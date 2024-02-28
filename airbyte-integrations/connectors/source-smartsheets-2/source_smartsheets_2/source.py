@@ -29,64 +29,68 @@ from smartsheet.models.sheet import Sheet
 # This dictionary maps metadata fields to a tuple of the type of the field
 # and a function that can yield the field value when given tne sheet,
 # the row, and any extra arguments.
-METADATA_MAPPING: dict[str, tuple[str, Callable[[Any], str]]] = {
-    "sheet_path": (
+METADATA_MAPPING: dict[str, tuple[str, Callable[[Any], Optional[str]]]] = {
+    "Folder ID": (
         "TEXT_NUMBER",
-        lambda sheet, row, kwargs: kwargs["sheet_path"]
+        lambda sheet, row, kwargs: kwargs.get("folder_id"),
     ),
-    "sheet_id": (
+    "Sheet Path": (
+        "TEXT_NUMBER",
+        lambda sheet, row, kwargs: kwargs.get("sheet_path"),
+    ),
+    "Sheet ID": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: str(sheet.id),
     ),
-    "sheet_name": (
+    "Sheet Name": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: sheet.name,
     ),
-    "sheet_created_at": (
+    "Sheet Created At": (
         "DATETIME",
         lambda sheet, row, kwargs: sheet.created_at.isoformat(),
     ),
-    "sheet_modified_at": (
+    "Sheet Modified At": (
         "DATETIME",
         lambda sheet, row, kwargs: sheet.modified_at.isoformat(),
     ),
-    "sheet_permalink": (
+    "Sheet Permalink": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: sheet.permalink,
     ),
-    "sheet_version": (
+    "Sheet Version": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: str(sheet.version),
     ),
-    "row_id": (
+    "Row ID": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: str(row.id),
     ),
-    "row_created_at": (
+    "Row Created At": (
         "DATETIME",
         lambda sheet, row, kwargs: row.created_at.isoformat(),
     ),
-    "row_created_by": (
+    "Row Created By": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: row.created_by.name,
     ),
-    "row_modified_at": (
+    "Row Modified At": (
         "DATETIME",
         lambda sheet, row, kwargs: row.modified_at.isoformat(),
     ),
-    "row_modified_by": (
+    "Row Modified By": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: row.modified_by.name,
     ),
-    "row_permalink": (
+    "Row Permalink": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: row.permalink,
     ),
-    "row_number": (
+    "Row Number": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: str(row.row_number),
     ),
-    "row_version": (
+    "Row Version": (
         "TEXT_NUMBER",
         lambda sheet, row, kwargs: str(row.version),
     ),
@@ -95,7 +99,8 @@ METADATA_MAPPING: dict[str, tuple[str, Callable[[Any], str]]] = {
 
 class SourceSmartsheets_2(Source):
 
-    def _conn(self, config: json) -> smartsheet.Smartsheet:
+    @staticmethod
+    def _conn(config: json) -> smartsheet.Smartsheet:
         """
         Initializes a Smartsheet client object from the config. The returned client
         has the option set to raise exceptions from API errors, which is not the
@@ -190,6 +195,23 @@ class SourceSmartsheets_2(Source):
                 unmatched_folders.append(folder)
         return unmatched_folders, matched_folders
 
+    @staticmethod
+    def normalize_column_name(column: str) -> str:
+        """
+        Normalize a column name by:
+          1. Trim excess whitespace surrounding the string.
+          2. Convert letters to lower case.
+          3. Replace whitespace with underscores.
+        
+        :param column: Any string.
+
+        :return: String normalized to be an all lower case and snake-case.
+        """
+        ret = column.strip()
+        ret = ret.split()
+        ret = (word.lower() for word in ret)
+        ret = "_".join(ret)
+        return ret
 
     def check(self, logger: AirbyteLogger, config: json) -> AirbyteConnectionStatus:
         """
@@ -204,8 +226,13 @@ class SourceSmartsheets_2(Source):
         :return: AirbyteConnectionStatus indicating a Success or Failure
         """
         try:
+            logger.info("getting a client")
             client = self._conn(config)
+            logger.info("accessing the root folder")
             client.Folders.get_folder(config["root-folder-id"])
+            for sheet_id in config["schema-sheet-ids"]:
+                logger.info("accessing schema sheet with id: '%d'", sheet_id)
+                client.Sheets.get_sheet(sheet_id)
             return AirbyteConnectionStatus(status=Status.SUCCEEDED)
         except Exception as e:
             return AirbyteConnectionStatus(status=Status.FAILED, message=f"An exception occurred: {str(e)}")
@@ -228,12 +255,13 @@ class SourceSmartsheets_2(Source):
             - json_schema providing the specifications of expected schema for this stream (a list of columns described
             by their names and types)
         """
+        logger.info("getting a client")
         client = self._conn(config)
 
         # Retrieve columns from given sheet IDs
         columns = {}
         for curr_sheet_id in config["schema-sheet-ids"]:
-            logger.debug("processing sheet id: '%d'", curr_sheet_id)
+            logger.info("processing sheet id: '%d'", curr_sheet_id)
             curr_sheet = client.Sheets.get_sheet(curr_sheet_id)
             for column in curr_sheet.columns:
                 col_type = self._convert_column_type(column.type.value)
@@ -247,6 +275,10 @@ class SourceSmartsheets_2(Source):
         if metadata_fields:
             metadata_cols = {col: self._convert_column_type(METADATA_MAPPING[col]) for col in metadata_fields}
             columns.update(metadata_cols)
+
+        # Normalize schema if needed
+        if config.get("normalize-column-names"):
+            columns = {self.normalize_column_name(col): val for (col, val) in columns.items()}
                 
         # Return results
         json_schema = {
@@ -299,7 +331,7 @@ class SourceSmartsheets_2(Source):
 
         while folder_stack:
             curr_folder_id, prev_path = folder_stack.pop()
-            logger.debug("requesting folder: '%d'", curr_folder_id)
+            logger.info("requesting folder: '%d'", curr_folder_id)
             curr_folder = client.Folders.get_folder(curr_folder_id)
             # Some logic to make paths prettier
             # 'curr_path' is a tuple of path segments that laters gets converted to a 'pathlib.PurePath'
@@ -315,7 +347,7 @@ class SourceSmartsheets_2(Source):
             # Filter subfolders
             unmatched_folders, matched_folders = self._filter_folders_by_exclusion(((subfolder, curr_path) for subfolder in curr_folder.folders), exclude_patterns)
             for subfolder, pattern in matched_folders:
-                logger.debug("subfolder excluded: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{subfolder.name}", pattern)
+                logger.info("subfolder excluded: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{subfolder.name}", pattern)
             # Reverse iteration to extend the stack in lexical order
             for subfolder in reversed(unmatched_folders):
                 folder_stack.append((subfolder.id, curr_path))
@@ -324,7 +356,7 @@ class SourceSmartsheets_2(Source):
             matched_sheets = self._filter_sheets_by_inclusion(((sheet, curr_path) for sheet in curr_folder.sheets), include_patterns)
             sheet_ids: list[int] = [sheet.id for (sheet, _) in matched_sheets]
             for sheet, pattern in matched_sheets:
-                logger.debug("sheet included: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{sheet.name}", pattern)
+                logger.info("sheet included: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{sheet.name}", pattern)
 
             # Process sheets
             for sheet_id in sheet_ids:
@@ -339,16 +371,21 @@ class SourceSmartsheets_2(Source):
                 # Process rows with the available columns and the metadata
                 for row in curr_sheet.rows:
                     metadata: dict[str, Any] = {
-                        field: METADATA_MAPPING[field][1](sheet, row, {"sheet_path": curr_path_str})
+                        field: METADATA_MAPPING[field][1](sheet, row, {
+                            "folder_id": curr_folder_id,
+                            "sheet_path": curr_path_str,
+                        })
                         for field in config.get("metadata-fields", [])
                     }
                     data: dict[str, Any] = {}
                     for col_idx, col_name in columns:
                         data[col_name] = row.cells[col_idx].value
-                    # Sometimes we get columns that are actually empty, skip those
+                    # Sometimes we get rows that are actually empty, skip those
                     if all(val is None for val in data.values()):
                         continue
                     data.update(metadata)
+                    # Normalize schema if needed
+                    data = {self.normalize_column_name(col): val for (col, val) in data.items()}
                     yield AirbyteMessage(
                         type=Type.RECORD,
                         record=AirbyteRecordMessage(stream=stream_name, data=data, emitted_at=int(datetime.now().timestamp()) * 1000),
