@@ -365,9 +365,10 @@ class SourceSmartsheets_2(Source):
                 columns: list[tuple[int, str]] = []
                 # Get whatever columns from the schema are available
                 for col_idx, column in enumerate(curr_sheet.columns):
-                    if column.title in schema_properties:
-                        columns.append((col_idx, column.title))
-                
+                    col_name = column.title if not config["normalize-column-names"] else self.normalize_column_name(column.title)
+                    if col_name in schema_properties:
+                        columns.append((col_idx, col_name))
+
                 # Process rows with the available columns and the metadata
                 for row in curr_sheet.rows:
                     metadata: dict[str, Any] = {
@@ -384,8 +385,6 @@ class SourceSmartsheets_2(Source):
                     if all(val is None for val in data.values()):
                         continue
                     data.update(metadata)
-                    # Normalize schema if needed
-                    data = {self.normalize_column_name(col): val for (col, val) in data.items()}
                     yield AirbyteMessage(
                         type=Type.RECORD,
                         record=AirbyteRecordMessage(stream=stream_name, data=data, emitted_at=int(datetime.now().timestamp()) * 1000),
