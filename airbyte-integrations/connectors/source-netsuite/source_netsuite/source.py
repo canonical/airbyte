@@ -20,6 +20,19 @@ class SourceNetsuite(AbstractSource):
 
     logger: logging.Logger = logging.getLogger("airbyte")
 
+    def _get_proxy(self, config: Mapping[str, Any]) -> List[str]:
+        proxies = {}
+        if "http_proxy" in config:
+            proxies["http"] = config["http_proxy"]
+        if "https_proxy" in config:
+            proxies["https"] = config["https_proxy"]
+        return proxies
+
+    def _get_default_date_format(self, config: Mapping[str, Any]) -> str:
+        if "date_format" in config:
+            return config["date_format"]
+        return None
+
     def auth(self, config: Mapping[str, Any]) -> OAuth1:
         # the `realm` param should be in format of: 12345_SB1
         realm = config["realm"].replace("-", "_").upper()
@@ -56,7 +69,9 @@ class SourceNetsuite(AbstractSource):
             # check connectivity to all provided `object_types`
             for object in object_types:
                 try:
-                    response = session.get(url=base_url + RECORD_PATH + object.lower(), params={"limit": 1})
+                    response = session.get(
+                        url=base_url + RECORD_PATH + object.lower(), params={"limit": 1}, proxies=self._get_proxy(config)
+                    )
                     response.raise_for_status()
                     return True, None
                 except requests.exceptions.HTTPError as e:
@@ -66,7 +81,7 @@ class SourceNetsuite(AbstractSource):
             # there should be at least 1 contact available in every NetSuite account by default.
             url = base_url + RECORD_PATH + "contact"
             try:
-                response = session.get(url=url, params={"limit": 1})
+                response = session.get(url=url, params={"limit": 1}, proxies=self._get_proxy(config))
                 response.raise_for_status()
                 return True, None
             except requests.exceptions.HTTPError as e:
@@ -107,6 +122,8 @@ class SourceNetsuite(AbstractSource):
         base_url: str,
         start_datetime: str,
         window_in_days: int,
+        proxies: List[str] = [],
+        default_date_format: str = None,
         max_retry: int = 3,
     ) -> Union[NetsuiteStream, IncrementalNetsuiteStream, CustomIncrementalNetsuiteStream]:
 
@@ -116,6 +133,8 @@ class SourceNetsuite(AbstractSource):
             "base_url": base_url,
             "start_datetime": start_datetime,
             "window_in_days": window_in_days,
+            "proxies": proxies,
+            "default_date_format": default_date_format,
         }
 
         schema = schemas[object_name]
@@ -151,7 +170,7 @@ class SourceNetsuite(AbstractSource):
 
         # retrieve all record types if `object_types` config field is not specified
         if not object_names:
-            objects_metadata = session.get(metadata_url).json().get("items")
+            objects_metadata = session.get(metadata_url, proxies=self._get_proxy(config)).json().get("items")
             object_names = [object["name"] for object in objects_metadata]
 
         input_args = {"session": session, "metadata_url": metadata_url}
@@ -163,6 +182,8 @@ class SourceNetsuite(AbstractSource):
                 "start_datetime": config["start_datetime"],
                 "window_in_days": config["window_in_days"],
                 "schemas": schemas,
+                "proxies": self._get_proxy(config),
+                "default_date_format": self._get_default_date_format(config),
             }
         )
         # build streams

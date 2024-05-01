@@ -64,3 +64,21 @@ connectionSpecification:
       description: The amount of days used to query the data with date chunks. Set smaller value, if you have lots of data.
       order: 7
       default: 30
+    http_proxy:
+      type: string
+      title: Http Proxy
+      description: Http Proxy
+      order: 8
+      example: "http://localhost:8442"
+    https_proxy:
+      type: string
+      title: Https Proxy
+      description: Https Proxy
+      order: 9
+    date_format:
+      type: string
+      title: Date Format
+      description: Date Format for your data
+      order: 10
+      default: "%m/%d/%Y"
+      examples: ["%m/%d/%Y", "%d/%m/%Y"]

@@ -6,7 +6,7 @@
 from abc import ABC
 from datetime import date, datetime, timedelta
 from json import JSONDecodeError
-from typing import Any, Iterable, Mapping, MutableMapping, Optional, Union
+from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Union
 
 import requests
 from airbyte_cdk.sources.streams.http import HttpStream
@@ -34,11 +34,15 @@ class NetsuiteStream(HttpStream, ABC):
         base_url: str,
         start_datetime: str,
         window_in_days: int,
+        proxies: MutableMapping[str, str],
+        default_date_format: str,
     ):
         self.object_name = object_name
         self.base_url = base_url
+        self.proxies = proxies
         self.start_datetime = start_datetime
         self.window_in_days = window_in_days
+        self.default_date_format = default_date_format
         self.schemas = {}  # store subschemas to reduce API calls
         super().__init__(authenticator=auth)
 
@@ -50,8 +54,16 @@ class NetsuiteStream(HttpStream, ABC):
     raise_on_http_errors = True
 
     @property
+    def get_input_date_formats(self) -> List[str]:
+        if self.default_date_format is not None:
+            if self.default_date_format not in NETSUITE_INPUT_DATE_FORMATS:
+                return [self.default_date_format] + NETSUITE_INPUT_DATE_FORMATS
+
+        return NETSUITE_INPUT_DATE_FORMATS
+
+    @property
     def default_datetime_format(self) -> str:
-        return NETSUITE_INPUT_DATE_FORMATS[self.index_datetime_format]
+        return self.get_input_date_formats[self.index_datetime_format]
 
     @property
     def name(self) -> str:
@@ -81,7 +93,7 @@ class NetsuiteStream(HttpStream, ABC):
         # try to retrieve the schema from the cache
         schema = self.schemas.get(ref)
         if not schema:
-            resp = self._session.get(url=self.url_base + ref, headers=SCHEMA_HEADERS)
+            resp = self._session.get(url=self.url_base + ref, headers=SCHEMA_HEADERS, proxies=self.proxies)
             # some schemas, like transaction, do not exist because they refer to multiple
             # record types, e.g. sales order/invoice ... in this case we can't retrieve
             # the correct schema, so we just put the json in a string
@@ -182,11 +194,11 @@ class NetsuiteStream(HttpStream, ABC):
                     if "INVALID_PARAMETER" in error_code and "failed with date format" in detail_message:
                         self.logger.warn(f"Stream `{self.name}`: cannot read using date format `{self.default_datetime_format}")
                         self.index_datetime_format += 1
-                        if self.index_datetime_format < len(NETSUITE_INPUT_DATE_FORMATS):
+                        if self.index_datetime_format < len(self.get_input_date_formats):
                             self.logger.warn(f"Stream `{self.name}`: retry using next date format `{self.default_datetime_format}")
                             raise DateFormatExeption
                         else:
-                            self.logger.error(f"DATE FORMAT exception. Cannot read using known formats {NETSUITE_INPUT_DATE_FORMATS}")
+                            self.logger.error(f"DATE FORMAT exception. Cannot read using known formats {self.get_input_date_formats}")
 
                     # handle other known errors
                     self.logger.error(f"Stream `{self.name}`: {error_code} error occured, full error message: {detail_message}")
