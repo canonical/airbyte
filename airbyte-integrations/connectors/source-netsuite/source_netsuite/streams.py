@@ -93,7 +93,7 @@ class NetsuiteStream(HttpStream, ABC):
         # try to retrieve the schema from the cache
         schema = self.schemas.get(ref)
         if not schema:
-            resp = self._session.get(url=self.url_base + ref, headers=SCHEMA_HEADERS, proxies=self.proxies)
+            resp = self._session.get(url=self.url_base + ref, headers=SCHEMA_HEADERS)
             # some schemas, like transaction, do not exist because they refer to multiple
             # record types, e.g. sales order/invoice ... in this case we can't retrieve
             # the correct schema, so we just put the json in a string
@@ -155,6 +155,7 @@ class NetsuiteStream(HttpStream, ABC):
     def fetch_record(self, record: Mapping[str, Any], request_kwargs: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
         url = record["links"][0]["href"]
         args = {"method": "GET", "url": url, "params": {"expandSubResources": True}}
+        self._session.proxies = self.proxies
         prep_req = self._session.prepare_request(requests.Request(**args))
         response = self._send_request(prep_req, request_kwargs)
         # sometimes response.status_code == 400,

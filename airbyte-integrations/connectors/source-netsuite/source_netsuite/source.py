@@ -50,16 +50,18 @@ class SourceNetsuite(AbstractSource):
         subdomain = config["realm"].replace("_", "-").lower()
         return f"https://{subdomain}.suitetalk.api.netsuite.com"
 
-    def get_session(self, auth: OAuth1) -> requests.Session:
+    def get_session(self, auth: OAuth1, proxies) -> requests.Session:
         session = requests.Session()
         session.auth = auth
+        session.proxies = proxies
         return session
 
     def check_connection(self, logger, config: Mapping[str, Any]) -> Tuple[bool, Any]:
         auth = self.auth(config)
         object_types = config.get("object_types")
         base_url = self.base_url(config)
-        session = self.get_session(auth)
+        proxies = self._get_proxy(config)
+        session = self.get_session(auth, proxies)
         # if record types are specified make sure they are valid
         if object_types:
             # ensure there are no duplicate record types as this will break Airbyte
@@ -69,9 +71,7 @@ class SourceNetsuite(AbstractSource):
             # check connectivity to all provided `object_types`
             for object in object_types:
                 try:
-                    response = session.get(
-                        url=base_url + RECORD_PATH + object.lower(), params={"limit": 1}, proxies=self._get_proxy(config)
-                    )
+                    response = session.get(url=base_url + RECORD_PATH + object.lower(), params={"limit": 1})
                     response.raise_for_status()
                     return True, None
                 except requests.exceptions.HTTPError as e:
@@ -163,14 +163,15 @@ class SourceNetsuite(AbstractSource):
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         auth = self.auth(config)
-        session = self.get_session(auth)
+        proxies = self._get_proxy(config)
+        session = self.get_session(auth, proxies)
         base_url = self.base_url(config)
         metadata_url = base_url + META_PATH
         object_names = config.get("object_types")
 
         # retrieve all record types if `object_types` config field is not specified
         if not object_names:
-            objects_metadata = session.get(metadata_url, proxies=self._get_proxy(config)).json().get("items")
+            objects_metadata = session.get(metadata_url).json().get("items")
             object_names = [object["name"] for object in objects_metadata]
 
         input_args = {"session": session, "metadata_url": metadata_url}
