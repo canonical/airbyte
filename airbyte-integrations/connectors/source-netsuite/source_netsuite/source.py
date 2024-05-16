@@ -20,6 +20,11 @@ class SourceNetsuite(AbstractSource):
 
     logger: logging.Logger = logging.getLogger("airbyte")
 
+    def _get_default_date_format(self, config: Mapping[str, Any]) -> str:
+        if "date_format" in config:
+            return config["date_format"]
+        return None
+
     def auth(self, config: Mapping[str, Any]) -> OAuth1:
         # the `realm` param should be in format of: 12345_SB1
         realm = config["realm"].replace("-", "_").upper()
@@ -107,6 +112,7 @@ class SourceNetsuite(AbstractSource):
         base_url: str,
         start_datetime: str,
         window_in_days: int,
+        default_date_format: str = None,
         max_retry: int = 3,
     ) -> Union[NetsuiteStream, IncrementalNetsuiteStream, CustomIncrementalNetsuiteStream]:
 
@@ -116,6 +122,7 @@ class SourceNetsuite(AbstractSource):
             "base_url": base_url,
             "start_datetime": start_datetime,
             "window_in_days": window_in_days,
+            "default_date_format": default_date_format,
         }
 
         schema = schemas[object_name]
@@ -163,6 +170,7 @@ class SourceNetsuite(AbstractSource):
                 "start_datetime": config["start_datetime"],
                 "window_in_days": config["window_in_days"],
                 "schemas": schemas,
+                "default_date_format": self._get_default_date_format(config),
             }
         )
         # build streams

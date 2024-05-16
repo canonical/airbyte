@@ -64,3 +64,10 @@ connectionSpecification:
       description: The amount of days used to query the data with date chunks. Set smaller value, if you have lots of data.
       order: 7
       default: 30
+    date_format:
+      type: string
+      title: Date Format
+      description: Date Format for your data
+      order: 8
+      default: "%m/%d/%Y"
+      examples: ["%m/%d/%Y", "%d/%m/%Y"]
