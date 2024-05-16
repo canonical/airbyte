@@ -1,5 +1,8 @@
 FROM python:3.9.13-alpine3.15 as base
 
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+
 # build and load all requirements
 FROM base as builder
 WORKDIR /airbyte/integration_code
@@ -32,6 +35,8 @@ COPY main.py ./
 
 COPY source_netsuite ./source_netsuite
 
+ENV HTTP_PROXY $HTTP_PROXY
+ENV HTTPS_PROXY $HTTPS_PROXY
 ENV AIRBYTE_ENTRYPOINT "python /airbyte/integration_code/main.py"
 ENTRYPOINT ["python", "/airbyte/integration_code/main.py"]
 
