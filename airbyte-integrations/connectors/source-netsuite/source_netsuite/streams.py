@@ -6,7 +6,7 @@
 from abc import ABC
 from datetime import date, datetime, timedelta
 from json import JSONDecodeError
-from typing import Any, Iterable, Mapping, MutableMapping, Optional, Union
+from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Union
 
 import requests
 from airbyte_cdk.sources.streams.http import HttpStream
@@ -34,11 +34,13 @@ class NetsuiteStream(HttpStream, ABC):
         base_url: str,
         start_datetime: str,
         window_in_days: int,
+        default_date_format: str,
     ):
         self.object_name = object_name
         self.base_url = base_url
         self.start_datetime = start_datetime
         self.window_in_days = window_in_days
+        self.default_date_format = default_date_format
         self.schemas = {}  # store subschemas to reduce API calls
         super().__init__(authenticator=auth)
 
@@ -50,8 +52,15 @@ class NetsuiteStream(HttpStream, ABC):
     raise_on_http_errors = True
 
     @property
+    def get_input_date_formats(self) -> List[str]:
+        if self.default_date_format and self.default_date_format not in NETSUITE_INPUT_DATE_FORMATS:
+            return [self.default_date_format] + NETSUITE_INPUT_DATE_FORMATS
+
+        return NETSUITE_INPUT_DATE_FORMATS
+
+    @property
     def default_datetime_format(self) -> str:
-        return NETSUITE_INPUT_DATE_FORMATS[self.index_datetime_format]
+        return self.get_input_date_formats[self.index_datetime_format]
 
     @property
     def name(self) -> str:
@@ -182,11 +191,11 @@ class NetsuiteStream(HttpStream, ABC):
                     if "INVALID_PARAMETER" in error_code and "failed with date format" in detail_message:
                         self.logger.warn(f"Stream `{self.name}`: cannot read using date format `{self.default_datetime_format}")
                         self.index_datetime_format += 1
-                        if self.index_datetime_format < len(NETSUITE_INPUT_DATE_FORMATS):
+                        if self.index_datetime_format < len(self.get_input_date_formats):
                             self.logger.warn(f"Stream `{self.name}`: retry using next date format `{self.default_datetime_format}")
                             raise DateFormatExeption
                         else:
-                            self.logger.error(f"DATE FORMAT exception. Cannot read using known formats {NETSUITE_INPUT_DATE_FORMATS}")
+                            self.logger.error(f"DATE FORMAT exception. Cannot read using known formats {self.get_input_date_formats}")
 
                     # handle other known errors
                     self.logger.error(f"Stream `{self.name}`: {error_code} error occured, full error message: {detail_message}")
