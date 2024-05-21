@@ -53,9 +53,8 @@ class NetsuiteStream(HttpStream, ABC):
 
     @property
     def get_input_date_formats(self) -> List[str]:
-        if self.default_date_format is not None:
-            if self.default_date_format not in NETSUITE_INPUT_DATE_FORMATS:
-                return [self.default_date_format] + NETSUITE_INPUT_DATE_FORMATS
+        if self.default_date_format and self.default_date_format not in NETSUITE_INPUT_DATE_FORMATS:
+            return [self.default_date_format] + NETSUITE_INPUT_DATE_FORMATS
 
         return NETSUITE_INPUT_DATE_FORMATS
 

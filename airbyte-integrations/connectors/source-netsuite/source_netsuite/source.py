@@ -6,7 +6,7 @@
 import logging
 from collections import Counter
 from json import JSONDecodeError
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Any, List, Mapping, Optional, Tuple, Union
 
 import requests
 from airbyte_cdk.sources import AbstractSource
@@ -20,7 +20,7 @@ class SourceNetsuite(AbstractSource):
 
     logger: logging.Logger = logging.getLogger("airbyte")
 
-    def _get_default_date_format(self, config: Mapping[str, Any]) -> str:
+    def _get_default_date_format(self, config: Mapping[str, Any]) -> Optional[str]:
         if "date_format" in config:
             return config["date_format"]
         return None
