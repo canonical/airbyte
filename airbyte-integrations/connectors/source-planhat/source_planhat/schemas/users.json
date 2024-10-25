@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "type": ["string", "null"]
+    },
+    "email": {
+      "type": ["string", "null"]
+    },
+    "nickName": {
+      "type": ["string", "null"]
+    },
+    "firstName": {
+      "type": ["string", "null"]
+    },
+    "lastName": {
+      "type": ["string", "null"]
+    },
+    "roles": {
+      "type": ["array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "externalId": {
+      "type": ["string", "null"]
+    },
+    "inactive": {
+      "type": ["boolean", "null"]
+    },
+    "defaultCurrencyId": {
+      "type": ["string", "null"]
+    },
+    "defaultMeetingLength": {
+      "type": ["number", "null"]
+    },
+    "image": {
+      "type": ["object", "null"]
+    },
+    "radarOneLine": {
+      "type": ["boolean", "null"]
+    },
+    "taskFilter": {
+      "type": ["object", "null"]
+    },
+    "companyFilter": {
+      "type": ["string", "null"]
+    },
+    "compressedView": {
+      "type": ["boolean", "null"]
+    },
+    "isHidden": {
+      "type": ["boolean", "null"]
+    },
+    "createDate": {
+      "type": ["string", "null"]
+    },
+    "createAt": {
+      "type": ["string", "null"]
+    },
+    "updatedAt": {
+      "type": ["string", "null"]
+    },
+    "arr": {
+      "type": ["number", "null"]
+    },
+    "arrAvg": {
+      "type": ["number", "null"]
+    },
+    "mrr": {
+      "type": ["number", "null"]
+    },
+    "mrrAvg": {
+      "type": ["number", "null"]
+    },
+    "healthAvg": {
+      "type": ["number", "null"]
+    },
+    "healthAvgRound": {
+      "type": ["number", "null"]
+    },
+    "lastTouch7": {
+      "type": ["number", "null"]
+    },
+    "lastTouch30": {
+      "type": ["number", "null"]
+    },
+    "lastTouch90": {
+      "type": ["number", "null"]
+    },
+    "lastActive7": {
+      "type": ["number", "null"]
+    },
+    "lastActive30": {
+      "type": ["number", "null"]
+    },
+    "lastActive90": {
+      "type": ["number", "null"]
+    },
+    "npsAvg": {
+      "type": ["number", "null"]
+    },
+    "customerCount": {
+      "type": ["number", "null"]
+    },
+    "payingCustomerCount": {
+      "type": ["number", "null"]
+    },
+    "revenueShare": {
+      "type": ["number", "null"]
+    },
+    "nrOpenTasks": {
+      "type": ["number", "null"]
+    },
+    "nrOverDueTasks": {
+      "type": ["number", "null"]
+    },
+    "nrTasksDue7Days": {
+      "type": ["number", "null"]
+    },
+    "nrTasksDue14Days": {
+      "type": ["number", "null"]
+    },
+    "nrTasksDue30Days": {
+      "type": ["number", "null"]
+    },
+    "nrTasksDue90Days": {
+      "type": ["number", "null"]
+    },
+    "teams": {
+      "type": ["array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "managers": {
+      "type": ["array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "permissions": {
+      "type": ["array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "custom": {
+      "type": ["object", "null"]
+    }
+  }
+}

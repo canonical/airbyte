@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "type": ["string", "null"]
+    },
+    "companyId": {
+      "type": ["string", "null"]
+    },
+    "companyName": {
+      "type": ["string", "null"]
+    },
+    "churnDate": {
+      "type": ["string", "null"]
+    },
+    "description": {
+      "type": ["string", "null"]
+    },
+    "currency": {
+      "type": ["string", "null"]
+    },
+    "value": {
+      "type": ["number", "null"]
+    },
+    "arr": {
+      "type": ["number", "null"]
+    },
+    "reasons": {
+      "type": ["array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "comment": {
+      "type": ["object", "null"]
+    },
+    "snoozed": {
+      "type": ["boolean", "null"]
+    },
+    "products": {
+      "type": ["array"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "onlyDowngrade": {
+      "type": ["boolean", "null"]
+    },
+    "sourceId": {
+      "type": ["string", "null"]
+    },
+    "createdAt": {
+      "type": ["string", "null"]
+    },
+    "updatedAt": {
+      "type": ["string", "null"]
+    },
+    "custom": {
+      "type": ["object", "null"]
+    }
+  }
+}

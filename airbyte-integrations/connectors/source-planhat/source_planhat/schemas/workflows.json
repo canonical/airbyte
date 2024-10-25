@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "_id": {
+      "type": ["string", "null"]
+    },
+    "companyId": {
+      "type": ["string", "null"]
+    },
+    "companyName": {
+      "type": ["string", "null"]
+    },
+    "owner": {
+      "type": ["string", "null"]
+    },
+    "type": {
+      "type": ["string", "null"]
+    },
+    "templateId": {
+      "type": ["object", "null"]
+    },
+    "isArchived": {
+      "type": ["boolean", "null"]
+    },
+    "startDate": {
+      "type": ["string", "null"]
+    },
+    "archiveDate": {
+      "type": ["string", "null"]
+    },
+    "expectedDays": {
+      "type": ["number", "null"]
+    },
+    "nextStartTime": {
+      "type": ["string", "null"]
+    },
+    "expectedEndDate": {
+      "type": ["string", "null"]
+    },
+    "actualDays": {
+      "type": ["number", "null"]
+    },
+    "targetId": {
+      "type": ["string", "null"]
+    },
+    "targetModel": {
+      "type": ["string", "null"]
+    },
+    "targetName": {
+      "type": ["string", "null"]
+    },
+    "status": {
+      "type": ["string", "null"]
+    },
+    "name": {
+      "type": ["string", "null"]
+    },
+    "endUserEmail": {
+      "type": ["string", "null"]
+    },
+    "openRate": {
+      "type": ["number", "null"]
+    },
+    "clickRate": {
+      "type": ["number", "null"]
+    },
+    "replyRate": {
+      "type": ["number", "null"]
+    },
+    "bounceRate": {
+      "type": ["number", "null"]
+    },
+    "percentDone": {
+      "type": ["number", "null"]
+    },
+    "createdAt": {
+      "type": ["string", "null"]
+    },
+    "updatedAt": {
+      "type": ["string", "null"]
+    },
+    "custom": {
+      "type": ["object", "null"]
+    }
+  }
+}
