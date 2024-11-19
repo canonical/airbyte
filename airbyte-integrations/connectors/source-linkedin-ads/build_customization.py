@@ -18,3 +18,4 @@ async def pre_connector_install(base_image_container: Container) -> Container:
     HTTPS_PROXY = os.environ["IMAGE_HTTPS_PROXY"]
 
     return await base_image_container.with_env_variable("HTTP_PROXY", HTTP_PROXY).with_env_variable("HTTPS_PROXY", HTTPS_PROXY)
+
