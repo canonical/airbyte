@@ -81,6 +81,7 @@
     "projectCategory": {
       "description": "The category the project belongs to.",
       "readOnly": true
+      "type": ["object", "null"]
     },
     "projectTypeKey": {
       "type": "string",
