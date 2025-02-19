@@ -101,3 +101,6 @@ scan-journal.log
 
 # connectors' cache
 *.sqlite
+
+
+*venv*
