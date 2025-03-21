@@ -1,0 +1,102 @@
+name: Canonical CD
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Ensure full history
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Install Airbyte CI
+        id: install-airbyte-ci
+        uses: ./.github/actions/install-airbyte-ci
+        with:
+          airbyte_ci_binary_url: ${{ inputs.airbyte_ci_binary_url }}
+          is_fork: ${{ inputs.is_fork }}
+
+      - name: Detect changed connectors
+        id: detect-changes
+        uses: ./.github/actions/detect-changes
+        with:
+          base_commit: ${{ github.event.before }}
+          head_commit: ${{ github.sha }}
+
+      - name: Build and push Docker images
+        id: build-and-push-images
+        env:
+          CI_GIT_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [[ -z "${{ steps.detect-changes.outputs.connectors_list }}" ]]; then
+            echo "No changed connectors to build. Exiting."
+            exit 0
+          fi
+
+          # install required packages
+          sudo apt update
+          sudo apt install python3-setuptools -y
+          pip install --upgrade setuptools
+
+          for CONNECTOR in ${{ steps.detect-changes.outputs.connectors_list }}; do
+            if [ ! -d "airbyte-integrations/connectors/$CONNECTOR" ]; then
+                echo "⚠️ Warning: Connector directory airbyte-integrations/connectors/$CONNECTOR not found! Skipping..."
+                continue
+            fi
+            
+            METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
+
+            # Extract metadata
+            VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
+            NAME=$(grep 'dockerRepository' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
+            IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/$NAME:$VERSION"
+
+            echo "🚀 Building $CONNECTOR with airbyte-ci..."
+            
+            # If build_customization.py already exists, exit with an error
+            if [[ -f build_customization.py ]]; then
+              echo "❌ Error: build_customization.py already exists in $CONNECTOR! Please edit it and add proxy configuration."
+              exit 1
+            fi
+            
+            .github/scripts/generate_build_customizations.sh $CONNECTOR
+
+            cd airbyte-integrations/connectors/$CONNECTOR
+
+            # Set proxy environment variables
+            export IMAGE_HTTP_PROXY=${{ vars.HTTP_PROXY }}
+            export IMAGE_HTTPS_PROXY=${{ vars.HTTPS_PROXY }}
+
+            # Build image using airbyte-ci
+            airbyte-ci connectors --name=$CONNECTOR build
+            
+            # Ensure the dev-tagged image exists before pushing
+            DEV_IMAGE="airbyte/$CONNECTOR:dev"
+            if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
+              echo "✅ Found built image: $DEV_IMAGE"
+              docker tag "$DEV_IMAGE" "$IMAGE_NAME"
+              docker push "$IMAGE_NAME"
+            else
+              echo "❌ Error: Image $DEV_IMAGE was not found after build."
+              exit 1
+            fi
+
+            cd ../../../
+
+          done
