@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - ci-cd-pipeline
 
 jobs:
   build-and-push:
