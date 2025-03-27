@@ -11,6 +11,9 @@ outputs:
   connectors_list:
     description: "List of changed connectors"
     value: ${{ steps.detect.outputs.connectors_list }}
+  connectors_list_json:
+    description: "List of changed connectors in JSON array format"
+    value: ${{ steps.detect.outputs.connectors_list_json }}
 
 runs:
   using: "composite"
@@ -26,8 +29,12 @@ runs:
 
         if [[ -z "$CHANGED_DIRS" ]]; then
           echo "⚠️ No changed connectors detected."
-          echo "connectors_list=" >> $GITHUB_OUTPUT
+          echo "connectors_list=" >> $GITHUB_ENV
+          echo "connectors_list_json=[]" >> "$GITHUB_OUTPUT"
         else
           echo "Changed connectors: $CHANGED_DIRS"
-          echo "connectors_list=$CHANGED_DIRS" >> $GITHUB_OUTPUT
+          echo "connectors_list=$CHANGED_DIRS" >> $GITHUB_ENV
+          JSON=$(echo "$CHANGED_DIRS" | tr ' ' '\n' | jq -R . | jq -s -c .)
+          echo "🧪 JSON array: $JSON"
+          echo "connectors_list_json=$JSON" >> "$GITHUB_OUTPUT"
         fi

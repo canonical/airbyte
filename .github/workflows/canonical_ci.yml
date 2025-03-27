@@ -6,89 +6,13 @@ on:
 jobs:
   fail_on_protected_path_changes:
     name: "Check fork does not change protected paths"
-    if: github.event.pull_request.head.repo.fork == true
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Get list of changed files
-        id: changed-files
-        uses: canonical/actions/changed-files@main
-      - name: Check for changes in protected paths
-        id: check-for-protected-paths
-        run: |
-          PROTECTED_PATHS=("airbyte-ci/" ".github/workflows/")
-          CHANGED_FILES="${{ steps.changed-files.outputs.changed-files }}"
+    uses: ./.github/workflows/canonical_check_protected_paths.yml
 
-          echo "Changed files: $CHANGED_FILES"
-          echo "$CHANGED_FILES" | tr ' ' '\n' > changed_files.txt
-
-          for path in "${PROTECTED_PATHS[@]}"; do
-            if grep -q "^$path" changed_files.txt; then
-              echo "PROTECTED_PATH_CHANGED=true" >> $GITHUB_ENV
-              break
-            fi
-          done
-          echo "PROTECTED_PATH_CHANGED=${PROTECTED_PATH_CHANGED:-false}" >> $GITHUB_ENV
-      - name: Fail if changes in protected paths
-        if: env.PROTECTED_PATH_CHANGED == 'true'
-        run: |
-          echo "The fork has changes in protected paths. This is not allowed."
-          exit 1
-
-  check_connector_version:
-    name: Check connector version
-    if: github.event.pull_request.head.repo.fork == true
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect changed connectors
-        id: changes
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            BASE_COMMIT=${{ github.event.before }}
-          else
-            BASE_COMMIT=${{ github.event.pull_request.base.sha }}
-          fi
-          echo "BASE_COMMIT=$BASE_COMMIT"
-          CHANGED_DIRS=$(git diff --name-only $BASE_COMMIT $GITHUB_SHA | grep '^airbyte-integrations/connectors/' | cut -d/ -f3 | sort -u)
-          echo "Changed connector directories: $CHANGED_DIRS"
-          echo "CONNECTORS_LIST=$CHANGED_DIRS" >> $GITHUB_ENV
-          echo "BASE_COMMIT=$BASE_COMMIT" >> $GITHUB_ENV
-
-      - name: Check connector version
-        id: version-check
-        run: |
-          for DIR in $CONNECTORS_LIST; do
-            if [ -d "airbyte-integrations/connectors/$DIR" ]; then
-              METADATAFILE="airbyte-integrations/connectors/$DIR/metadata.yaml"
-              echo "METADATAFILE=$METADATAFILE"
-              NEW_VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
-              echo "BASE_COMMIT=$BASE_COMMIT"
-              git checkout $BASE_COMMIT
-              BASE_VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
-              # Switch back to the current commit
-              git checkout $GITHUB_SHA
-              echo "NEW_VERSION=$NEW_VERSION"
-              echo "BASE_VERSION=$BASE_VERSION"
-              if [ "$NEW_VERSION" == "$BASE_VERSION" ]; then
-                echo "Error: Connector version has not changed in $METADATAFILE. Please check canonicalImageTag."
-                exit 1
-              fi
-              echo "Connector version has changed for $DIR: $BASE_VERSION -> $NEW_VERSION"
-            fi
-          done
-
-  get-changed-directories-list:
+  get_changed_directories_list:
     name: Get List Of Changed Directories
     runs-on: ubuntu-22.04
+    outputs:
+      connectors_list_json: ${{ steps.detect-changes.outputs.connectors_list_json }}
     steps:
       - name: Checkout fork with full history
         uses: actions/checkout@v4
@@ -105,12 +29,12 @@ jobs:
 
   connectors_full_ci:
     name: Run connectors full CI on fork
-    if: github.event.pull_request.head.repo.fork == true
-    needs: [fail_on_protected_path_changes, get-changed-directories-list]
+    if: github.event.pull_request.head.repo.fork == true && needs.detect-changes.outputs.connectors_list_json != '[]'
+    needs: [fail_on_protected_path_changes, get_changed_directories_list]
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        dir: ${{ fromJson(needs.get-changed-directories-list.outputs.connectors_list) }}
+        dir: ${{ fromJson(needs.get_changed_directories_list.outputs.connectors_list_json) }}
 
     steps:
       - name: Checkout fork with full history
@@ -135,6 +59,7 @@ jobs:
           CI_GIT_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_REF: ${{ github.event.pull_request.head.sha }}
+          CONNECTOR: ${{ matrix.dir }}
         run: |
           if [ -z "${{ matrix.dir }}" ]; then
             echo "No directory specified in matrix.dir, skipping."
@@ -148,8 +73,6 @@ jobs:
 
           git checkout $CI_GIT_BRANCH
 
-          CONNECTOR = ${{ matrix.dir }}
-
           echo "🔄 Running tests for connector: $CONNECTOR"
           cd airbyte-integrations/connectors/$CONNECTOR
 
@@ -157,6 +80,7 @@ jobs:
           airbyte-ci --disable-update-check --disable-dagger-run connectors --name=$CONNECTOR test \
               --skip-step=qa_checks --skip-step=version_inc_check --skip-step=acceptance --skip-step=python_cli_validation
 
+          # return back to root
           cd ../../../
           # Find the latest timestamped report directory inside the CI branch folder
           REPORT_DIR=$(find airbyte-ci/connectors/pipelines/pipeline_reports/airbyte-ci/connectors/test/manual/"$CI_GIT_BRANCH" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
