@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+  pull_request:
 
 jobs:
   get_changed_directories_list:
@@ -90,7 +91,7 @@ jobs:
               exit 1
             fi
           fi
-      
+
           .github/scripts/generate_build_customizations.sh $CONNECTOR
 
           cd airbyte-integrations/connectors/$CONNECTOR
