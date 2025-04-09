@@ -67,7 +67,7 @@ jobs:
 
           # install required packages
           sudo apt update
-          sudo apt install python3-setuptools -y
+          sudo apt install --reinstall python3-pkg-resources python3-setuptools
           pip install --upgrade setuptools
 
           METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
