@@ -10,7 +10,7 @@ jobs:
 
   get_changed_directories_list:
     name: Get List Of Changed Directories
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       connectors_list_json: ${{ steps.detect-changes.outputs.connectors_list_json }}
     steps:
@@ -31,7 +31,7 @@ jobs:
     name: Run connectors full CI on fork
     if: github.event.pull_request.head.repo.fork == true && needs.detect-changes.outputs.connectors_list_json != '[]'
     needs: [fail_on_protected_path_changes, get_changed_directories_list]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         dir: ${{ fromJson(needs.get_changed_directories_list.outputs.connectors_list_json) }}

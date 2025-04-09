@@ -8,7 +8,7 @@ on:
 jobs:
   get_changed_directories_list:
     name: Get List Of Changed Directories
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       connectors_list_json: ${{ steps.detect-changes.outputs.connectors_list_json }}
     steps:
@@ -24,7 +24,7 @@ jobs:
           head_commit: ${{ github.sha }}
 
   build_and_push:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     if: needs.detect-changes.outputs.connectors_list_json != '[]'
     needs: [get_changed_directories_list]
     strategy:
@@ -78,12 +78,19 @@ jobs:
 
           echo "🚀 Building $CONNECTOR with airbyte-ci..."
 
-          # If build_customization.py already exists, exit with an error
           if [[ -f build_customization.py ]]; then
-            echo "❌ Error: build_customization.py already exists in $CONNECTOR! Please edit it and add proxy configuration."
-            exit 1
-          fi
+            echo "⚠️ build_customization.py exists. Validating proxy config..."
 
+            # Check for proxy-related content
+            if grep -q 'IMAGE_HTTP_PROXY' build_customization.py && grep -q 'with_env_variable("HTTP_PROXY"' build_customization.py; then
+              echo "✅ Proxy configuration detected in build_customization.py."
+            else
+              echo "❌ Error: build_customization.py exists but does not include required proxy config."
+              echo "Please ensure it contains references to IMAGE_HTTP_PROXY and with_env_variable(\"HTTP_PROXY\"...)"
+              exit 1
+            fi
+          fi
+      
           .github/scripts/generate_build_customizations.sh $CONNECTOR
 
           cd airbyte-integrations/connectors/$CONNECTOR
