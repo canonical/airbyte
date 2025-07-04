@@ -21,8 +21,9 @@ import io.airbyte.cdk.jdbc.LongFieldType
 import io.airbyte.cdk.jdbc.StringFieldType
 import io.airbyte.cdk.read.Stream
 import io.airbyte.cdk.read.cdc.AbortDebeziumWarmStartState
+import io.airbyte.cdk.read.cdc.CdcPartitionReaderDebeziumOperations
+import io.airbyte.cdk.read.cdc.CdcPartitionsCreatorDebeziumOperations
 import io.airbyte.cdk.read.cdc.DebeziumOffset
-import io.airbyte.cdk.read.cdc.DebeziumOperations
 import io.airbyte.cdk.read.cdc.DebeziumPropertiesBuilder
 import io.airbyte.cdk.read.cdc.DebeziumRecordKey
 import io.airbyte.cdk.read.cdc.DebeziumRecordValue
@@ -64,7 +65,9 @@ class MySqlSourceDebeziumOperations(
     val jdbcConnectionFactory: JdbcConnectionFactory,
     val configuration: MySqlSourceConfiguration,
     random: Random = Random.Default,
-) : DebeziumOperations<MySqlSourceCdcPosition> {
+) :
+    CdcPartitionsCreatorDebeziumOperations<MySqlSourceCdcPosition>,
+    CdcPartitionReaderDebeziumOperations<MySqlSourceCdcPosition> {
     private val log = KotlinLogging.logger {}
     private val cdcIncrementalConfiguration: CdcIncrementalConfiguration by lazy {
         configuration.incrementalConfiguration as CdcIncrementalConfiguration
@@ -350,7 +353,6 @@ class MySqlSourceDebeziumOperations(
             // construct the db schema history. Note that we used to use schema_only_recovery mode
             // instead, but this mode has been deprecated.
             .with("snapshot.mode", "recovery")
-            .withStreams(listOf())
             .buildMap()
 
     override fun generateWarmStartProperties(streams: List<Stream>): Map<String, String> =

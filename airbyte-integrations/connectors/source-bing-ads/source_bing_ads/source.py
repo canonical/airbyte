@@ -5,20 +5,16 @@ import logging
 from itertools import product
 from typing import Any, List, Mapping, Optional, Tuple
 
-from airbyte_cdk.models import FailureType, SyncMode
-from airbyte_cdk.sources import AbstractSource
+from airbyte_cdk import TState, YamlDeclarativeSource
+from airbyte_cdk.models import ConfiguredAirbyteCatalog, FailureType, SyncMode
 from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.utils import AirbyteTracedException
-from source_bing_ads.base_streams import Accounts, AdGroups, Ads, Campaigns
+from source_bing_ads.base_streams import Accounts
 from source_bing_ads.bulk_streams import (
-    AdGroupLabels,
-    AppInstallAdLabels,
-    AppInstallAds,
     Budget,
     CampaignLabels,
     KeywordLabels,
     Keywords,
-    Labels,
 )
 from source_bing_ads.client import Client
 from source_bing_ads.report_streams import (  # noqa: F401
@@ -38,14 +34,6 @@ from source_bing_ads.report_streams import (  # noqa: F401
     AdGroupPerformanceReportHourly,
     AdGroupPerformanceReportMonthly,
     AdGroupPerformanceReportWeekly,
-    AdPerformanceReportDaily,
-    AdPerformanceReportHourly,
-    AdPerformanceReportMonthly,
-    AdPerformanceReportWeekly,
-    AgeGenderAudienceReportDaily,
-    AgeGenderAudienceReportHourly,
-    AgeGenderAudienceReportMonthly,
-    AgeGenderAudienceReportWeekly,
     AudiencePerformanceReportDaily,
     AudiencePerformanceReportHourly,
     AudiencePerformanceReportMonthly,
@@ -56,10 +44,6 @@ from source_bing_ads.report_streams import (  # noqa: F401
     CampaignImpressionPerformanceReportHourly,
     CampaignImpressionPerformanceReportMonthly,
     CampaignImpressionPerformanceReportWeekly,
-    CampaignPerformanceReportDaily,
-    CampaignPerformanceReportHourly,
-    CampaignPerformanceReportMonthly,
-    CampaignPerformanceReportWeekly,
     CustomReport,
     GeographicPerformanceReportDaily,
     GeographicPerformanceReportHourly,
@@ -90,12 +74,21 @@ from source_bing_ads.report_streams import (  # noqa: F401
     UserLocationPerformanceReportMonthly,
     UserLocationPerformanceReportWeekly,
 )
+from source_bing_ads.reports.ad_performance_report import (  # noqa: F401
+    AdPerformanceReportDaily,
+    AdPerformanceReportHourly,
+    AdPerformanceReportMonthly,
+    AdPerformanceReportWeekly,
+)
 
 
-class SourceBingAds(AbstractSource):
+class SourceBingAds(YamlDeclarativeSource):
     """
     Source implementation of Bing Ads API. Fetches advertising data from accounts
     """
+
+    def __init__(self, catalog: Optional[ConfiguredAirbyteCatalog], config: Optional[Mapping[str, Any]], state: TState, **kwargs):
+        super().__init__(catalog=catalog, config=config, state=state, **{"path_to_yaml": "manifest.yaml"})
 
     def check_connection(self, logger: logging.Logger, config: Mapping[str, Any]) -> Tuple[bool, Any]:
         try:
@@ -148,33 +141,24 @@ class SourceBingAds(AbstractSource):
         ]
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
+        declarative_streams = super().streams(config)
+
         client = Client(**config)
         streams = [
-            Accounts(client, config),
-            AdGroups(client, config),
-            AdGroupLabels(client, config),
-            AppInstallAds(client, config),
-            AppInstallAdLabels(client, config),
-            Ads(client, config),
             Budget(client, config),
-            Campaigns(client, config),
             BudgetSummaryReport(client, config),
-            Labels(client, config),
+            # Labels(client, config),
             KeywordLabels(client, config),
             Keywords(client, config),
             CampaignLabels(client, config),
         ]
 
         reports = (
-            "AgeGenderAudienceReport",
             "AccountImpressionPerformanceReport",
-            "AccountPerformanceReport",
             "AudiencePerformanceReport",
             "KeywordPerformanceReport",
             "AdGroupPerformanceReport",
-            "AdPerformanceReport",
             "AdGroupImpressionPerformanceReport",
-            "CampaignPerformanceReport",
             "CampaignImpressionPerformanceReport",
             "GeographicPerformanceReport",
             "GoalsAndFunnelsReport",
@@ -188,4 +172,5 @@ class SourceBingAds(AbstractSource):
 
         custom_reports = self.get_custom_reports(config, client)
         streams.extend(custom_reports)
+        streams.extend(declarative_streams)
         return streams

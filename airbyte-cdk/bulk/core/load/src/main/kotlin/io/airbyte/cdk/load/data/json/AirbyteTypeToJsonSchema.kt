@@ -32,6 +32,13 @@ class AirbyteTypeToJsonSchema {
                 airbyteType.properties.forEach { (name, field) ->
                     properties.replace(name, convert(field.type))
                 }
+                if (!airbyteType.required.isEmpty()) {
+                    val required = objNode.putArray("required")
+                    airbyteType.required.forEach { required.add(it) }
+                }
+                if (airbyteType.additionalProperties != null) {
+                    objNode.put("additionalProperties", airbyteType.additionalProperties)
+                }
                 objNode
             }
             is ObjectTypeWithoutSchema -> ofType("object")
@@ -63,8 +70,7 @@ class AirbyteTypeToJsonSchema {
                 val timestampNode = ofType("string").put("format", "date-time")
                 timestampNode.put("airbyte_type", "timestamp_without_timezone")
             }
-            // In case of unknown type, just return {} (i.e. the accept-all JsonSchema)
-            is UnknownType -> JsonNodeFactory.instance.objectNode()
+            is UnknownType -> airbyteType.schema
         }
     }
 }
