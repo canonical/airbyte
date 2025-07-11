@@ -88,7 +88,8 @@ jobs:
           ls airbyte-ci/connectors/pipelines/pipeline_reports/airbyte-ci/connectors/test
           ls airbyte-ci/connectors/pipelines/pipeline_reports/airbyte-ci/connectors/test/manual/
 
-          REPORT_DIR=$(find airbyte-ci/connectors/pipelines/pipeline_reports/airbyte-ci/connectors/test/manual/"$CI_GIT_BRANCH" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
+          BRANCH_LOWERCASE="${CI_GIT_BRANCH,,}"
+          REPORT_DIR=$(find airbyte-ci/connectors/pipelines/pipeline_reports/airbyte-ci/connectors/test/manual/"$BRANCH_LOWERCASE" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
           echo "Report dir is $REPORT_DIR"
 
           if [[ -z "$REPORT_DIR" ]]; then
