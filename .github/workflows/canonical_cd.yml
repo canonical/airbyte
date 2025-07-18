@@ -110,14 +110,8 @@ jobs:
             if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
               echo "🛠️ Detected manifest-only connector."
               CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
-              docker build \
-              --build-arg BASE_IMAGE=$DEV_IMAGE \
-              -t "$CUSTOM_IMAGE" \
-              - <<EOF
-                FROM $DEV_IMAGE
-                ENV HTTP_PROXY=${{ vars.HTTP_PROXY }}
-                ENV HTTPS_PROXY=${{ vars.HTTPS_PROXY }}
-                EOF
+              
+              .github/scripts/build_custom_docker_image.sh $CONNECTOR
 
               echo "🔄 Tagging and pushing image $CUSTOM_IMAGE to $IMAGE_NAME"
               docker tag "$CUSTOM_IMAGE" "$IMAGE_NAME"
