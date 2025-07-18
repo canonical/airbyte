@@ -94,8 +94,6 @@ jobs:
 
           .github/scripts/generate_build_customizations.sh $CONNECTOR
 
-          cd airbyte-integrations/connectors/$CONNECTOR
-
           # Set proxy environment variables
           export IMAGE_HTTP_PROXY=${{ vars.HTTP_PROXY }}
           export IMAGE_HTTPS_PROXY=${{ vars.HTTPS_PROXY }}
@@ -107,7 +105,7 @@ jobs:
           DEV_IMAGE="airbyte/$CONNECTOR:dev"
           if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
             echo "✅ Found built image: $DEV_IMAGE"
-            if grep -q "docker.io/airbyte/source-declarative-manifest" "metadata.yaml"; then
+            if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
               echo "🛠️ Detected manifest-only connector."
               CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
               
