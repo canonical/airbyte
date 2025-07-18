@@ -96,6 +96,8 @@ jobs:
 
           cd airbyte-integrations/connectors/$CONNECTOR
 
+          cat build_customization.py 
+
           # Set proxy environment variables
           export IMAGE_HTTP_PROXY=${{ vars.HTTP_PROXY }}
           export IMAGE_HTTPS_PROXY=${{ vars.HTTPS_PROXY }}
