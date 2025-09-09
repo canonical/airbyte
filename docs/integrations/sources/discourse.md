@@ -4,6 +4,7 @@ This page contains the setup guide and reference information for the Discourse s
 
 ## Prerequisites
 
+- API Base URL
 - API Key
 - API Username
 
@@ -20,7 +21,7 @@ Go to **Discourse/admin &gt; API**, and select **New API Key**.
 1. [Log into your Airbyte Cloud](https://cloud.airbyte.com/workspaces) account.
 2. In the left navigation bar, click **Sources**. In the top-right corner, click **+new source**.
 3. On the Set up the source page, enter the name for the Discourse connector and select **Discourse** from the Source type dropdown.
-4. Enter your API key and it's associated username that you obtained from Discourse.
+4. Enter your API base url, key, and the associated username that you obtained from Discourse.
 5. Click **Set up source**.
 
 ## Supported sync modes
