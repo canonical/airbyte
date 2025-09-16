@@ -1,6 +1,9 @@
 name: Canonical Generate Image
 
 on:
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       connector_name:
