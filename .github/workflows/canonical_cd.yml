@@ -108,7 +108,7 @@ jobs:
               echo "🛠️ Detected manifest-only connector."
               CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
               
-              .github/scripts/build_custom_docker_image.sh $CONNECTOR
+              .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
 
               echo "🔄 Tagging and pushing image $CUSTOM_IMAGE to $IMAGE_NAME"
               docker tag "$CUSTOM_IMAGE" "$IMAGE_NAME"
