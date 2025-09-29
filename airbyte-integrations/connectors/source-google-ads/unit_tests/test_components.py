@@ -14,7 +14,7 @@ from airbyte_cdk.sources.declarative.schema import InlineSchemaLoader
 class TestCustomGAQuerySchemaLoader:
     def test_custom_ga_query_schema_loader_returns_expected_schema(self, config_for_custom_query_tests, requests_mock):
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/campaign_budget.name",
+            "https://googleads.googleapis.com/v20/googleAdsFields/campaign_budget.name",
             json={
                 "resourceName": "googleAdsFields/campaign_budget.name",
                 "category": "ATTRIBUTE",
@@ -28,7 +28,7 @@ class TestCustomGAQuerySchemaLoader:
             },
         )
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/campaign.name",
+            "https://googleads.googleapis.com/v20/googleAdsFields/campaign.name",
             json={
                 "resourceName": "googleAdsFields/campaign.name",
                 "category": "ATTRIBUTE",
@@ -42,7 +42,7 @@ class TestCustomGAQuerySchemaLoader:
             },
         )
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/metrics.interaction_event_types",
+            "https://googleads.googleapis.com/v20/googleAdsFields/metrics.interaction_event_types",
             json={
                 "resourceName": "googleAdsFields/metrics.interaction_event_types",
                 "category": "METRIC",
@@ -52,7 +52,7 @@ class TestCustomGAQuerySchemaLoader:
                 "filterable": True,
                 "sortable": False,
                 "enumValues": ["UNSPECIFIED", "UNKNOWN", "CLICK", "ENGAGEMENT", "VIDEO_VIEW", "NONE"],
-                "typeUrl": "google.ads.googleads.v18.enums.InteractionEventTypeEnum.InteractionEventType",
+                "typeUrl": "google.ads.googleads.v20.enums.InteractionEventTypeEnum.InteractionEventType",
                 "isRepeated": True,
             },
         )
@@ -85,7 +85,7 @@ class TestCustomGAQuerySchemaLoader:
 
     def test_custom_ga_query_schema_loader_with_cursor_field_returns_expected_schema(self, config_for_custom_query_tests, requests_mock):
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/campaign_budget.name",
+            "https://googleads.googleapis.com/v20/googleAdsFields/campaign_budget.name",
             json={
                 "resourceName": "googleAdsFields/campaign_budget.name",
                 "category": "ATTRIBUTE",
@@ -99,7 +99,7 @@ class TestCustomGAQuerySchemaLoader:
             },
         )
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/campaign.name",
+            "https://googleads.googleapis.com/v20/googleAdsFields/campaign.name",
             json={
                 "resourceName": "googleAdsFields/campaign.name",
                 "category": "ATTRIBUTE",
@@ -113,7 +113,7 @@ class TestCustomGAQuerySchemaLoader:
             },
         )
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/metrics.interaction_event_types",
+            "https://googleads.googleapis.com/v20/googleAdsFields/metrics.interaction_event_types",
             json={
                 "resourceName": "googleAdsFields/metrics.interaction_event_types",
                 "category": "METRIC",
@@ -123,12 +123,12 @@ class TestCustomGAQuerySchemaLoader:
                 "filterable": True,
                 "sortable": False,
                 "enumValues": ["UNSPECIFIED", "UNKNOWN", "CLICK", "ENGAGEMENT", "VIDEO_VIEW", "NONE"],
-                "typeUrl": "google.ads.googleads.v18.enums.InteractionEventTypeEnum.InteractionEventType",
+                "typeUrl": "google.ads.googleads.v20.enums.InteractionEventTypeEnum.InteractionEventType",
                 "isRepeated": True,
             },
         )
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/segments.date",
+            "https://googleads.googleapis.com/v20/googleAdsFields/segments.date",
             json={
                 "resourceName": "googleAdsFields/segments.date",
                 "category": "SEGMENT",
@@ -147,7 +147,7 @@ class TestCustomGAQuerySchemaLoader:
             config=config_for_custom_query_tests,
             requester=mock_requester,
             query=config_for_custom_query_tests["custom_queries_array"][0]["query"],
-            cursor_field=config_for_custom_query_tests["custom_queries_array"][0]["cursor_field"],
+            cursor_field="segments.date",
         )
         expected_schema = {
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -169,7 +169,7 @@ class TestCustomGAQuerySchemaLoader:
         config = config_for_custom_query_tests
         config["custom_queries_array"][0]["query"] = "SELECT invalid_field FROM campaign_budget"
         requests_mock.get(
-            "https://googleads.googleapis.com/v18/googleAdsFields/invalid_field",
+            "https://googleads.googleapis.com/v20/googleAdsFields/invalid_field",
             json={"error": {"code": 404, "message": "Requested entity was not found.", "status": "NOT_FOUND"}},
         )
         mock_requester = Mock()
@@ -228,13 +228,13 @@ class TestCustomGAQueryHttpRequester:
     def test_given_valid_query_with_cursor_field_returns_expected_request_body(self, config_for_custom_query_tests, requests_mock):
         config = config_for_custom_query_tests
         config["custom_queries_array"][0]["query"] = (
-            "SELECT campaign_budget.name, campaign.name, metrics.interaction_event_types FROM campaign_budget"
+            "SELECT campaign_budget.name, campaign.name, metrics.interaction_event_types, segments.date FROM campaign_budget ORDER BY segments.date ASC"
         )
         requester = CustomGAQueryHttpRequester(
             name="test_custom_ga_query_http_requester",
             parameters={
                 "query": config["custom_queries_array"][0]["query"],
-                "cursor_field": config["custom_queries_array"][0]["cursor_field"],
+                "cursor_field": "segments.date",
             },
             config=config,
         )
