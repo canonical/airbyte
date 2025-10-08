@@ -128,7 +128,7 @@ class SourceSmartsheets_2(Source):
             logger.info("getting a client")
             client = api.get_client(config)
             logger.info("accessing the root folder")
-            client.Folders.get_folder(config["root-folder-id"])
+            client.Folders.get_folder_metadata(config["root-folder-id"])
             for sheet_id in config["schema-sheet-ids"]:
                 logger.info("accessing schema sheet with id: '%d'", sheet_id)
                 client.Sheets.get_sheet(sheet_id)
@@ -237,7 +237,7 @@ class SourceSmartsheets_2(Source):
         while folder_stack:
             curr_folder_id, prev_path = folder_stack.pop()
             logger.info("requesting folder: '%d'", curr_folder_id)
-            curr_folder = client.Folders.get_folder(curr_folder_id)
+            curr_folder = client.Folders.get_folder_metadata(curr_folder_id)
             # Some logic to make paths prettier
             # 'curr_path' is a tuple of path segments that laters gets converted to a 'pathlib.PurePath'
             # 'curr_path_str' is the representation that is mainly for logging, can also be used in the metadata

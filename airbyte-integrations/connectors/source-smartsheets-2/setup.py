@@ -8,7 +8,7 @@ from setuptools import find_packages, setup
 
 MAIN_REQUIREMENTS = [
     "airbyte-cdk~=0.2",
-    "smartsheet-python-sdk~=3.0",
+    "smartsheet-python-sdk~=3.1",
 ]
 
 TEST_REQUIREMENTS = [
