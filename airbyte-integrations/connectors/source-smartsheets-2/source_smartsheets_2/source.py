@@ -250,7 +250,7 @@ class SourceSmartsheets_2(Source):
                 sheets.extend([item for item in children_result.data if item.__class__.__name__ == "Sheet"])
                 # Check if there are more pages
                 # The Smartsheet API returns last_key for pagination. Check both snake_case and camelCase.
-                last_key = getattr(children_result, 'last_key', None) or getattr(children_result, 'lastKey', None)
+                last_key = getattr(children_result, "last_key", None) or getattr(children_result, "lastKey", None)
                 if not last_key:
                     break
             # Fetch folder metadata separately for the folder name
