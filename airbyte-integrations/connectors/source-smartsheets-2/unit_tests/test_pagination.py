@@ -1,9 +1,10 @@
+# Copyright (c) 2025 Airbyte, Inc., all rights reserved.
+
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-
 from source_smartsheets_2.source import SourceSmartsheets_2
 
 
@@ -99,6 +100,7 @@ def test_paginated_children_all_pages_processed(monkeypatch):
 
     client.Folders.get_folder_children.side_effect = get_folder_children_side_effect
     client.Folders.get_folder_metadata.return_value = folder
+
     # Mock get_sheet to return the appropriate sheet
     def get_sheet_side_effect(sheet_id):
         if sheet_id == 10:
@@ -106,6 +108,7 @@ def test_paginated_children_all_pages_processed(monkeypatch):
         elif sheet_id == 11:
             return sheet2
         return None
+
     client.Sheets.get_sheet.side_effect = get_sheet_side_effect
 
     monkeypatch.setattr("source_smartsheets_2.source.api.get_client", lambda cfg: client)
