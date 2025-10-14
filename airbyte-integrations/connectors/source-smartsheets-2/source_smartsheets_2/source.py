@@ -238,7 +238,10 @@ class SourceSmartsheets_2(Source):
             curr_folder_id, prev_path = folder_stack.pop()
             logger.info("requesting folder: '%d'", curr_folder_id)
             # Call get_folder_children once and fetch metadata separately.
-            curr_children = client.Folders.get_folder_children(curr_folder_id)
+            children_result = client.Folders.get_folder_children(curr_folder_id)
+            # children_result.data is a list of mixed objects (Folder, Sheet, etc.)
+            folders = [item for item in children_result.data if item.__class__.__name__ == "Folder"]
+            sheets = [item for item in children_result.data if item.__class__.__name__ == "Sheet"]
             # Fetch folder metadata separately for the folder name
             curr_folder = client.Folders.get_folder_metadata(curr_folder_id)
             # Some logic to make paths prettier
@@ -254,7 +257,7 @@ class SourceSmartsheets_2(Source):
 
             # Filter subfolders
             matched_folders, unmatched_folders = utils.filter_folders_by_exclusion(
-                ((subfolder, curr_path) for subfolder in curr_children.folders), exclude_patterns
+                ((subfolder, curr_path) for subfolder in folders), exclude_patterns
             )
             for subfolder, pattern in matched_folders:
                 logger.info("subfolder excluded: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{subfolder.name}", pattern)
@@ -263,7 +266,7 @@ class SourceSmartsheets_2(Source):
                 folder_stack.append((subfolder.id, curr_path))
 
             # Filter sheets
-            matched_sheets = utils.filter_sheets_by_inclusion(((sheet, curr_path) for sheet in curr_children.sheets), include_patterns)
+            matched_sheets = utils.filter_sheets_by_inclusion(((sheet, curr_path) for sheet in sheets), include_patterns)
             sheet_ids: list[int] = [sheet.id for (sheet, _) in matched_sheets]
             for sheet, pattern in matched_sheets:
                 logger.info("sheet included: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{sheet.name}", pattern)
