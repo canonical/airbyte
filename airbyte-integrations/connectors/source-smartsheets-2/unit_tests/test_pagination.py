@@ -62,11 +62,11 @@ def run_read_and_collect(client_mock, config):
 def test_single_page_children_are_processed(monkeypatch):
     # Setup client mock
     client = MagicMock()
-    # get_folder_children returns an object with .folders and .sheets
+    # get_folder_children returns an object with .data containing both folders and sheets
     folder = DummyFolder(1, "root")
     child_folder = DummyFolder(2, "child")
     sheet = DummySheet(10, "sheet1", [], [])
-    client.Folders.get_folder_children.return_value = SimpleNamespace(folders=[child_folder], sheets=[sheet])
+    client.Folders.get_folder_children.return_value = SimpleNamespace(data=[child_folder, sheet])
     client.Folders.get_folder_metadata.return_value = folder
     client.Sheets.get_sheet.return_value = sheet
 
@@ -88,11 +88,8 @@ def test_paginated_children_only_first_page_processed(monkeypatch):
     # Second page would have another sheet, but our code won't fetch it
     sheet2 = DummySheet(11, "sheet2", [], [])
 
-    # Simulate paginated response by returning an object that indicates more pages exist
-    paginated = SimpleNamespace(folders=[], sheets=[sheet1])
-    paginated_more = SimpleNamespace(folders=[], sheets=[sheet2])
-
-    client.Folders.get_folder_children.return_value = paginated
+    # Simulate paginated response by returning an object with .data
+    client.Folders.get_folder_children.return_value = SimpleNamespace(data=[sheet1])
     client.Folders.get_folder_metadata.return_value = folder
     client.Sheets.get_sheet.return_value = sheet1
 
