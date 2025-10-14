@@ -237,11 +237,22 @@ class SourceSmartsheets_2(Source):
         while folder_stack:
             curr_folder_id, prev_path = folder_stack.pop()
             logger.info("requesting folder: '%d'", curr_folder_id)
-            # Call get_folder_children once and fetch metadata separately.
-            children_result = client.Folders.get_folder_children(curr_folder_id)
-            # children_result.data is a list of mixed objects (Folder, Sheet, etc.)
-            folders = [item for item in children_result.data if item.__class__.__name__ == "Folder"]
-            sheets = [item for item in children_result.data if item.__class__.__name__ == "Sheet"]
+            # Call get_folder_children with pagination support.
+            # The Smartsheet API may return paginated results, so we need to handle the last_key
+            # to fetch all children across multiple pages.
+            folders = []
+            sheets = []
+            last_key = None
+            while True:
+                children_result = client.Folders.get_folder_children(curr_folder_id, last_key=last_key)
+                # children_result.data is a list of mixed objects (Folder, Sheet, etc.)
+                folders.extend([item for item in children_result.data if item.__class__.__name__ == "Folder"])
+                sheets.extend([item for item in children_result.data if item.__class__.__name__ == "Sheet"])
+                # Check if there are more pages
+                # The Smartsheet API returns last_key for pagination. Check both snake_case and camelCase.
+                last_key = getattr(children_result, 'last_key', None) or getattr(children_result, 'lastKey', None)
+                if not last_key:
+                    break
             # Fetch folder metadata separately for the folder name
             curr_folder = client.Folders.get_folder_metadata(curr_folder_id)
             # Some logic to make paths prettier
