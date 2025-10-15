@@ -1,16 +1,13 @@
 # Copyright (c) 2023 Airbyte, Inc., all rights reserved.
 
-import re
-from pathlib import PurePath
-from typing import Iterable, Optional
-
-import time
 import logging
+import re
+import time
 from datetime import datetime
-from typing import Any, Callable
-from smartsheet.exceptions import ApiError, RateLimitExceededError, HttpError
+from pathlib import PurePath
+from typing import Any, Callable, Iterable, Optional
 
-
+from smartsheet.exceptions import ApiError, HttpError, RateLimitExceededError
 from smartsheet.models.enums import ColumnType
 from smartsheet.models.folder import Folder
 from smartsheet.models.sheet import Sheet
@@ -190,9 +187,11 @@ def reconcile_types(left: ColumnType, right: ColumnType) -> ColumnType:
     # TEXT_NUMBER is the universal type
     return ColumnType.TEXT_NUMBER
 
+
 # --- Rate limit/retry utility ---
 def now_str() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
 
 def call_with_retries(fn: Callable, *args, max_backoff: int = 60, **kwargs) -> Any:
     """
