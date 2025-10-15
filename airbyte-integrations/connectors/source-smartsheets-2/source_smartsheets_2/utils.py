@@ -4,6 +4,13 @@ import re
 from pathlib import PurePath
 from typing import Iterable, Optional
 
+import time
+import logging
+from datetime import datetime
+from typing import Any, Callable
+from smartsheet.exceptions import ApiError, RateLimitExceededError, HttpError
+
+
 from smartsheet.models.enums import ColumnType
 from smartsheet.models.folder import Folder
 from smartsheet.models.sheet import Sheet
@@ -182,3 +189,53 @@ def reconcile_types(left: ColumnType, right: ColumnType) -> ColumnType:
 
     # TEXT_NUMBER is the universal type
     return ColumnType.TEXT_NUMBER
+
+# --- Rate limit/retry utility ---
+def now_str() -> str:
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+def call_with_retries(fn: Callable, *args, max_backoff: int = 60, **kwargs) -> Any:
+    """
+    Wrap Smartsheet SDK calls to handle 429s and transient errors.
+    - Honors Retry-After when present on 429
+    - Exponential backoff (1,2,4,... up to max_backoff)
+    - Logs each wait so the program never appears to 'hang'
+    """
+    backoff = 1
+    logger = logging.getLogger("smartsheet-retry")
+    while True:
+        try:
+            return fn(*args, **kwargs)
+        except RateLimitExceededError as e:
+            retry_after = None
+            try:
+                retry_after = int(e.error.request_response.headers.get("Retry-After", ""))
+            except Exception:
+                pass
+            wait = min(retry_after if retry_after else backoff, max_backoff)
+            logger.warning(f"[{now_str()}] 429 Rate limit. Sleeping {wait}s (backoff={backoff}).")
+            time.sleep(wait)
+            backoff = min(backoff * 2, max_backoff)
+            continue
+        except HttpError as e:
+            status = getattr(e, "status_code", "?")
+            logger.warning(f"[{now_str()}] HTTP error {status}. Sleeping {backoff}s (backoff={backoff}).")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, max_backoff)
+            continue
+        except ApiError as e:
+            logger.error(f"API error {getattr(e.error, 'error_code', '?')}: {getattr(e.error, 'message', e)}")
+            raise
+        except KeyError as e:
+            # SDK bug path: 429 with missing 'refId' triggers KeyError('refId')
+            if str(e) == "'refId'":
+                wait = min(backoff, max_backoff)
+                logger.error('{"response": {"statusCode": 429, "reason": "Too Many Requests"}}')
+                logger.warning(f"[{now_str()}] Caught SDK 'refId' bug on 429. Sleeping {wait}s (backoff={backoff}).")
+                time.sleep(wait)
+                backoff = min(backoff * 2, max_backoff)
+                continue
+            raise  # some other KeyError — surface it
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            raise
