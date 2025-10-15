@@ -220,13 +220,15 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: i
             except:
                 pass
             wait = min(retry_after if retry_after else backoff, max_backoff)
-            logger.warning("[%s] 429 Rate limit. Retry %s/%s. Sleeping %ss (backoff=%s).", now_str(), retry_count, max_retries, wait, backoff)
+            logger.warning(
+                "[%s] 429 Rate limit. Retry %s/%s. Sleeping %ss (backoff=%s).", now_str(), retry_count, max_retries, wait, backoff
+            )
             time.sleep(wait)
             backoff = min(backoff * 2, max_backoff)
             continue
         except HttpError as e:
             status = getattr(e, "status_code", "?")
-            
+
             # Only retry on transient errors (5xx server errors and some 4xx)
             # Don't retry on client errors like 400, 401, 403, 404
             if isinstance(status, int) and status >= 500:
@@ -235,7 +237,15 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: i
                     logger.error("[%s] Max retries (%s) reached for HTTP %s error. Giving up.", now_str(), max_retries, status)
                     raise
 
-                logger.warning("[%s] HTTP error %s. Retry %s/%s. Sleeping %ss (backoff=%s).", now_str(), status, retry_count, max_retries, backoff, backoff)
+                logger.warning(
+                    "[%s] HTTP error %s. Retry %s/%s. Sleeping %ss (backoff=%s).",
+                    now_str(),
+                    status,
+                    retry_count,
+                    max_retries,
+                    backoff,
+                    backoff,
+                )
                 time.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
                 continue
@@ -244,7 +254,7 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: i
                 logger.error("[%s] HTTP error %s - not retrying client error.", now_str(), status)
                 raise
         except ApiError as e:
-            logger.error("API error %s: %s", getattr(e.error, 'error_code', '?'), getattr(e.error, 'message', e))
+            logger.error("API error %s: %s", getattr(e.error, "error_code", "?"), getattr(e.error, "message", e))
             raise
         except KeyError as e:
             # SDK bug path: 429 with missing 'refId' triggers KeyError('refId')
@@ -256,7 +266,14 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: i
 
                 wait = min(backoff, max_backoff)
                 logger.error('{"response": {"statusCode": 429, "reason": "Too Many Requests"}}')
-                logger.warning("[%s] Caught SDK 'refId' bug on 429. Retry %s/%s. Sleeping %ss (backoff=%s).", now_str(), retry_count, max_retries, wait, backoff)
+                logger.warning(
+                    "[%s] Caught SDK 'refId' bug on 429. Retry %s/%s. Sleeping %ss (backoff=%s).",
+                    now_str(),
+                    retry_count,
+                    max_retries,
+                    wait,
+                    backoff,
+                )
                 time.sleep(wait)
                 backoff = min(backoff * 2, max_backoff)
                 continue
