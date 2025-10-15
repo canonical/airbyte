@@ -225,16 +225,24 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: i
             backoff = min(backoff * 2, max_backoff)
             continue
         except HttpError as e:
-            retry_count += 1
-            if retry_count >= max_retries:
-                logger.error(f"[{now_str()}] Max retries ({max_retries}) reached for HTTP error. Giving up.")
-                raise
-
             status = getattr(e, "status_code", "?")
-            logger.warning(f"[{now_str()}] HTTP error {status}. Retry {retry_count}/{max_retries}. Sleeping {backoff}s (backoff={backoff}).")
-            time.sleep(backoff)
-            backoff = min(backoff * 2, max_backoff)
-            continue
+            
+            # Only retry on transient errors (5xx server errors and some 4xx)
+            # Don't retry on client errors like 400, 401, 403, 404
+            if isinstance(status, int) and status >= 500:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error(f"[{now_str()}] Max retries ({max_retries}) reached for HTTP {status} error. Giving up.")
+                    raise
+
+                logger.warning(f"[{now_str()}] HTTP error {status}. Retry {retry_count}/{max_retries}. Sleeping {backoff}s (backoff={backoff}).")
+                time.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
+                continue
+            else:
+                # Don't retry on client errors (4xx except 429 which is handled separately)
+                logger.error(f"[{now_str()}] HTTP error {status} - not retrying client error.")
+                raise
         except ApiError as e:
             logger.error(f"API error {getattr(e.error, 'error_code', '?')}: {getattr(e.error, 'message', e)}")
             raise
