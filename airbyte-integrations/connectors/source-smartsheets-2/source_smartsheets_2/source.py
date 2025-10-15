@@ -237,6 +237,23 @@ class SourceSmartsheets_2(Source):
         while folder_stack:
             curr_folder_id, prev_path = folder_stack.pop()
             logger.info("requesting folder: '%d'", curr_folder_id)
+            # Call get_folder_children with pagination support.
+            # The Smartsheet API may return paginated results, so we need to handle the last_key
+            # to fetch all children across multiple pages.
+            folders = []
+            sheets = []
+            last_key = None
+            while True:
+                children_result = client.Folders.get_folder_children(curr_folder_id, last_key=last_key)
+                # children_result.data is a list of mixed objects (Folder, Sheet, etc.)
+                folders.extend([item for item in children_result.data if item.__class__.__name__ == "Folder"])
+                sheets.extend([item for item in children_result.data if item.__class__.__name__ == "Sheet"])
+                # Check if there are more pages
+                # The Smartsheet API returns last_key for pagination. Check both snake_case and camelCase.
+                last_key = getattr(children_result, "last_key", None) or getattr(children_result, "lastKey", None)
+                if not last_key:
+                    break
+            # Fetch folder metadata separately for the folder name
             curr_folder = client.Folders.get_folder_metadata(curr_folder_id)
             # Some logic to make paths prettier
             # 'curr_path' is a tuple of path segments that laters gets converted to a 'pathlib.PurePath'
@@ -251,7 +268,7 @@ class SourceSmartsheets_2(Source):
 
             # Filter subfolders
             matched_folders, unmatched_folders = utils.filter_folders_by_exclusion(
-                ((subfolder, curr_path) for subfolder in curr_folder.folders), exclude_patterns
+                ((subfolder, curr_path) for subfolder in folders), exclude_patterns
             )
             for subfolder, pattern in matched_folders:
                 logger.info("subfolder excluded: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{subfolder.name}", pattern)
@@ -260,7 +277,7 @@ class SourceSmartsheets_2(Source):
                 folder_stack.append((subfolder.id, curr_path))
 
             # Filter sheets
-            matched_sheets = utils.filter_sheets_by_inclusion(((sheet, curr_path) for sheet in curr_folder.sheets), include_patterns)
+            matched_sheets = utils.filter_sheets_by_inclusion(((sheet, curr_path) for sheet in sheets), include_patterns)
             sheet_ids: list[int] = [sheet.id for (sheet, _) in matched_sheets]
             for sheet, pattern in matched_sheets:
                 logger.info("sheet included: '%s' -- matched pattern: '%s'", f"{curr_path_str}/{sheet.name}", pattern)
