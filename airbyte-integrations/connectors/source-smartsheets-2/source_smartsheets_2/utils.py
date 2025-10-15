@@ -193,32 +193,45 @@ def now_str() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def call_with_retries(fn: Callable, *args, max_backoff: int = 60, **kwargs) -> Any:
+def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: int = 10, **kwargs) -> Any:
     """
     Wrap Smartsheet SDK calls to handle 429s and transient errors.
     - Honors Retry-After when present on 429
     - Exponential backoff (1,2,4,... up to max_backoff)
     - Logs each wait so the program never appears to 'hang'
+    - Fails after max_retries attempts to prevent infinite loops
     """
     backoff = 1
+    retry_count = 0
     logger = logging.getLogger("smartsheet-retry")
-    while True:
+
+    while retry_count < max_retries:
         try:
             return fn(*args, **kwargs)
         except RateLimitExceededError as e:
+            retry_count += 1
+            if retry_count >= max_retries:
+                logger.error(f"[{now_str()}] Max retries ({max_retries}) reached for rate limit. Giving up.")
+                raise
+
             retry_after = None
             try:
                 retry_after = int(e.error.request_response.headers.get("Retry-After", ""))
             except Exception:
                 pass
             wait = min(retry_after if retry_after else backoff, max_backoff)
-            logger.warning(f"[{now_str()}] 429 Rate limit. Sleeping {wait}s (backoff={backoff}).")
+            logger.warning(f"[{now_str()}] 429 Rate limit. Retry {retry_count}/{max_retries}. Sleeping {wait}s (backoff={backoff}).")
             time.sleep(wait)
             backoff = min(backoff * 2, max_backoff)
             continue
         except HttpError as e:
+            retry_count += 1
+            if retry_count >= max_retries:
+                logger.error(f"[{now_str()}] Max retries ({max_retries}) reached for HTTP error. Giving up.")
+                raise
+
             status = getattr(e, "status_code", "?")
-            logger.warning(f"[{now_str()}] HTTP error {status}. Sleeping {backoff}s (backoff={backoff}).")
+            logger.warning(f"[{now_str()}] HTTP error {status}. Retry {retry_count}/{max_retries}. Sleeping {backoff}s (backoff={backoff}).")
             time.sleep(backoff)
             backoff = min(backoff * 2, max_backoff)
             continue
@@ -228,9 +241,14 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, **kwargs) -> A
         except KeyError as e:
             # SDK bug path: 429 with missing 'refId' triggers KeyError('refId')
             if str(e) == "'refId'":
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error(f"[{now_str()}] Max retries ({max_retries}) reached for SDK refId bug. Giving up.")
+                    raise
+
                 wait = min(backoff, max_backoff)
                 logger.error('{"response": {"statusCode": 429, "reason": "Too Many Requests"}}')
-                logger.warning(f"[{now_str()}] Caught SDK 'refId' bug on 429. Sleeping {wait}s (backoff={backoff}).")
+                logger.warning(f"[{now_str()}] Caught SDK 'refId' bug on 429. Retry {retry_count}/{max_retries}. Sleeping {wait}s (backoff={backoff}).")
                 time.sleep(wait)
                 backoff = min(backoff * 2, max_backoff)
                 continue
@@ -238,3 +256,7 @@ def call_with_retries(fn: Callable, *args, max_backoff: int = 60, **kwargs) -> A
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             raise
+
+    # Should never reach here, but just in case
+    logger.error(f"[{now_str()}] Exhausted all {max_retries} retries.")
+    raise Exception(f"Max retries ({max_retries}) exceeded")
