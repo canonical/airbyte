@@ -1,9 +1,13 @@
 # Copyright (c) 2023 Airbyte, Inc., all rights reserved.
 
+import logging
 import re
+import time
+from datetime import datetime
 from pathlib import PurePath
-from typing import Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
+from smartsheet.exceptions import ApiError, HttpError, RateLimitExceededError
 from smartsheet.models.enums import ColumnType
 from smartsheet.models.folder import Folder
 from smartsheet.models.sheet import Sheet
@@ -182,3 +186,102 @@ def reconcile_types(left: ColumnType, right: ColumnType) -> ColumnType:
 
     # TEXT_NUMBER is the universal type
     return ColumnType.TEXT_NUMBER
+
+
+# --- Rate limit/retry utility ---
+def now_str() -> str:
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def call_with_retries(fn: Callable, *args, max_backoff: int = 60, max_retries: int = 10, **kwargs) -> Any:
+    """
+    Wrap Smartsheet SDK calls to handle 429s and transient errors.
+    - Honors Retry-After when present on 429
+    - Exponential backoff (1,2,4,... up to max_backoff)
+    - Logs each wait so the program never appears to 'hang'
+    - Fails after max_retries attempts to prevent infinite loops
+    """
+    backoff = 1
+    retry_count = 0
+    logger = logging.getLogger("smartsheet-retry")
+
+    while retry_count < max_retries:
+        try:
+            return fn(*args, **kwargs)
+        except RateLimitExceededError as e:
+            retry_count += 1
+            if retry_count >= max_retries:
+                logger.error("[%s] Max retries (%s) reached for rate limit. Giving up.", now_str(), max_retries)
+                raise
+
+            retry_after = None
+            try:
+                retry_after = int(e.error.request_response.headers.get("Retry-After", ""))
+            except:
+                pass
+            wait = min(retry_after if retry_after else backoff, max_backoff)
+            logger.warning(
+                "[%s] 429 Rate limit. Retry %s/%s. Sleeping %ss (backoff=%s).", now_str(), retry_count, max_retries, wait, backoff
+            )
+            time.sleep(wait)
+            backoff = min(backoff * 2, max_backoff)
+            continue
+        except HttpError as e:
+            status = getattr(e, "status_code", "?")
+
+            # Only retry on transient errors (5xx server errors and some 4xx)
+            # Don't retry on client errors like 400, 401, 403, 404
+            if isinstance(status, int) and status >= 500:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error("[%s] Max retries (%s) reached for HTTP %s error. Giving up.", now_str(), max_retries, status)
+                    raise
+
+                logger.warning(
+                    "[%s] HTTP error %s. Retry %s/%s. Sleeping %ss (backoff=%s).",
+                    now_str(),
+                    status,
+                    retry_count,
+                    max_retries,
+                    backoff,
+                    backoff,
+                )
+                time.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
+                continue
+            else:
+                # Don't retry on client errors (4xx except 429 which is handled separately)
+                logger.error("[%s] HTTP error %s - not retrying client error.", now_str(), status)
+                raise
+        except ApiError as e:
+            logger.error("API error %s: %s", getattr(e.error, "error_code", "?"), getattr(e.error, "message", e))
+            raise
+        except KeyError as e:
+            # SDK bug path: 429 with missing 'refId' triggers KeyError('refId')
+            if str(e) == "'refId'":
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error("[%s] Max retries (%s) reached for SDK refId bug. Giving up.", now_str(), max_retries)
+                    raise
+
+                wait = min(backoff, max_backoff)
+                logger.error('{"response": {"statusCode": 429, "reason": "Too Many Requests"}}')
+                logger.warning(
+                    "[%s] Caught SDK 'refId' bug on 429. Retry %s/%s. Sleeping %ss (backoff=%s).",
+                    now_str(),
+                    retry_count,
+                    max_retries,
+                    wait,
+                    backoff,
+                )
+                time.sleep(wait)
+                backoff = min(backoff * 2, max_backoff)
+                continue
+            raise  # some other KeyError — surface it
+        except Exception as e:
+            logger.error("Unexpected error: %s", e)
+            raise
+
+    # Should never reach here, but just in case
+    logger.error("[%s] Exhausted all %s retries.", now_str(), max_retries)
+    raise Exception(f"Max retries ({max_retries}) exceeded")

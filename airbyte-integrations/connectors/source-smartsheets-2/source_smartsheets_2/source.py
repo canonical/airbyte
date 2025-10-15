@@ -128,10 +128,11 @@ class SourceSmartsheets_2(Source):
             logger.info("getting a client")
             client = api.get_client(config)
             logger.info("accessing the root folder")
-            client.Folders.get_folder_metadata(config["root-folder-id"])
+
+            utils.call_with_retries(client.Folders.get_folder_metadata, config["root-folder-id"])
             for sheet_id in config["schema-sheet-ids"]:
                 logger.info("accessing schema sheet with id: '%d'", sheet_id)
-                client.Sheets.get_sheet(sheet_id)
+                utils.call_with_retries(client.Sheets.get_sheet, sheet_id)
             return AirbyteConnectionStatus(status=Status.SUCCEEDED)
         except Exception as e:
             return AirbyteConnectionStatus(status=Status.FAILED, message=f"An exception occurred: {str(e)}")
@@ -161,7 +162,7 @@ class SourceSmartsheets_2(Source):
         columns = {}  # maps column name to column type
         for curr_sheet_id in config["schema-sheet-ids"]:
             logger.info("processing sheet id: '%d'", curr_sheet_id)
-            curr_sheet = client.Sheets.get_sheet(curr_sheet_id)
+            curr_sheet = utils.call_with_retries(client.Sheets.get_sheet, curr_sheet_id)
             for column in curr_sheet.columns:
                 if column.title in columns:
                     columns[column.title] = utils.reconcile_types(columns[column.title], column.type.value)
@@ -244,7 +245,7 @@ class SourceSmartsheets_2(Source):
             sheets = []
             last_key = None
             while True:
-                children_result = client.Folders.get_folder_children(curr_folder_id, last_key=last_key)
+                children_result = utils.call_with_retries(client.Folders.get_folder_children, curr_folder_id, last_key=last_key)
                 # children_result.data is a list of mixed objects (Folder, Sheet, etc.)
                 folders.extend([item for item in children_result.data if item.__class__.__name__ == "Folder"])
                 sheets.extend([item for item in children_result.data if item.__class__.__name__ == "Sheet"])
@@ -254,7 +255,7 @@ class SourceSmartsheets_2(Source):
                 if not last_key:
                     break
             # Fetch folder metadata separately for the folder name
-            curr_folder = client.Folders.get_folder_metadata(curr_folder_id)
+            curr_folder = utils.call_with_retries(client.Folders.get_folder_metadata, curr_folder_id)
             # Some logic to make paths prettier
             # 'curr_path' is a tuple of path segments that laters gets converted to a 'pathlib.PurePath'
             # 'curr_path_str' is the representation that is mainly for logging, can also be used in the metadata
@@ -284,7 +285,7 @@ class SourceSmartsheets_2(Source):
 
             # Process sheets
             for sheet_id in sheet_ids:
-                sheet = client.Sheets.get_sheet(sheet_id)
+                sheet = utils.call_with_retries(client.Sheets.get_sheet, sheet_id)
                 logger.info("processing sheet: '%s'", f"{curr_path_str}/{sheet.name}")
                 columns: list[tuple[int, str]] = []
                 # Get whatever columns from the schema are available
