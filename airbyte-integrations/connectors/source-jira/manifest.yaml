@@ -14625,8 +14625,8 @@ check:
   type: CheckStream
   stream_names:
   - projects
+  - users
   - issues
-# Removed user stream from check list because it requires admin permissions to access
 
 # Defining a value here is difficult because the Jira API documentation mentions "REST API rate limits are not published because the computation logic is evolving continuously to maximize reliability and performance for customers" regarding the API budget. Hence, we will need to empirically validate the values that are set here.
 concurrency_level:
