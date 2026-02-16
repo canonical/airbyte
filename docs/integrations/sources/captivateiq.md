@@ -23,7 +23,7 @@ Source CaptivateIQ is designed to interact with the data your permissions give y
 
 ## Supported sync modes
 
-The CaptivateIQ source connector supports the following [ sync modes](https://docs.airbyte.com/cloud/core-concepts#connection-sync-modes):
+The CaptivateIQ source connector supports the following [sync modes](https://docs.airbyte.com/cloud/core-concepts#connection-sync-modes):
 
 - [Full Refresh - Overwrite](https://docs.airbyte.com/understanding-airbyte/connections/full-refresh-overwrite/)
 - [Full Refresh - Append](https://docs.airbyte.com/understanding-airbyte/connections/full-refresh-append)
@@ -34,6 +34,7 @@ The CaptivateIQ source connector supports the following [ sync modes](https://do
 This connector outputs the following streams:
 
 - Employees
+- Audit Logs (Incremental)
 - Attribute Worksheets
 - Payouts
 - Report Model
