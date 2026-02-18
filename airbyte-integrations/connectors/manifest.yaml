@@ -1,0 +1,497 @@
+version: 7.0.4
+
+type: DeclarativeSource
+
+check:
+  type: CheckStream
+  stream_names:
+    - ZiftONE Deals
+
+streams:
+  - type: DeclarativeStream
+    name: ZiftONE Deals
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        type: DefaultPaginator
+        pagination_strategy:
+          type: PageIncrement
+          start_from_page: 2
+          page_size: 20
+        page_size_option:
+          type: RequestOption
+          inject_into: request_parameter
+          field_name: size
+        page_token_option:
+          type: RequestOption
+          inject_into: request_parameter
+          field_name: page
+      requester:
+        type: HttpRequester
+        url: https://supplier.ziftone.com/api/dealregistration/deals/
+        http_method: GET
+        authenticator:
+          type: SessionTokenAuthenticator
+          login_requester:
+            type: HttpRequester
+            url: https://supplier.ziftone.com/api/authorization/login
+            http_method: POST
+            request_body:
+              type: RequestBodyJsonObject
+              value:
+                password: "{{ config['ziftone_password'] }}"
+                userType: SUPPLIER
+                username: "{{ config['ziftone_username'] }}"
+          session_token_path:
+            - token
+          request_authentication:
+            type: ApiKey
+            inject_into:
+              type: RequestOption
+              field_name: Authorization
+              inject_into: header
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - content
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          description:
+            type:
+              - string
+              - "null"
+          clientId:
+            type:
+              - string
+              - "null"
+          createDate:
+            type:
+              - string
+              - "null"
+          updateDate:
+            type: string
+          externalId:
+            type:
+              - string
+              - "null"
+          externalSourceIntegrationId:
+            type:
+              - string
+              - "null"
+          partnerExternalId:
+            type:
+              - string
+              - "null"
+          partnerExternalSourceIntegrationId:
+            type:
+              - string
+              - "null"
+          name:
+            type:
+              - string
+              - "null"
+          active:
+            type:
+              - boolean
+              - "null"
+          dealId:
+            type: string
+          closePercentage:
+            type:
+              - number
+              - "null"
+          closeDate:
+            type:
+              - string
+              - "null"
+          accountId:
+            type:
+              - string
+              - "null"
+          accountName:
+            type:
+              - string
+              - "null"
+          pricebookId:
+            type:
+              - string
+              - "null"
+          partnerId:
+            type:
+              - string
+              - "null"
+          source:
+            type:
+              - string
+              - "null"
+          totalValue:
+            type:
+              - number
+              - "null"
+          createdByZift123UserId:
+            type:
+              - string
+              - "null"
+          updatedByUserId:
+            type:
+              - string
+              - "null"
+          status:
+            type:
+              - string
+              - "null"
+          ownerUserId:
+            type:
+              - string
+              - "null"
+          dealSalesRep:
+            type:
+              - object
+              - "null"
+            properties:
+              clientId:
+                type:
+                  - string
+                  - "null"
+              createDate:
+                type:
+                  - string
+                  - "null"
+              updateDate:
+                type:
+                  - string
+                  - "null"
+              dealSalesRepId:
+                type:
+                  - string
+                  - "null"
+              zift123UserId:
+                type:
+                  - string
+                  - "null"
+              source:
+                type:
+                  - string
+                  - "null"
+          dealSalesRepRole:
+            type:
+              - object
+              - "null"
+            properties:
+              clientId:
+                type:
+                  - string
+                  - "null"
+              createDate:
+                type:
+                  - string
+                  - "null"
+              updateDate:
+                type:
+                  - string
+                  - "null"
+              externalId:
+                type:
+                  - string
+                  - "null"
+              id:
+                type:
+                  - string
+                  - "null"
+              source:
+                type:
+                  - string
+                  - "null"
+          stage:
+            type:
+              - string
+              - "null"
+          submitDate:
+            type:
+              - string
+              - "null"
+          approveDate:
+            type:
+              - string
+              - "null"
+          rejectDate:
+            type:
+              - string
+              - "null"
+          currency:
+            type:
+              - object
+              - "null"
+            properties:
+              currencyCode:
+                type:
+                  - string
+                  - "null"
+              symbol:
+                type:
+                  - string
+                  - "null"
+          pushToPRM:
+            type:
+              - boolean
+              - "null"
+          customFields:
+            type:
+              - object
+              - "null"
+            properties:
+              Customer Street Address:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Distributor Sales Rep Email:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer City:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Reseller Sales Rep Email:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Technical User Email:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Country:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Reseller Sales Rep:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Public Sector?:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Technical User:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Distributor Sales Rep:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Do Not Create Opportunity Upon Conversion:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Name:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Renewal/Growth:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              forecastCategory:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              DealLostReason__c:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Rejection Reason Description:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+          dealContacts:
+            type:
+              - array
+              - "null"
+          dealAttachments:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                clientId:
+                  type:
+                    - string
+                    - "null"
+                createDate:
+                  type:
+                    - string
+                    - "null"
+                updateDate:
+                  type:
+                    - string
+                    - "null"
+                externalId:
+                  type:
+                    - string
+                    - "null"
+                externalSourceIntegrationId:
+                  type:
+                    - string
+                    - "null"
+                id:
+                  type:
+                    - string
+                    - "null"
+                attachment:
+                  type:
+                    - string
+                    - "null"
+                source:
+                  type:
+                    - string
+                    - "null"
+          dealTypeId:
+            type:
+              - string
+              - "null"
+          coSellingPartnerId:
+            type:
+              - string
+              - "null"
+          createdByUserId:
+            type:
+              - string
+              - "null"
+        required:
+          - dealId
+          - updateDate
+        additionalProperties: true
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: updateDate
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_time'] }}"
+      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      start_time_option:
+        type: RequestOption
+        inject_into: header
+        field_name: updateDateFrom
+    transformations: []
+    primary_key: dealId
+
+spec:
+  type: Spec
+  connection_specification:
+    type: object
+    $schema: http://json-schema.org/draft-07/schema#
+    required:
+      - ziftone_username
+      - ziftone_password
+    properties:
+      ziftone_username:
+        type: string
+        description: An email address
+        order: 0
+        title: ZiftONE Username
+      ziftone_password:
+        type: string
+        order: 1
+        title: ZiftONE Password
+        airbyte_secret: true
+      start_time:
+        type: string
+        title: Start time
+        pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$
+        format: date-time
+        order: 2
+    additionalProperties: true
+
+metadata:
+  testedStreams:
+    stream_0:
+      streamHash: ad11f9fa446b445a056b0f48d54e74059e0bc977
+    ZiftONE Deals:
+      isStale: false
+      hasRecords: true
+      streamHash: 0785b79211aa5f603e042d4dd1f250ab0e2712da
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+  autoImportSchema:
+    ZiftONE Deals: true
+
+concurrency_level:
+  type: ConcurrencyLevel
+  default_concurrency: 1
+
