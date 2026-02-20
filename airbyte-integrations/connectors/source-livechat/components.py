@@ -1,4 +1,7 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 """Custom components for LiveChat source connector."""
+
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
