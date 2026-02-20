@@ -20,7 +20,6 @@ Source LiveChat is designed to interact with the resources your permissions give
 - Name your token (the name doesn't affect authorization).
 - Click Create token.
 
-
 ## Step 2: Set up the LiveChat connector in Airbyte
 
 1. [Log into your Airbyte Cloud](https://cloud.airbyte.com/workspaces) account.
@@ -31,7 +30,7 @@ Source LiveChat is designed to interact with the resources your permissions give
 
 ## Supported sync modes
 
-The Tempo source connector supports the following [ sync modes](https://docs.airbyte.com/cloud/core-concepts#connection-sync-modes):
+The Tempo source connector supports the following [sync modes](https://docs.airbyte.com/cloud/core-concepts#connection-sync-modes):
 
 - [Full Refresh - Overwrite](https://docs.airbyte.com/understanding-airbyte/connections/full-refresh-overwrite/)
 - [Full Refresh - Append](https://docs.airbyte.com/understanding-airbyte/connections/full-refresh-append)
