@@ -15,11 +15,11 @@ data:
   connectorType: source
   dockerImageTag: 0.1.0
   canonicalImageTag: 0.1.0
-  dockerRepository: airbyte/source-discourse
-  githubIssueLabel: source-discourse
+  dockerRepository: airbyte/source-ziftone
+  githubIssueLabel: source-ziftone
   icon: icon.svg
   license: MIT
-  name: Discourse
+  name: ZiftONE
   releaseDate: 2025-09-09
   releaseStage: alpha
   supportLevel: community
