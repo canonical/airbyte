@@ -15,7 +15,7 @@ data:
   connectorType: source
   dockerImageTag: 0.1.0
   canonicalImageTag: 0.1.0
-  dockerRepository: airbyte/source-discourse
+  dockerRepository: airbyte/source-ziftone
   githubIssueLabel: source-discourse
   icon: icon.svg
   license: MIT
