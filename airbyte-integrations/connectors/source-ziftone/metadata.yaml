@@ -16,7 +16,7 @@ data:
   dockerImageTag: 0.1.0
   canonicalImageTag: 0.1.0
   dockerRepository: airbyte/source-ziftone
-  githubIssueLabel: source-discourse
+  githubIssueLabel: source-ziftone
   icon: icon.svg
   license: MIT
   name: ZiftONE
