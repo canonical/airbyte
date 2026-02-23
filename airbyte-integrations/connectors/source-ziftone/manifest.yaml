@@ -25,7 +25,7 @@ streams:
         pagination_strategy:
           type: PageIncrement
           page_size: 20
-          start_from_page: 2
+          start_from_page: 1
       requester:
         type: HttpRequester
         url: https://supplier.ziftone.com/api/dealregistration/deals/
