@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Airbyte, all rights reserved.
+# Copyright (c) 2026 Canonical, all rights reserved.
 
 """Custom components for LiveChat source connector."""
 
