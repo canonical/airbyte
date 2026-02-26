@@ -76,38 +76,19 @@ streams:
       schema:
         type: object
         $schema: http://json-schema.org/schema#
+        required:
+          - dealId
+          - updateDate
         properties:
           description:
             type:
               - string
               - "null"
-          clientId:
-            type:
-              - string
-              - "null"
-          createDate:
-            type:
-              - string
-              - "null"
-          updateDate:
-            type: string
-          externalId:
-            type:
-              - string
-              - "null"
-          externalSourceIntegrationId:
-            type:
-              - string
-              - "null"
-          partnerExternalId:
-            type:
-              - string
-              - "null"
-          partnerExternalSourceIntegrationId:
-            type:
-              - string
-              - "null"
           name:
+            type:
+              - string
+              - "null"
+          stage:
             type:
               - string
               - "null"
@@ -117,43 +98,7 @@ streams:
               - "null"
           dealId:
             type: string
-          closePercentage:
-            type:
-              - number
-              - "null"
-          closeDate:
-            type:
-              - string
-              - "null"
-          accountId:
-            type:
-              - string
-              - "null"
-          accountName:
-            type:
-              - string
-              - "null"
-          pricebookId:
-            type:
-              - string
-              - "null"
-          partnerId:
-            type:
-              - string
-              - "null"
           source:
-            type:
-              - string
-              - "null"
-          totalValue:
-            type:
-              - number
-              - "null"
-          createdByZift123UserId:
-            type:
-              - string
-              - "null"
-          updatedByUserId:
             type:
               - string
               - "null"
@@ -161,81 +106,7 @@ streams:
             type:
               - string
               - "null"
-          ownerUserId:
-            type:
-              - string
-              - "null"
-          dealSalesRep:
-            type:
-              - object
-              - "null"
-            properties:
-              clientId:
-                type:
-                  - string
-                  - "null"
-              createDate:
-                type:
-                  - string
-                  - "null"
-              updateDate:
-                type:
-                  - string
-                  - "null"
-              dealSalesRepId:
-                type:
-                  - string
-                  - "null"
-              zift123UserId:
-                type:
-                  - string
-                  - "null"
-              source:
-                type:
-                  - string
-                  - "null"
-          dealSalesRepRole:
-            type:
-              - object
-              - "null"
-            properties:
-              clientId:
-                type:
-                  - string
-                  - "null"
-              createDate:
-                type:
-                  - string
-                  - "null"
-              updateDate:
-                type:
-                  - string
-                  - "null"
-              externalId:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - string
-                  - "null"
-              source:
-                type:
-                  - string
-                  - "null"
-          stage:
-            type:
-              - string
-              - "null"
-          submitDate:
-            type:
-              - string
-              - "null"
-          approveDate:
-            type:
-              - string
-              - "null"
-          rejectDate:
+          clientId:
             type:
               - string
               - "null"
@@ -244,104 +115,78 @@ streams:
               - object
               - "null"
             properties:
-              currencyCode:
-                type:
-                  - string
-                  - "null"
               symbol:
                 type:
                   - string
                   - "null"
+              currencyCode:
+                type:
+                  - string
+                  - "null"
+          accountId:
+            type:
+              - string
+              - "null"
+          closeDate:
+            type:
+              - string
+              - "null"
+          partnerId:
+            type:
+              - string
+              - "null"
           pushToPRM:
             type:
               - boolean
+              - "null"
+          createDate:
+            type:
+              - string
+              - "null"
+          dealTypeId:
+            type:
+              - string
+              - "null"
+          externalId:
+            type:
+              - string
+              - "null"
+          rejectDate:
+            type:
+              - string
+              - "null"
+          submitDate:
+            type:
+              - string
+              - "null"
+          totalValue:
+            type:
+              - number
+              - "null"
+          updateDate:
+            type: string
+          accountName:
+            type:
+              - string
+              - "null"
+          approveDate:
+            type:
+              - string
+              - "null"
+          ownerUserId:
+            type:
+              - string
+              - "null"
+          pricebookId:
+            type:
+              - string
               - "null"
           customFields:
             type:
               - object
               - "null"
             properties:
-              Customer Street Address:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Distributor Sales Rep Email:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
               Customer City:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Reseller Sales Rep Email:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Customer Technical User Email:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Customer Country:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Reseller Sales Rep:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Public Sector?:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Customer Technical User:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Distributor Sales Rep:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              Do Not Create Opportunity Upon Conversion:
                 type:
                   - array
                   - "null"
@@ -357,7 +202,23 @@ streams:
                   type:
                     - string
                     - "null"
+              Public Sector?:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
               Renewal/Growth:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Country:
                 type:
                   - array
                   - "null"
@@ -373,7 +234,7 @@ streams:
                   type:
                     - string
                     - "null"
-              DealLostReason__c:
+              Expiration_Date__c:
                 type:
                   - array
                   - "null"
@@ -381,7 +242,63 @@ streams:
                   type:
                     - string
                     - "null"
-              Rejection Reason Description:
+              Reseller Sales Rep:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Distributor Sales Rep:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Street Address:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Technical User:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Reseller Sales Rep Email:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Distributor Sales Rep Email:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Customer Technical User Email:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+              Do Not Create Opportunity Upon Conversion:
                 type:
                   - array
                   - "null"
@@ -393,6 +310,43 @@ streams:
             type:
               - array
               - "null"
+          dealSalesRep:
+            type:
+              - object
+              - "null"
+            properties:
+              source:
+                type:
+                  - string
+                  - "null"
+              clientId:
+                type:
+                  - string
+                  - "null"
+              createDate:
+                type:
+                  - string
+                  - "null"
+              updateDate:
+                type:
+                  - string
+                  - "null"
+              zift123UserId:
+                type:
+                  - string
+                  - "null"
+              dealSalesRepId:
+                type:
+                  - string
+                  - "null"
+          closePercentage:
+            type:
+              - number
+              - "null"
+          createdByUserId:
+            type:
+              - string
+              - "null"
           dealAttachments:
             type:
               - array
@@ -402,31 +356,7 @@ streams:
                 - object
                 - "null"
               properties:
-                clientId:
-                  type:
-                    - string
-                    - "null"
-                createDate:
-                  type:
-                    - string
-                    - "null"
-                updateDate:
-                  type:
-                    - string
-                    - "null"
-                externalId:
-                  type:
-                    - string
-                    - "null"
-                externalSourceIntegrationId:
-                  type:
-                    - string
-                    - "null"
                 id:
-                  type:
-                    - string
-                    - "null"
-                attachment:
                   type:
                     - string
                     - "null"
@@ -434,7 +364,60 @@ streams:
                   type:
                     - string
                     - "null"
-          dealTypeId:
+                clientId:
+                  type:
+                    - string
+                    - "null"
+                attachment:
+                  type:
+                    - string
+                    - "null"
+                createDate:
+                  type:
+                    - string
+                    - "null"
+                externalId:
+                  type:
+                    - string
+                    - "null"
+                updateDate:
+                  type:
+                    - string
+                    - "null"
+                externalSourceIntegrationId:
+                  type:
+                    - string
+                    - "null"
+          updatedByUserId:
+            type:
+              - string
+              - "null"
+          dealSalesRepRole:
+            type:
+              - object
+              - "null"
+            properties:
+              id:
+                type:
+                  - string
+                  - "null"
+              source:
+                type:
+                  - string
+                  - "null"
+              clientId:
+                type:
+                  - string
+                  - "null"
+              createDate:
+                type:
+                  - string
+                  - "null"
+              updateDate:
+                type:
+                  - string
+                  - "null"
+          partnerExternalId:
             type:
               - string
               - "null"
@@ -442,17 +425,18 @@ streams:
             type:
               - string
               - "null"
-          createdByUserId:
+          createdByZift123UserId:
             type:
               - string
               - "null"
-          updatedByZift123UserId:
+          externalSourceIntegrationId:
             type:
               - string
               - "null"
-        required:
-          - dealId
-          - updateDate
+          partnerExternalSourceIntegrationId:
+            type:
+              - string
+              - "null"
         additionalProperties: true
     transformations: []
     incremental_sync:
@@ -465,7 +449,7 @@ streams:
       start_time_option:
         type: RequestOption
         field_name: updateDateFrom
-        inject_into: header
+        inject_into: request_parameter
 
 spec:
   type: Spec
@@ -476,23 +460,23 @@ spec:
       - ziftone_username
       - ziftone_password
     properties:
-      ziftone_username:
+      start_time:
         type: string
-        description: An email address
-        order: 0
-        title: ZiftONE Username
+        order: 2
+        title: Start time
+        format: date-time
+        default: "2026-01-01T00:00:00Z"
+        pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$
       ziftone_password:
         type: string
         order: 1
         title: ZiftONE Password
         airbyte_secret: true
-      start_time:
+      ziftone_username:
         type: string
-        title: Start time
-        pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$
-        default: "2026-01-01T00:00:00Z"
-        format: date-time
-        order: 2
+        description: An email address
+        order: 0
+        title: ZiftONE Username
     additionalProperties: true
 
 metadata:
@@ -500,7 +484,7 @@ metadata:
     deals:
       isStale: false
       hasRecords: true
-      streamHash: bac9cf53e0da8211172704e5742d5ff03c44a83c
+      streamHash: 1db6b6cb4e0b6ced414aa9a60ecbf146c14d5e97
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
