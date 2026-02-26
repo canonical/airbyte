@@ -20,7 +20,7 @@ data:
   icon: icon.svg
   license: MIT
   name: ZiftONE
-  releaseDate: 2025-09-09
+  releaseDate: 2026-02-26
   releaseStage: alpha
   supportLevel: community
   documentationUrl: https://docs.airbyte.com/integrations/sources/ziftone
