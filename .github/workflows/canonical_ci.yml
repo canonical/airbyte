@@ -70,6 +70,8 @@ jobs:
           sudo apt install python3-setuptools -y
           pip install --upgrade setuptools
 
+          echo $(python3 --version)
+
           git checkout $CI_GIT_BRANCH
 
           echo "🔄 Running tests for connector: $CONNECTOR"
