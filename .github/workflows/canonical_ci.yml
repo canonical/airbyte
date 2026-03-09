@@ -118,6 +118,11 @@ jobs:
           cat "$OUTPUT_JSON"
 
           # Extract connector name dynamically from the JSON file if available
+          OUTPUT_HTML=$(find "$COMMIT_DIR" -mindepth 3 -maxdepth 3 -type f -name "output.html" | head -n 1)
+
+          cat "$OUTPUT_HTML"
+
+          # Extract connector name dynamically from the JSON file if available
           DAGGER_JSON=$(find "$COMMIT_DIR" -mindepth 3 -maxdepth 3 -type f -name "dagger.json" | head -n 1)
 
           cat "$DAGGER_JSON"
