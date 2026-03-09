@@ -1,5 +1,9 @@
 FROM python:3.9.13-alpine3.15 as base
 
+# Define build arguments
+ARG IMAGE_HTTP_PROXY
+ARG IMAGE_HTTPS_PROXY
+
 # build and load all requirements
 FROM base as builder
 WORKDIR /airbyte/integration_code
@@ -31,6 +35,10 @@ RUN apk --no-cache add bash
 COPY main.py ./
 
 COPY source_netsuite ./source_netsuite
+
+# Set environment variables in the final image
+ENV HTTP_PROXY $IMAGE_HTTP_PROXY
+ENV HTTPS_PROXY $IMAGE_HTTPS_PROXY
 
 ENV AIRBYTE_ENTRYPOINT "python /airbyte/integration_code/main.py"
 ENTRYPOINT ["python", "/airbyte/integration_code/main.py"]
