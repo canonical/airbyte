@@ -70,7 +70,10 @@ jobs:
           sudo apt install python3-setuptools -y
           pip install --upgrade setuptools
 
+          echo $(where python3)
           echo $(python3 --version)
+          echo $(where python)
+          echo $(python --version)
 
           git checkout $CI_GIT_BRANCH
 
