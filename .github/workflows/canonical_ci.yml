@@ -115,6 +115,8 @@ jobs:
               exit 1
           fi
 
+          cat OUTPUT_JSON
+
           # Extracting the connector name dynamically
           CONNECTOR_NAME=$(jq -r '.connector_technical_name' "$OUTPUT_JSON")
 
