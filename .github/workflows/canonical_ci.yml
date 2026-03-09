@@ -115,8 +115,13 @@ jobs:
               exit 1
           fi
 
-          cat OUTPUT_JSON
+          cat "$OUTPUT_JSON"
 
+          # Extract connector name dynamically from the JSON file if available
+          DAGGER_JSON=$(find "$COMMIT_DIR" -mindepth 3 -maxdepth 3 -type f -name "dagger.json" | head -n 1)
+
+          cat "$DAGGER_JSON"
+          
           # Extracting the connector name dynamically
           CONNECTOR_NAME=$(jq -r '.connector_technical_name' "$OUTPUT_JSON")
 
