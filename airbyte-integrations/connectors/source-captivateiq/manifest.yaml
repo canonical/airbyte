@@ -2986,6 +2986,14 @@ streams:
                 type:
                   - string
                   - "null"
+              Contract Total:
+                type:
+                  - string
+                  - "null"
+                type:
+                type:
+                  - string
+                  - "null"
               ContractId__r.Id:
                 type:
                   - string
