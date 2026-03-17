@@ -86,30 +86,18 @@ streams:
       schema:
         type: object
         $schema: http://json-schema.org/schema#
-        required:
-          - employee_id
         properties:
-          id:
-            type:
-              - string
-              - "null"
-          email:
-            type:
-              - string
-              - "null"
           object:
             type:
               - string
               - "null"
-          is_active:
-            type:
-              - boolean
-              - "null"
-          last_name:
+          id:
             type:
               - string
               - "null"
-          created_at:
+          employee_id:
+            type: string
+          email:
             type:
               - string
               - "null"
@@ -117,13 +105,7 @@ streams:
             type:
               - string
               - "null"
-          updated_at:
-            type:
-              - string
-              - "null"
-          employee_id:
-            type: string
-          linked_user:
+          last_name:
             type:
               - string
               - "null"
@@ -131,6 +113,24 @@ streams:
             type:
               - string
               - "null"
+          is_active:
+            type:
+              - boolean
+              - "null"
+          linked_user:
+            type:
+              - string
+              - "null"
+          created_at:
+            type:
+              - string
+              - "null"
+          updated_at:
+            type:
+              - string
+              - "null"
+        required:
+          - employee_id
         additionalProperties: true
     transformations: []
   - type: DeclarativeStream
@@ -592,8 +592,6 @@ streams:
       schema:
         type: object
         $schema: http://json-schema.org/schema#
-        required:
-          - id
         properties:
           type:
             type:
@@ -603,13 +601,21 @@ streams:
             type:
               - string
               - "null"
+          object:
+            type:
+              - string
+              - "null"
           id:
             type: string
           name:
             type:
               - string
               - "null"
-          object:
+          workbook:
+            type:
+              - string
+              - "null"
+          workbook_name:
             type:
               - string
               - "null"
@@ -626,11 +632,23 @@ streams:
                   type:
                     - string
                     - "null"
+                object:
+                  type:
+                    - string
+                    - "null"
                 id:
                   type:
                     - string
                     - "null"
                 name:
+                  type:
+                    - string
+                    - "null"
+                variant:
+                  type:
+                    - string
+                    - "null"
+                data_type:
                   type:
                     - string
                     - "null"
@@ -655,19 +673,7 @@ streams:
                       type:
                         - string
                         - "null"
-                object:
-                  type:
-                    - string
-                    - "null"
                 formula:
-                  type:
-                    - string
-                    - "null"
-                variant:
-                  type:
-                    - string
-                    - "null"
-                data_type:
                   type:
                     - string
                     - "null"
@@ -683,10 +689,6 @@ streams:
                   type:
                     - string
                     - "null"
-          workbook:
-            type:
-              - string
-              - "null"
           created_at:
             type:
               - string
@@ -695,10 +697,8 @@ streams:
             type:
               - string
               - "null"
-          workbook_name:
-            type:
-              - string
-              - "null"
+        required:
+          - id
         additionalProperties: true
   - type: DeclarativeStream
     name: employee-assumptions
@@ -2942,6 +2942,38 @@ streams:
               - object
               - "null"
             properties:
+              Unique ID:
+                type:
+                  - string
+                  - "null"
+              Opportunity ID:
+                type:
+                  - string
+                  - "null"
+              Line Item ID:
+                type:
+                  - string
+                  - "null"
+              Contract Total:
+                type:
+                  - string
+                  - "null"
+              Invoice Number:
+                type:
+                  - string
+                  - "null"
+              Invoiced Amount:
+                type:
+                  - string
+                  - "null"
+              Invoice Date:
+                type:
+                  - string
+                  - "null"
+              Contract End Date:
+                type:
+                  - string
+                  - "null"
               ID:
                 type:
                   - string
