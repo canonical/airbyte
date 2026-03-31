@@ -1427,8 +1427,6 @@ definitions:
           $ref: "#/definitions/base_requester"
           path: /activity_histories
           http_method: GET
-          request_parameters:
-            sort_direction: ASC
         record_selector:
           type: RecordSelector
           extractor:
