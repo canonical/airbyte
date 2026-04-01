@@ -1416,6 +1416,68 @@ definitions:
         type: InlineSchemaLoader
         schema:
           $ref: "#/schemas/crm_activities"
+    activity_histories:
+      type: DeclarativeStream
+      name: activity_histories
+      primary_key:
+        - id
+      retriever:
+        type: SimpleRetriever
+        requester:
+          $ref: "#/definitions/base_requester"
+          path: /activity_histories
+          http_method: GET
+        record_selector:
+          type: RecordSelector
+          extractor:
+            type: DpathExtractor
+            field_path:
+              - data
+        paginator:
+          type: DefaultPaginator
+          page_token_option:
+            type: RequestOption
+            inject_into: request_parameter
+            field_name: page
+          page_size_option:
+            type: RequestOption
+            field_name: per_page
+            inject_into: request_parameter
+          pagination_strategy:
+            type: CursorPagination
+            page_size: 100
+            cursor_value: "{{ response['metadata']['paging']['next_page'] }}"
+            stop_condition: >-
+              {{ response['metadata']['paging'] is not defined or not
+              response['metadata']['paging'] or
+              response['metadata']['paging']['next_page'] is not defined or not
+              response['metadata']['paging']['next_page'] }}
+      incremental_sync:
+        type: DatetimeBasedCursor
+        cursor_field: updated_at
+        cursor_datetime_formats:
+          - "%Y-%m-%dT%H:%M:%S.%f%z"
+        datetime_format: "%Y-%m-%dT%H:%M:%S.%fZ"
+        start_datetime:
+          type: MinMaxDatetime
+          datetime: "{{ config['start_date'] }}"
+          datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+        start_time_option:
+          type: RequestOption
+          inject_into: request_parameter
+          field_name: updated_at[gte]
+        end_time_option:
+          type: RequestOption
+          inject_into: request_parameter
+          field_name: updated_at[lte]
+        end_datetime:
+          type: MinMaxDatetime
+          datetime: "{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+          datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      schema_loader:
+        type: InlineSchemaLoader
+        schema:
+          $ref: "#/schemas/activity_histories"
     successes:
       type: DeclarativeStream
       name: successes
@@ -1647,6 +1709,7 @@ streams:
   - $ref: "#/definitions/streams/notes"
   - $ref: "#/definitions/streams/team_templates"
   - $ref: "#/definitions/streams/crm_activities"
+  - $ref: "#/definitions/streams/activity_histories"
   - $ref: "#/definitions/streams/successes"
   - $ref: "#/definitions/streams/call_data_records"
   - $ref: "#/definitions/streams/searches"
@@ -1760,6 +1823,7 @@ metadata:
     notes: true
     team_templates: true
     crm_activities: true
+    activity_histories: true
     successes: true
     call_data_records: true
     searches: true
@@ -4405,6 +4469,73 @@ schemas:
             type:
               - "null"
               - integer
+  activity_histories:
+    type: object
+    $schema: http://json-schema.org/draft-07/schema#
+    additionalProperties: true
+    properties:
+      created_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      dynamic_data:
+        type:
+          - "null"
+          - object
+        additionalProperties: true
+        properties: {}
+      failed_dynamic_resources:
+        type:
+          - "null"
+          - array
+        items:
+          type:
+            - "null"
+            - object
+          additionalProperties: true
+          properties: {}
+      id:
+        type:
+          - "null"
+          - string
+      occurred_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      pinned_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      resource_id:
+        type:
+          - "null"
+          - integer
+      resource_type:
+        type:
+          - "null"
+          - string
+      static_data:
+        type:
+          - "null"
+          - object
+        additionalProperties: true
+        properties: {}
+      type:
+        type:
+          - "null"
+          - string
+      updated_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      user_guid:
+        type:
+          - "null"
+          - string
   successes:
     type: object
     $schema: http://json-schema.org/draft-07/schema#
