@@ -179,6 +179,16 @@ class MarketoExportBase(IncrementalMarketoStream):
     def stream_filter(self):
         return {}
 
+    @property
+    def export_date_filter_field(self) -> str:
+        """The Marketo Bulk Export date-range filter key (createdAt or updatedAt).
+
+        Subclasses whose cursor_field is 'updatedAt' must override this to return
+        'updatedAt' so that the export job window matches the cursor field and
+        leads updated (but not created) after the last sync are not skipped.
+        """
+        return "createdAt"
+
     def create_export(self, param):
         return next(
             MarketoExportCreate(self.config, stream_name=self.stream_name, param=param).read_records(sync_mode=None),
@@ -204,7 +214,7 @@ class MarketoExportBase(IncrementalMarketoStream):
         date_slices = super().stream_slices(sync_mode, stream_state, **kwargs)
 
         for date_slice in date_slices:
-            param = {"fields": [], "filter": {"createdAt": date_slice}}
+            param = {"fields": [], "filter": {self.export_date_filter_field: date_slice}}
             param["fields"].extend(self.stream_fields)
             param["filter"].update(self.stream_filter)
 
@@ -404,6 +414,13 @@ class Leads(MarketoExportBase):
     """
 
     cursor_field = "updatedAt"
+
+    @property
+    def export_date_filter_field(self) -> str:
+        # Marketo Bulk Lead Extract supports filtering by updatedAt, which must
+        # match the cursor field to avoid skipping leads that were updated (but
+        # not created) after the previous sync's state date.
+        return "updatedAt"
 
     def __init__(self, config: Mapping[str, Any]):
         super().__init__(config, self.name)
