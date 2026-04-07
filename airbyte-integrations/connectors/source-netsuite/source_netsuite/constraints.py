@@ -39,6 +39,6 @@ INCREMENTAL_CURSOR: str = "lastModifiedDate"
 CUSTOM_INCREMENTAL_CURSOR: str = "lastmodified"
 
 # Please keep the "%d/%m/%Y" format in the first position as it's the date format for Canonical.
-# Please check: https://github.com/canonical/airbyte/pull/63
+# Check https://github.com/canonical/airbyte/pull/63 for more details.
 NETSUITE_INPUT_DATE_FORMATS: list[str] = ["%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d", "%d.%m.%Y"]
 NETSUITE_OUTPUT_DATETIME_FORMAT: str = "%Y-%m-%dT%H:%M:%SZ"
