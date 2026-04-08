@@ -424,6 +424,7 @@ class Leads(MarketoExportBase):
 
     def __init__(self, config: Mapping[str, Any]):
         super().__init__(config, self.name)
+        self.window_in_days = config.get("window_in_days", 7)
         self._available_fields: Optional[Mapping[str, str]] = None
         self._schema = None
 
