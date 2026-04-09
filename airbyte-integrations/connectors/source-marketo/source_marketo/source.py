@@ -422,6 +422,17 @@ class Leads(MarketoExportBase):
         # not created) after the previous sync's state date.
         return "updatedAt"
 
+    def request_kwargs(
+        self,
+        stream_state: Optional[Mapping[str, Any]],
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
+    ) -> Mapping[str, Any]:
+        # Lead bulk export files can be large enough that buffering the entire
+        # body in requests triggers ChunkedEncodingError before parse_response
+        # starts. Stream the response so the CSV is consumed incrementally.
+        return {"stream": True}
+
     def __init__(self, config: Mapping[str, Any]):
         super().__init__(config, self.name)
         self.window_in_days = config.get("window_in_days", 7)
