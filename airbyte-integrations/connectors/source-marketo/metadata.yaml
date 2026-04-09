@@ -11,7 +11,7 @@ data:
   connectorType: source
   definitionId: 9e0556f4-69df-4522-a3fb-03264d36b348
   dockerImageTag: 1.6.2
-  canonicalImageTag: 1.6.2-canonical-1.1.2
+  canonicalImageTag: 1.6.2-canonical-1.1.3
   dockerRepository: airbyte/source-marketo
   documentationUrl: https://docs.airbyte.com/integrations/sources/marketo
   githubIssueLabel: source-marketo
