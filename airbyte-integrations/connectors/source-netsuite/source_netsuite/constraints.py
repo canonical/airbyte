@@ -34,6 +34,9 @@ USLESS_SCHEMA_ELEMENTS: list = [
 # PREDEFINE SCHEMA HEADER
 SCHEMA_HEADERS: dict = {"Accept": "application/schema+json"}
 
+# Airbyte only supports a small subset of JSON schema formats in discovered catalogs.
+SUPPORTED_AIRBYTE_FORMATS: set[str] = {"date", "date-time"}
+
 # INCREMENTAL CURSOR FIELDS
 INCREMENTAL_CURSOR: str = "lastModifiedDate"
 CUSTOM_INCREMENTAL_CURSOR: str = "lastmodified"
