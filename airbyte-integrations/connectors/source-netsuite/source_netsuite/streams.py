@@ -21,8 +21,8 @@ from source_netsuite.constraints import (
     RECORD_PATH,
     REFERAL_SCHEMA,
     REFERAL_SCHEMA_URL,
+    NUMERIC_JSON_SCHEMA_TYPES,
     SCHEMA_HEADERS,
-    SUPPORTED_AIRBYTE_FORMATS,
     USLESS_SCHEMA_ELEMENTS,
 )
 from source_netsuite.errors import NETSUITE_ERRORS_MAPPING, DateFormatExeption
@@ -111,7 +111,8 @@ class NetsuiteStream(HttpStream, ABC):
                 record["type"] = ["null"] + property_type_list
             # removing non-functional elements from schema
             [record.pop(element) for element in USLESS_SCHEMA_ELEMENTS if record.get(element)]
-            if record.get("format") not in SUPPORTED_AIRBYTE_FORMATS:
+            non_null_types = set(property_type_list) - {"null"}
+            if non_null_types & NUMERIC_JSON_SCHEMA_TYPES:
                 record.pop("format", None)
 
             ref = record.get("$ref")
