@@ -34,6 +34,9 @@ USLESS_SCHEMA_ELEMENTS: list = [
 # PREDEFINE SCHEMA HEADER
 SCHEMA_HEADERS: dict = {"Accept": "application/schema+json"}
 
+# Numeric JSON schema types should never carry a format annotation in Airbyte catalogs.
+NUMERIC_JSON_SCHEMA_TYPES: set[str] = {"number", "integer"}
+
 # INCREMENTAL CURSOR FIELDS
 INCREMENTAL_CURSOR: str = "lastModifiedDate"
 CUSTOM_INCREMENTAL_CURSOR: str = "lastmodified"

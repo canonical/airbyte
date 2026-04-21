@@ -18,6 +18,7 @@ from source_netsuite.constraints import (
     META_PATH,
     NETSUITE_INPUT_DATE_FORMATS,
     NETSUITE_OUTPUT_DATETIME_FORMAT,
+    NUMERIC_JSON_SCHEMA_TYPES,
     RECORD_PATH,
     REFERAL_SCHEMA,
     REFERAL_SCHEMA_URL,
@@ -110,6 +111,9 @@ class NetsuiteStream(HttpStream, ABC):
                 record["type"] = ["null"] + property_type_list
             # removing non-functional elements from schema
             [record.pop(element) for element in USLESS_SCHEMA_ELEMENTS if record.get(element)]
+            non_null_types = set(property_type_list) - {"null"}
+            if non_null_types & NUMERIC_JSON_SCHEMA_TYPES:
+                record.pop("format", None)
 
             ref = record.get("$ref")
             if ref:
