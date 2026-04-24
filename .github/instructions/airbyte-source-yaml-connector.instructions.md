@@ -1,9 +1,9 @@
 ---
 description: 'Build and review Airbyte manifest-only source connectors end-to-end, including implementation, testing, documentation, and merge readiness checks.'
-applyTo: 'airbyte-integrations/connectors/source-*/manifest.yaml, airbyte-integrations/connectors/source-*/acceptance-test-config.yml, airbyte-integrations/connectors/source-*/metadata.yaml, airbyte-integrations/connectors/source-*/README.md, airbyte-integrations/connectors/source-*/CONTRIBUTING.md, docs/integrations/sources/*.md'
+applyTo: 'airbyte-integrations/connectors/source-*/manifest.yaml, airbyte-integrations/connectors/source-*/acceptance-test-config.yml, airbyte-integrations/connectors/source-*/metadata.yaml, airbyte-integrations/connectors/source-*/README.md, airbyte-integrations/connectors/source-*/CONTRIBUTING.md, airbyte-integrations/connectors/source-*/erd/*.dbml, docs/integrations/sources/*.md'
 ---
 
-# Airbyte YAML connector instructions
+# Airbyte Source YAML Connector Instructions
 
 ## Purpose
 
@@ -27,19 +27,35 @@ Use when the user asks to create, update, or fix a connector.
 
 Use when the user asks for review, QA, readiness, or risk assessment.
 
+### Model specification by phase
+
+For requests that include both planning and implementation:
+- Use GPT 5.4+ for the planning phase.
+- Use Claude 4.6+ for the implementation phase.
+
 ## Scope
 
-Apply to manifest-only connectors where behavior is declaratively defined in YAML.
+Apply to manifest-only source connectors where behavior is declaratively defined in YAML.
 
 Before implementation, ensure required API context is available:
 - If API docs are not provided, ask the prompter for API documentation or a concrete endpoint list for streams to sync.
-- Skim provided docs before designing streams, auth, pagination, and cursors.
+- Skim provided docs before designing streams, auth, pagination, API versioning, and cursors.
 - If any required behavior is unclear, ask follow-up questions and do not make assumptions.
 
 If custom Python is required:
 - Keep YAML as the primary behavior definition.
 - Add Python only for non-declarative gaps.
 - Add unit tests for all custom logic.
+
+## Prerequisites
+
+Confirm these before implementation or review:
+
+1. Source API version is identified and validated for each endpoint used by the connector.
+2. Metadata canonical image tagging format is known and will be applied correctly in `metadata.yaml`.
+3. Airbyte CDK version is compatible with upstream Airbyte version 1.7.
+
+If any prerequisite cannot be confirmed from provided context, ask the prompter before proceeding.
 
 ## Required artifacts for new or major connector changes
 
@@ -50,12 +66,17 @@ If custom Python is required:
 5. Connector icon when missing
 6. `docs/integrations/sources/<connector>.md`
 7. Connector-level `CONTRIBUTING.md`
+8. ERD definition file at `erd/source.dbml`
+9. Unit test suite under `unit_tests/` with realistic fixtures and stream coverage
+10. Integration test suite under `integration_tests/` with config, catalog, state, and expected output artifacts
 
-## Development Workflow
+## Development workflow
 
 ### 1. API and stream design
 
-1. Identify authentication, pagination, rate limits, and failure classes.
+1. Identify authentication, pagination, rate limits, failure classes, and source API version semantics.
+   - Confirm the connector uses the correct source API version for each endpoint.
+   - Do not mix incompatible versioned endpoints unless explicitly documented and justified.
 2. Build an explicit endpoint inventory and assign stream sync mode per endpoint.
 3. Define every stream explicitly in the manifest.
    - Do not embed stream definitions in inline structures.
@@ -63,15 +84,14 @@ If custom Python is required:
 4. Select stable primary keys and cursor fields:
    - Prefer native stable keys from the API.
    - If no globally unique stable key exists, build a deterministic composite key from stable business fields
-      and generate an airbyte_unique_id hash from that composite key.
+     and generate an `airbyte_unique_id` hash from that composite key.
 5. Prefer server-side filtering and bounded windows where supported.
-6. Prefer real incremental cursoring whenever API semantics support monotonic filtering or ordered windows.
+6. Use real incremental cursoring whenever API semantics support monotonic filtering or ordered windows.
    - Use incremental append + deduped when a stable primary key and reliable cursor semantics are both available.
    - Fall back to full refresh only when incremental correctness cannot be guaranteed; document the reason.
 7. Define retry and backoff by transient and permanent failure classes:
    - Ignore non-retriable resource conditions such as 404 and 409.
-   - Treat 403 as conditional: retry only when response indicates rate limiting; otherwise treat as
-      non-retriable permission or policy failure.
+   - Treat 403 as conditional: retry only when response indicates rate limiting; otherwise treat as non-retriable permission or policy failure.
    - Retry 429 responses and honor server retry headers when available.
    - Retry 502, 503, and 504 with constant backoff of 60 seconds.
    - Cap retries to a reasonable bounded limit (for example, 5) to prevent runaway sync durations.
@@ -86,22 +106,67 @@ If custom Python is required:
    - Match cursor to API filter semantics.
    - Apply lower and upper bounds correctly.
    - Prevent cursor drift and duplicate amplification.
-   - Prefer incremental append + deduped when key and cursor guarantees are valid.
+   - Use incremental append + deduped when key and cursor guarantees are valid.
 6. For substreams:
    - Define parent-child partitioning explicitly.
    - Use scalable cursor and state behavior.
 
 ### 3. Tests
 
-1. Update acceptance test config for spec validation and relevant coverage.
-2. Use explicit bypass reasons only when credentials are unavailable.
-3. Keep strictness high unless justified.
-4. If custom Python exists, add unit tests for:
-   - Error and retry classification
-   - Pagination and cursor boundaries
-   - Record transformation and key generation
-5. Prefer integration acceptance coverage when sandbox credentials exist.
-6. Do not claim tests passed unless they were executed.
+1. Create both unit and integration tests for new connectors and major stream behavior changes.
+2. Use the same testing depth and structure expected from mature manifest-only connectors.
+3. Never create placeholder or cosmetic tests (for example, `assert True`) to satisfy coverage requirements.
+4. Never write tests that encode known broken behavior as the expected result.
+   - If connector behavior is broken, fix the connector first, or mark the task blocked with explicit evidence.
+   - Do not weaken assertions or remove checks just to make tests pass.
+5. Update acceptance test config for spec validation and relevant coverage.
+6. Use explicit bypass reasons only when credentials are unavailable.
+7. Keep strictness high unless justified.
+8. Prefer integration acceptance coverage when sandbox credentials exist.
+9. Do not claim tests passed unless they were executed.
+
+#### Unit test expectations
+
+1. Maintain a connector-level `unit_tests/` package with at least:
+   - `conftest.py` for shared source construction, manifest path resolution, common config, and reusable fixtures
+   - `pyproject.toml` for the test environment and dependencies
+   - Focused test modules such as `test_source.py`, `test_streams.py`, `test_pagination.py`, and `test_components.py` when custom components exist
+2. Keep test data in `unit_tests/responses/*.json` and load fixtures from files rather than hardcoding large payloads.
+3. Use HTTP mocking patterns that validate endpoint paths and query parameters, including:
+   - Success responses
+   - 4xx/5xx error classification behavior
+   - Pagination boundaries and final-page behavior
+4. Validate stream behavior per stream, including:
+   - Record counts and selected record content
+   - Number of HTTP calls where it reveals pagination or substream fan-out behavior
+   - Incremental cursor handling and lower-bound application
+5. Cover substream and partition routers with realistic parent-child slices.
+6. For custom components, add deterministic unit tests for extractor/transformer/router logic with mocked responses.
+7. Include retry-relevant tests for 403/404/409/429/5xx semantics based on connector policy.
+
+#### Integration test expectations
+
+1. Maintain `integration_tests/` with realistic execution artifacts, including:
+   - `sample_config.json`
+   - `invalid_config.json` and other validation-failure config variants
+   - `configured_catalog.json`
+   - `sample_state.json` and edge-case state (for example, abnormal or future cursor values)
+   - `expected_records.jsonl` when deterministic expected output assertions are used
+2. Ensure integration coverage validates:
+   - Check/read behavior with valid config
+   - Failure behavior with invalid auth/domain/config
+   - Incremental state progression and partitioned state handling
+3. Keep integration scaffolding executable and meaningful.
+   - If a test file is a harness placeholder, replace it with real assertions before completion.
+4. Ensure integration test fixtures and catalogs are synchronized with the current manifest stream set and cursor strategy.
+
+#### Test quality and execution requirements
+
+1. Tests must validate real connector logic, not only import paths or object construction.
+2. Assertions must be specific enough to catch regressions in URL building, query params, cursor math, and partitioning.
+3. Prefer small, composable fixtures and shared builders over duplicated inline setup.
+4. If exact behavior cannot be validated due to missing API details, ask the prompter for missing details instead of guessing.
+5. Include executed test commands and outcomes in the completion report.
 
 ### 4. Documentation
 
@@ -125,17 +190,27 @@ Create or update connector-level `CONTRIBUTING.md` with:
 5. PR expectations and reviewer checklist
 6. Common failure modes and debugging guidance
 
+### 6. ERD generation
+
+After connector implementation and test execution:
+
+1. Generate or update `erd/source.dbml` to reflect the final stream and relationship model.
+2. Keep ERD naming and relationship style consistent with existing connector ERD conventions.
+3. Ensure primary keys and major foreign-key relationships are represented.
+4. If relationship certainty is incomplete, annotate conservatively in the PR notes rather than inventing links.
+
 ## Review workflow
 
 ### Review order
 
 1. Data correctness
 2. Incremental and state safety
-3. Reliability and retry behavior
-4. Scalability and API efficiency
-5. Security and secret handling
-6. Test adequacy
-7. Documentation and contribution completeness
+3. API version and compatibility checks
+4. Reliability and retry behavior
+5. Scalability and API efficiency
+6. Security and secret handling
+7. Test adequacy
+8. Documentation and contribution completeness
 
 ### Findings format
 
@@ -165,15 +240,25 @@ Mark as blocked if any condition applies:
 6. Required tests are missing without justified bypass
 7. Stream definitions are embedded in ways that prevent explicit review of each stream
 8. API behavior was assumed without docs or user confirmation
+9. Source API version prerequisite is unmet or endpoint versioning is inconsistent
+10. Metadata canonical image tagging prerequisite is unmet, missing, or malformed
+11. Airbyte CDK compatibility prerequisite is unmet for upstream Airbyte 1.7
+12. ERD artifact `erd/source.dbml` is missing or materially out of sync with implemented streams
+13. Tests are placeholders, non-executable, or intentionally aligned to broken connector behavior
 
 ## Quality gates before completion
 
 1. Manifest structure is valid and internally coherent.
 2. Acceptance test config aligns with available credentials and expected coverage.
 3. Metadata is complete and consistent with connector identity.
-4. README and user docs match actual connector behavior.
-5. `CONTRIBUTING.md` is actionable for another engineer.
-6. Validation commands are run or blockers are explicitly documented.
+4. Metadata includes canonical image tagging in the expected format for connector release.
+5. Airbyte CDK version compatibility is confirmed against upstream Airbyte version 1.7.
+6. Source API version usage is verified across streams and matches documented endpoint versions.
+7. README and user docs match actual connector behavior.
+8. `CONTRIBUTING.md` is actionable for another engineer.
+9. Validation commands are run or blockers are explicitly documented.
+10. ERD file `erd/source.dbml` is generated or updated to match the implemented schema and relationships.
+11. Unit and integration tests are present, executable, and assert correct connector behavior rather than broken behavior.
 
 ## Completion output contract
 
