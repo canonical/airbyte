@@ -1427,6 +1427,8 @@ definitions:
           $ref: "#/definitions/base_requester"
           path: /activity_histories
           http_method: GET
+          request_parameters:
+            type: "{{ config['activity_histories_action_type'] }}"
         record_selector:
           type: RecordSelector
           extractor:
@@ -1792,6 +1794,10 @@ spec:
         order: 1
         examples:
           - "2020-11-16T00:00:00Z"
+      activity_histories_action_type:
+        type: string
+        title: Activity Histories Action Type
+        order: 2
     additionalProperties: true
 
 metadata:
