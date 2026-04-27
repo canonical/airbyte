@@ -1,23 +1,23 @@
 ---
 description: 'Build and review Airbyte manifest-only source connectors end-to-end, including implementation, testing, documentation, and merge readiness checks.'
-applyTo: 'airbyte-integrations/connectors/source-*/manifest.yaml, airbyte-integrations/connectors/source-*/acceptance-test-config.yml, airbyte-integrations/connectors/source-*/metadata.yaml, airbyte-integrations/connectors/source-*/README.md, airbyte-integrations/connectors/source-*/CONTRIBUTING.md, airbyte-integrations/connectors/source-*/erd/*.dbml, docs/integrations/sources/*.md'
+applyTo: 'airbyte-integrations/connectors/source-*/manifest.yaml, airbyte-integrations/connectors/source-*/acceptance-test-config.yml, airbyte-integrations/connectors/source-*/metadata.yaml, airbyte-integrations/connectors/source-*/README.md, airbyte-integrations/connectors/source-*/CONTRIBUTING.md, airbyte-integrations/connectors/source-*/Makefile, airbyte-integrations/connectors/source-*/erd/*.dbml, docs/integrations/sources/*.md'
 ---
 
 # Airbyte Source YAML Connector Instructions
 
 ## Purpose
 
-Use this instruction for both development and review of YAML-based Airbyte source connectors.
+Use this instruction for both development and review of manifest-only Airbyte source connectors.
 
 Primary objective:
 - Ensure connector correctness, reliability, and maintainability.
 
 Secondary objective:
-- Ensure tests, docs, and contribution guidance are complete.
+- Ensure tests, docs, and contribution guidance are complete and accurate.
 
 ## Operating mode
 
-Choose mode based on user intent.
+Select a mode based on user intent and execute only the relevant workflow.
 
 ### Development mode
 
@@ -27,11 +27,13 @@ Use when the user asks to create, update, or fix a connector.
 
 Use when the user asks for review, QA, readiness, or risk assessment.
 
-### Model specification by phase
+## Agent execution rules
 
-For requests that include both planning and implementation:
-- Use GPT 5.4+ for the planning phase.
-- Use Claude 4.6+ for the implementation phase.
+- Use imperative, deterministic behavior.
+- Treat all MUST and DO NOT statements as mandatory.
+- Do not assume API behavior, endpoint versions, or canonical image tag formats.
+- If required information is missing, stop and ask for it.
+- Do not mark work complete when blocking conditions are present.
 
 ## Scope
 
@@ -47,17 +49,31 @@ If custom Python is required:
 - Add Python only for non-declarative gaps.
 - Add unit tests for all custom logic.
 
-## Prerequisites
+## Required inputs
+
+Before implementation or review, obtain:
+
+1. API documentation or a concrete endpoint list for all planned streams.
+2. Source API version details per endpoint.
+3. Canonical image tagging format for this company-forked Airbyte environment.
+4. Airbyte CDK version target and compatibility context for upstream Airbyte 1.7.
+
+If any required input is missing, ask the prompter and mark the task blocked until clarified.
+
+## Prerequisite checks
 
 Confirm these before implementation or review:
 
 1. Source API version is identified and validated for each endpoint used by the connector.
 2. Metadata canonical image tagging format is known and will be applied correctly in `metadata.yaml`.
 3. Airbyte CDK version is compatible with upstream Airbyte version 1.7.
+4. For this company-forked Airbyte context, canonical image tagging is mandatory for connector metadata.
 
 If any prerequisite cannot be confirmed from provided context, ask the prompter before proceeding.
 
 ## Required artifacts for new or major connector changes
+
+Ensure all artifacts below are present and coherent:
 
 1. `manifest.yaml`
 2. `acceptance-test-config.yml`
@@ -66,11 +82,12 @@ If any prerequisite cannot be confirmed from provided context, ask the prompter 
 5. Connector icon when missing
 6. `docs/integrations/sources/<connector>.md`
 7. Connector-level `CONTRIBUTING.md`
-8. ERD definition file at `erd/source.dbml`
-9. Unit test suite under `unit_tests/` with realistic fixtures and stream coverage
-10. Integration test suite under `integration_tests/` with config, catalog, state, and expected output artifacts
+8. Connector-root `Makefile` with common local development and validation commands
+9. ERD definition file at `erd/source.dbml`
+10. Unit test suite under `unit_tests/` with realistic fixtures and stream coverage
+11. Integration test suite under `integration_tests/` with config, catalog, state, and expected output artifacts
 
-## Development workflow
+## Development workflow (development mode)
 
 ### 1. API and stream design
 
@@ -83,8 +100,7 @@ If any prerequisite cannot be confirmed from provided context, ask the prompter 
    - Reuse shared component definitions, but keep each stream as an explicit top-level stream entry.
 4. Select stable primary keys and cursor fields:
    - Prefer native stable keys from the API.
-   - If no globally unique stable key exists, build a deterministic composite key from stable business fields
-     and generate an `airbyte_unique_id` hash from that composite key.
+   - If no globally unique stable key exists, build a deterministic composite key from stable business fields and generate an `airbyte_unique_id` (md5) hash from that composite key.
 5. Prefer server-side filtering and bounded windows where supported.
 6. Use real incremental cursoring whenever API semantics support monotonic filtering or ordered windows.
    - Use incremental append + deduped when a stable primary key and reliable cursor semantics are both available.
@@ -94,7 +110,7 @@ If any prerequisite cannot be confirmed from provided context, ask the prompter 
    - Treat 403 as conditional: retry only when response indicates rate limiting; otherwise treat as non-retriable permission or policy failure.
    - Retry 429 responses and honor server retry headers when available.
    - Retry 502, 503, and 504 with constant backoff of 60 seconds.
-   - Cap retries to a reasonable bounded limit (for example, 5) to prevent runaway sync durations.
+   - Cap retries to a bounded limit (for example, 20) to prevent runaway sync durations.
 
 ### 2. Manifest implementation
 
@@ -124,6 +140,12 @@ If any prerequisite cannot be confirmed from provided context, ask the prompter 
 7. Keep strictness high unless justified.
 8. Prefer integration acceptance coverage when sandbox credentials exist.
 9. Do not claim tests passed unless they were executed.
+
+#### CI test expectations
+
+1. Assume CI will run all available connector tests for the connector, including Connector QA checks and tests in `unit_tests/` and `integration_tests/`.
+2. For local Connector Acceptance runs, provide connector config as `.secrets/config.json` in the connector root.
+3. If `.secrets/config.json` is unavailable, explicitly document the blocker and do not claim local acceptance execution succeeded.
 
 #### Unit test expectations
 
@@ -199,7 +221,41 @@ After connector implementation and test execution:
 3. Ensure primary keys and major foreign-key relationships are represented.
 4. If relationship certainty is incomplete, annotate conservatively in the PR notes rather than inventing links.
 
-## Review workflow
+### 7. Connector Makefile
+
+Create or update a connector-root `Makefile` with common commands.
+
+1. Include standard targets:
+   - `build`
+   - `spec`
+   - `check`
+   - `discover`
+   - `read`
+   - `unit-test`
+   - `test`
+2. Include practical defaults for common variables:
+   - `IMAGE`
+   - `CONFIG`
+   - `CATALOG`
+   - `PYTHON`
+   - `DAGGER`
+   - `AIRBYTE_CI`
+3. Ensure `help` output documents available targets and expected input files.
+4. Execute all standard Make targets and verify they work as expected.
+5. Ensure `read` mounts config and integration artifacts correctly.
+6. Ensure `unit-test` runs pytest from `unit_tests/`.
+7. Ensure `test` runs connector acceptance through `airbyte-ci`.
+
+### 8. Metadata canonical image tagging
+
+For this company-forked Airbyte environment:
+
+1. Always add canonical image tagging in `metadata.yaml`.
+2. Validate that the canonical image tag matches the fork's required registry/namespace/tagging convention.
+3. If canonical tag format is not fully specified in context, ask the prompter for the exact expected format before finalizing.
+4. Do not mark work complete if canonical tagging is missing, malformed, or inconsistent with fork conventions.
+
+## Review workflow (review mode)
 
 ### Review order
 
@@ -241,17 +297,18 @@ Mark as blocked if any condition applies:
 7. Stream definitions are embedded in ways that prevent explicit review of each stream
 8. API behavior was assumed without docs or user confirmation
 9. Source API version prerequisite is unmet or endpoint versioning is inconsistent
-10. Metadata canonical image tagging prerequisite is unmet, missing, or malformed
+10. Metadata canonical image tagging prerequisite is unmet, missing, malformed, or not aligned to company-fork conventions
 11. Airbyte CDK compatibility prerequisite is unmet for upstream Airbyte 1.7
 12. ERD artifact `erd/source.dbml` is missing or materially out of sync with implemented streams
 13. Tests are placeholders, non-executable, or intentionally aligned to broken connector behavior
+14. Connector-root `Makefile` is missing or does not expose common build/spec/check/discover/read/unit-test/test commands
 
 ## Quality gates before completion
 
 1. Manifest structure is valid and internally coherent.
 2. Acceptance test config aligns with available credentials and expected coverage.
 3. Metadata is complete and consistent with connector identity.
-4. Metadata includes canonical image tagging in the expected format for connector release.
+4. Metadata includes canonical image tagging in the expected format for connector release and company-fork conventions.
 5. Airbyte CDK version compatibility is confirmed against upstream Airbyte version 1.7.
 6. Source API version usage is verified across streams and matches documented endpoint versions.
 7. README and user docs match actual connector behavior.
@@ -259,13 +316,18 @@ Mark as blocked if any condition applies:
 9. Validation commands are run or blockers are explicitly documented.
 10. ERD file `erd/source.dbml` is generated or updated to match the implemented schema and relationships.
 11. Unit and integration tests are present, executable, and assert correct connector behavior rather than broken behavior.
+12. Connector-root `Makefile` is present and supports the standard local workflow commands.
 
 ## Completion output contract
 
-Always end with:
+Always end with the following sections, in this order:
 
 1. Summary of changes or findings
 2. Files touched
 3. Commands run and outcomes
 4. What was unverified and why
 5. Residual risks and next recommended steps
+6. ERD status: explicitly state whether `erd/source.dbml` was created or updated, and why if not
+7. Canonical image tagging status: explicitly state what tag was set in `metadata.yaml`, or why it could not be set
+
+If any blocking condition is active, clearly label the final status as `Blocked` and list the unresolved blockers first.
