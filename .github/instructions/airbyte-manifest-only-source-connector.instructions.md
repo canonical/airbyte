@@ -34,6 +34,17 @@ Use when the user asks for review, QA, readiness, or risk assessment.
 - Do not assume API behavior, endpoint versions, or canonical image tag formats
 - If required information is missing, stop and ask for it
 - Do not mark work complete when blocking conditions are present
+- Parallel sub-agents may be used for read-only discovery tasks only when two or more independent discovery tasks are required
+   - Recommended parallel tasks include, but are not limited to:
+      - Rate-limit and quota policy extraction
+      - Stream-specific API documentation checks
+      - Authentication and authorization requirement analysis
+      - Endpoint inventory and stream mapping extraction
+      - Pagination and cursor pattern analysis by endpoint
+      - Error-classification and retry-header behavior analysis
+      - Schema and field-constraint extraction from API references
+   - Consolidate sub-agent outputs into one reconciled result before implementation
+   - If sub-agents produce conflicting information, treat the task as blocked until resolved with source docs or prompter clarification
 
 ## Scope
 
@@ -166,10 +177,13 @@ Ensure all artifacts below are present and coherent:
    ```bash
    cd airbyte-ci/connectors/pipelines/
    poetry install
-   poetry run airbyte-ci connectors --name source-<connector> test
    ```
 3. Provide connector config as `.secrets/config.json` in the connector root before running acceptance commands
-4. If `.secrets/config.json` is unavailable, explicitly document the blocker and do not claim local acceptance execution succeeded
+4. Run connector acceptance using the exact connector slug from `metadata.yaml`; replace `<connector>` in the command below with that slug:
+   ```bash
+   poetry run airbyte-ci connectors --name source-<connector> test
+   ```
+5. If `.secrets/config.json` is unavailable, explicitly document the blocker and do not claim local acceptance execution succeeded
 
 #### Unit test expectations
 
