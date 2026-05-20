@@ -1,0 +1,762 @@
+# WIP manifest for a Udemy source connector
+# TODO: verify response schemas over internal API documentation
+# TODO: add documentation URL - Udemy publishes it internally
+# TODO: add rate limit information
+# TODO: add stream descriptions
+# TODO: add error handling and retry logic based on API documentation
+
+version: 7.10.0
+
+type: DeclarativeSource
+
+check:
+  type: CheckStream
+  stream_names:
+    - courses
+
+definitions:
+  linked:
+    SimpleRetriever:
+      paginator:
+        type: DefaultPaginator
+        page_token_option:
+          type: RequestPath
+        pagination_strategy:
+          type: CursorPagination
+          cursor_value: "{{ response.get('next', '') }}"
+          stop_condition: "{{ response.get('next') is none }}"
+    HttpRequester:
+      authenticator:
+        type: BasicHttpAuthenticator
+        password: "{{ config['client_secret'] }}"
+        username: "{{ config['client_id'] }}"
+
+streams:
+  - type: DeclarativeStream
+    name: courses
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: >-
+          https://{{ config['account_name']
+          }}.udemy.com/api-2.0/organizations/{{ config['account_id']
+          }}/courses/list/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          description:
+            type:
+              - string
+              - "null"
+          _class:
+            type:
+              - string
+              - "null"
+          id:
+            type:
+              - number
+              - "null"
+          title:
+            type:
+              - string
+              - "null"
+          url:
+            type:
+              - string
+              - "null"
+          estimated_content_length:
+            type:
+              - number
+              - "null"
+          categories:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          topics:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                _class:
+                  type:
+                    - string
+                    - "null"
+                id:
+                  type:
+                    - number
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
+                url:
+                  type:
+                    - string
+                    - "null"
+          num_lectures:
+            type:
+              - number
+              - "null"
+          num_videos:
+            type:
+              - number
+              - "null"
+          promo_video_url:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                type:
+                  type:
+                    - string
+                    - "null"
+                label:
+                  type:
+                    - string
+                    - "null"
+                file:
+                  type:
+                    - string
+                    - "null"
+          instructors:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          requirements:
+            type:
+              - object
+              - "null"
+            properties:
+              list:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+          what_you_will_learn:
+            type:
+              - object
+              - "null"
+            properties:
+              list:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+          images:
+            type:
+              - object
+              - "null"
+            properties:
+              size_48x27:
+                type:
+                  - string
+                  - "null"
+              size_50x50:
+                type:
+                  - string
+                  - "null"
+              size_75x75:
+                type:
+                  - string
+                  - "null"
+              size_96x54:
+                type:
+                  - string
+                  - "null"
+              size_100x100:
+                type:
+                  - string
+                  - "null"
+              size_125_H:
+                type:
+                  - string
+                  - "null"
+              size_200_H:
+                type:
+                  - string
+                  - "null"
+              size_240x135:
+                type:
+                  - string
+                  - "null"
+              size_304x171:
+                type:
+                  - string
+                  - "null"
+              size_480x270:
+                type:
+                  - string
+                  - "null"
+              size_750x422:
+                type:
+                  - string
+                  - "null"
+          mobile_native_deeplink:
+            type:
+              - string
+              - "null"
+          locale:
+            type:
+              - object
+              - "null"
+            properties:
+              _class:
+                type:
+                  - string
+                  - "null"
+              locale:
+                type:
+                  - string
+                  - "null"
+          is_practice_test_course:
+            type:
+              - boolean
+              - "null"
+          primary_category:
+            type:
+              - object
+              - "null"
+            properties:
+              _class:
+                type:
+                  - string
+                  - "null"
+              id:
+                type:
+                  - number
+                  - "null"
+              title:
+                type:
+                  - string
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+          primary_subcategory:
+            type:
+              - object
+              - "null"
+            properties:
+              _class:
+                type:
+                  - string
+                  - "null"
+              id:
+                type:
+                  - number
+                  - "null"
+              title:
+                type:
+                  - string
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+          num_quizzes:
+            type:
+              - number
+              - "null"
+          num_practice_tests:
+            type:
+              - number
+              - "null"
+          has_closed_caption:
+            type:
+              - boolean
+              - "null"
+          caption_languages:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          caption_locales:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                _class:
+                  type:
+                    - string
+                    - "null"
+                locale:
+                  type:
+                    - string
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
+                english_title:
+                  type:
+                    - string
+                    - "null"
+          estimated_content_length_video:
+            type:
+              - number
+              - "null"
+          last_update_date:
+            type:
+              - string
+              - "null"
+          xapi_activity_id:
+            type:
+              - string
+              - "null"
+          accreditations:
+            type:
+              - array
+              - "null"
+          is_custom:
+            type:
+              - boolean
+              - "null"
+          is_imported:
+            type:
+              - boolean
+              - "null"
+          headline:
+            type:
+              - string
+              - "null"
+          level:
+            type:
+              - string
+              - "null"
+        additionalProperties: true
+  - type: DeclarativeStream
+    name: learning_paths
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: >-
+          https://{{ config['account_name']
+          }}.udemy.com/api-2.0/organizations/{{ config['account_id']
+          }}/learning-paths/list/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties: {}
+        additionalProperties: true
+  - type: DeclarativeStream
+    name: user_activity
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: >-
+          https://{{ config['account_name']
+          }}.udemy.com/api-2.0/organizations/{{ config['account_id']
+          }}/analytics/user-activity/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          user_name:
+            type:
+              - string
+              - "null"
+          user_surname:
+            type:
+              - string
+              - "null"
+          user_email:
+            type:
+              - string
+              - "null"
+          user_role:
+            type:
+              - string
+              - "null"
+          user_joined_date:
+            type:
+              - string
+              - "null"
+          user_external_id:
+            type:
+              - string
+              - "null"
+          user_is_deactivated:
+            type:
+              - boolean
+              - "null"
+          num_new_enrolled_courses:
+            type:
+              - number
+              - "null"
+          num_new_assigned_courses:
+            type:
+              - number
+              - "null"
+          num_new_started_courses:
+            type:
+              - number
+              - "null"
+          num_completed_courses:
+            type:
+              - number
+              - "null"
+          num_completed_lectures:
+            type:
+              - number
+              - "null"
+          num_completed_quizzes:
+            type:
+              - number
+              - "null"
+          num_video_consumed_minutes:
+            type:
+              - number
+              - "null"
+          num_web_visited_days:
+            type:
+              - number
+              - "null"
+          last_date_visit:
+            type:
+              - string
+              - "null"
+        additionalProperties: true
+  - type: DeclarativeStream
+    name: user_path_activity
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: >-
+          https://{{ config['account_name']
+          }}.udemy.com/api-2.0/organizations/{{ config['account_id']
+          }}/analytics/user-path-activity/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          user_name:
+            type:
+              - string
+              - "null"
+          user_surname:
+            type:
+              - string
+              - "null"
+          user_email:
+            type:
+              - string
+              - "null"
+          user_role:
+            type:
+              - string
+              - "null"
+          path_id:
+            type:
+              - number
+              - "null"
+          path_title:
+            type:
+              - string
+              - "null"
+          is_pro_path:
+            type:
+              - boolean
+              - "null"
+          is_private_path:
+            type:
+              - boolean
+              - "null"
+          completion_ratio:
+            type:
+              - number
+              - "null"
+          path_enrolled_date:
+            type:
+              - string
+              - "null"
+          path_consumed_minutes:
+            type:
+              - number
+              - "null"
+          path_completion_date:
+            type:
+              - string
+              - "null"
+          is_path_assigned:
+            type:
+              - boolean
+              - "null"
+          path_first_activity_date:
+            type:
+              - string
+              - "null"
+          path_last_activity_date:
+            type:
+              - string
+              - "null"
+        additionalProperties: true
+  - type: DeclarativeStream
+    name: user_course_activity
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: >-
+          https://{{ config['account_name']
+          }}.udemy.com/api-2.0/organizations/{{ config['account_id']
+          }}/analytics/user-course-activity/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          user_id:
+            type:
+              - number
+              - "null"
+          user_name:
+            type:
+              - string
+              - "null"
+          user_surname:
+            type:
+              - string
+              - "null"
+          user_email:
+            type:
+              - string
+              - "null"
+          user_role:
+            type:
+              - string
+              - "null"
+          user_external_id:
+            type:
+              - string
+              - "null"
+          course_id:
+            type:
+              - number
+              - "null"
+          course_title:
+            type:
+              - string
+              - "null"
+          course_category:
+            type:
+              - string
+              - "null"
+          course_duration:
+            type:
+              - number
+              - "null"
+          completion_ratio:
+            type:
+              - number
+              - "null"
+          num_video_consumed_minutes:
+            type:
+              - number
+              - "null"
+          course_enroll_date:
+            type:
+              - string
+              - "null"
+          course_start_date:
+            type:
+              - string
+              - "null"
+          course_completion_date:
+            type:
+              - string
+              - "null"
+          course_first_completion_date:
+            type:
+              - string
+              - "null"
+          course_last_accessed_date:
+            type:
+              - string
+              - "null"
+          last_activity_date:
+            type:
+              - string
+              - "null"
+          is_assigned:
+            type:
+              - boolean
+              - "null"
+          assigned_by:
+            type:
+              - string
+              - "null"
+          user_is_deactivated:
+            type:
+              - boolean
+              - "null"
+        additionalProperties: true
+
+spec:
+  type: Spec
+  connection_specification:
+    type: object
+    title: Udemy Business Source Spec
+    $schema: http://json-schema.org/draft-07/schema#
+    required:
+      - account_name
+      - account_id
+      - client_id
+      - client_secret
+    properties:
+      client_id:
+        type: string
+      account_id:
+        type: string
+      account_name:
+        type: string
+      client_secret:
+        type: string
+        airbyte_secret: true
+
+metadata:
+  testedStreams:
+    courses:
+      streamHash: 27003ddab2fe7d43a6928811dacaab8138432e58
+      isStale: true
+      hasResponse: true
+      responsesAreSuccessful: true
+      hasRecords: true
+      primaryKeysArePresent: true
+      primaryKeysAreUnique: true
+    learning_paths:
+      streamHash: 8cdd105f221da04ae04d85f1e45683360a3ef79d
+      isStale: true
+      hasResponse: true
+      responsesAreSuccessful: true
+      hasRecords: false
+      primaryKeysArePresent: true
+      primaryKeysAreUnique: true
+    user_activity:
+      streamHash: 60c2e685d0e6f321721c7d36eb250e7752e45a3b
+      isStale: true
+      hasResponse: true
+      responsesAreSuccessful: true
+      hasRecords: true
+      primaryKeysArePresent: true
+      primaryKeysAreUnique: true
+    user_path_activity:
+      streamHash: 9d26a7876d338ab90e260f76b3f4d7d2a7054108
+      isStale: true
+      hasResponse: true
+      responsesAreSuccessful: true
+      hasRecords: true
+      primaryKeysArePresent: true
+      primaryKeysAreUnique: true
+    user_course_activity:
+      streamHash: 3f744ac1cfe9b06b14a247a9c9879191f7477895
+      isStale: true
+      hasResponse: true
+      responsesAreSuccessful: true
+      hasRecords: true
+      primaryKeysArePresent: true
+      primaryKeysAreUnique: true
+  autoImportSchema:
+    courses: true
+    learning_paths: true
+    user_activity: true
+    user_path_activity: true
+    user_course_activity: true
