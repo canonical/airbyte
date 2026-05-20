@@ -1,9 +1,10 @@
 # WIP manifest for a Udemy source connector
-# TODO: verify response schemas over internal API documentation
+# TODO: verify response schemas over internal official API documentation
 # TODO: add documentation URL - Udemy publishes it internally
 # TODO: add rate limit information
 # TODO: add stream descriptions
-# TODO: add error handling and retry logic based on API documentation
+# TODO: add error handling and retry logic based on official API documentation
+# TODO: verify primary key over official API documentation
 
 version: 7.10.0
 
@@ -30,10 +31,14 @@ definitions:
         type: BasicHttpAuthenticator
         password: "{{ config['client_secret'] }}"
         username: "{{ config['client_id'] }}"
+      request_parameters:
+        page_size: "{{ config.get('page_size', 20) }}"
 
 streams:
   - type: DeclarativeStream
     name: courses
+    primary_key:
+      - id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -48,8 +53,7 @@ streams:
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         request_parameters:
-          page_size: "20"
-          "fields[course]": "@all"
+          $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
         type: RecordSelector
         extractor:
@@ -374,6 +378,8 @@ streams:
         additionalProperties: true
   - type: DeclarativeStream
     name: learning_paths
+    primary_key:
+      - id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -388,7 +394,7 @@ streams:
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         request_parameters:
-          page_size: "20"
+          $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
         type: RecordSelector
         extractor:
@@ -404,6 +410,9 @@ streams:
         additionalProperties: true
   - type: DeclarativeStream
     name: user_activity
+    primary_key:
+      - user_email
+      - user_joined_date
     retriever:
       type: SimpleRetriever
       paginator:
@@ -418,9 +427,7 @@ streams:
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         request_parameters:
-          page_size: "20"
-          "fields[aggregate_organization_user_activity]": "@all"
-          user_email: "{{ config.get('user_email', '') }}"
+          $ref: "#/definitions/linked/HttpRequester/request_parameters"
           from_date: "{{ config.get('from_date', '') }}"
           to_date: "{{ config.get('to_date', '') }}"
       record_selector:
@@ -502,6 +509,9 @@ streams:
         additionalProperties: true
   - type: DeclarativeStream
     name: user_path_activity
+    primary_key:
+      - user_email
+      - path_id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -516,9 +526,7 @@ streams:
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         request_parameters:
-          page_size: "20"
-          user_email: "{{ config.get('user_email', '') }}"
-          course_id: "{{ config.get('course_id', '') }}"
+          $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
         type: RecordSelector
         extractor:
@@ -594,6 +602,9 @@ streams:
         additionalProperties: true
   - type: DeclarativeStream
     name: user_course_activity
+    primary_key:
+      - user_id
+      - course_id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -608,10 +619,7 @@ streams:
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         request_parameters:
-          page_size: "20"
-          "fields[aggregate_organization_user_course_activity]": "@all"
-          user_email: "{{ config.get('user_email', '') }}"
-          course_id: "{{ config.get('course_id', '') }}"
+          $ref: "#/definitions/linked/HttpRequester/request_parameters"
           from_date: "{{ config.get('from_date', '') }}"
           to_date: "{{ config.get('to_date', '') }}"
       record_selector:
@@ -733,14 +741,6 @@ spec:
       client_secret:
         type: string
         airbyte_secret: true
-      user_email:
-        type: string
-        description: >-
-          Optional. Filter user-activity and user-path-activity records by user email address.
-      course_id:
-        type: string
-        description: >-
-          Optional. Filter user-path-activity and user-course-activity records by course ID.
       from_date:
         type: string
         description: >-
@@ -749,6 +749,13 @@ spec:
         type: string
         description: >-
           Optional. Filter user-activity and user-course-activity records up to this date (format: YYYY-MM-DD).
+      page_size:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+        description: >-
+          Optional. Number of records per page for paginated API requests. Defaults to 20.
 
 metadata:
   testedStreams:
