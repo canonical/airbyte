@@ -1,7 +1,7 @@
 # WIP metadata for a Udemy source connector
 # TODO: verify image version
-# TODO: add documentationUrl - Udemy publishes it internally
-# TODO: add registryOverrides
+# TODO: add externalDocumentationUrls
+# TODO: verify registryOverrides and ab_internal values
 
 metadataSpecVersion: "1.0"
 
@@ -25,7 +25,7 @@ data:
   icon: udemy.svg
   license: MIT
   name: Udemy
-  releaseDate: 2026-05-18
+  releaseDate: 2026-05-20
   releaseStage: alpha
   supportLevel: community
   tags:

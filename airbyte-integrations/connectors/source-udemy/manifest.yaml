@@ -47,6 +47,9 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        request_parameters:
+          page_size: "20"
+          "fields[course]": "@all"
       record_selector:
         type: RecordSelector
         extractor:
@@ -384,6 +387,8 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        request_parameters:
+          page_size: "20"
       record_selector:
         type: RecordSelector
         extractor:
@@ -412,6 +417,12 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        request_parameters:
+          page_size: "20"
+          "fields[aggregate_organization_user_activity]": "@all"
+          user_email: "{{ config.get('user_email', '') }}"
+          from_date: "{{ config.get('from_date', '') }}"
+          to_date: "{{ config.get('to_date', '') }}"
       record_selector:
         type: RecordSelector
         extractor:
@@ -504,6 +515,10 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        request_parameters:
+          page_size: "20"
+          user_email: "{{ config.get('user_email', '') }}"
+          course_id: "{{ config.get('course_id', '') }}"
       record_selector:
         type: RecordSelector
         extractor:
@@ -592,6 +607,13 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        request_parameters:
+          page_size: "20"
+          "fields[aggregate_organization_user_course_activity]": "@all"
+          user_email: "{{ config.get('user_email', '') }}"
+          course_id: "{{ config.get('course_id', '') }}"
+          from_date: "{{ config.get('from_date', '') }}"
+          to_date: "{{ config.get('to_date', '') }}"
       record_selector:
         type: RecordSelector
         extractor:
@@ -711,6 +733,22 @@ spec:
       client_secret:
         type: string
         airbyte_secret: true
+      user_email:
+        type: string
+        description: >-
+          Optional. Filter user-activity and user-path-activity records by user email address.
+      course_id:
+        type: string
+        description: >-
+          Optional. Filter user-path-activity and user-course-activity records by course ID.
+      from_date:
+        type: string
+        description: >-
+          Optional. Filter user-activity and user-course-activity records from this date (format: YYYY-MM-DD).
+      to_date:
+        type: string
+        description: >-
+          Optional. Filter user-activity and user-course-activity records up to this date (format: YYYY-MM-DD).
 
 metadata:
   testedStreams:
