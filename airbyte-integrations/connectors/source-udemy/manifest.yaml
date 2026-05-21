@@ -28,7 +28,7 @@ definitions:
         type: BasicHttpAuthenticator
         password: "{{ config['client_secret'] }}"
         username: "{{ config['client_id'] }}"
-     error_handler:
+      error_handler:
         type: CompositeErrorHandler
         error_handlers:
           - type: DefaultErrorHandler
@@ -39,7 +39,7 @@ definitions:
                 http_codes:
                   - 429
             backoff_strategies:
-              - type: WaitTimeFromHeaderBackoffStrategy
+              - type: WaitTimeFromHeader
                 regex: "([0-9]+)"
                 header: Retry-After
                 min_wait: 1
@@ -52,7 +52,7 @@ definitions:
                   - 500
             backoff_strategies:
               - type: ConstantBackoffStrategy
-                backoff_time_in_seconds: 30
+                backoff_time_in_seconds: 60
           - type: DefaultErrorHandler
             response_filters:
               - type: HttpResponseFilter
@@ -101,7 +101,7 @@ streams:
             type:
               - string
               - "null"
-          _class:
+          _class: # not in official docs, observed in API responses
             type:
               - string
               - "null"
@@ -129,7 +129,7 @@ streams:
               type:
                 - string
                 - "null"
-          topics:
+          topics: # not in official docs, observed in API responses
             type:
               - array
               - "null"
@@ -283,7 +283,7 @@ streams:
                 type:
                   - string
                   - "null"
-          is_practice_test_course:
+          is_practice_test_course: # not in official docs, observed in API responses
             type:
               - boolean
               - "null"
@@ -390,6 +390,31 @@ streams:
             type:
               - array
               - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                type:
+                  type:
+                    - string
+                    - "null"
+                compliant_since:
+                  type:
+                    - string
+                    - "null"
+                field_of_study:
+                  type:
+                    - string
+                    - "null"
+                program_level:
+                  type:
+                    - string
+                    - "null"
+                num_credits:
+                  type:
+                    - number
+                    - "null"
           is_custom:
             type:
               - boolean
@@ -406,6 +431,12 @@ streams:
             type:
               - string
               - "null"
+            enum:
+              - Beginner
+              - Intermediate
+              - Expert
+              - All levels
+              - null
         additionalProperties: true
   - type: DeclarativeStream
     name: learning_paths
@@ -439,7 +470,171 @@ streams:
       schema:
         type: object
         $schema: http://json-schema.org/draft-07/schema#
-        properties: {}
+        properties:
+          id:
+            type:
+              - number
+              - "null"
+          url:
+            type:
+              - string
+              - "null"
+          title:
+            type:
+              - string
+              - "null"
+          description:
+            type:
+              - string
+              - "null"
+          editors:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                display_name:
+                  type:
+                    - string
+                    - "null"
+                email_address:
+                  type:
+                    - string
+                    - "null"
+                lms_user_id:
+                  type:
+                    - string
+                    - "null"
+          created:
+            type:
+              - string
+              - "null"
+          last_modified:
+            type:
+              - string
+              - "null"
+          estimated_content_length:
+            type:
+              - number
+              - "null"
+          number_of_content_items:
+            type:
+              - number
+              - "null"
+          is_pro_path:
+            type:
+              - boolean
+              - "null"
+          sections:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                id:
+                  type:
+                    - number
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
+                description:
+                  type:
+                    - string
+                    - "null"
+                order:
+                  type:
+                    - number
+                    - "null"
+                items:
+                  type:
+                    - array
+                    - "null"
+                  items:
+                    type:
+                      - object
+                      - "null"
+                    properties:
+                      id:
+                        type:
+                          - number
+                          - "null"
+                      title:
+                        type:
+                          - string
+                          - "null"
+                      url:
+                        type:
+                          - string
+                          - "null"
+                      type:
+                        type:
+                          - string
+                          - "null"
+                      duration:
+                        type:
+                          - number
+                          - "null"
+                      number_of_items:
+                        type:
+                          - number
+                          - "null"
+                      order:
+                        type:
+                          - number
+                          - "null"
+                      thumbnail:
+                        type:
+                          - string
+                          - "null"
+                      resource_url:
+                        type:
+                          - string
+                          - "null"
+          locales:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          categories:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          folders:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                id:
+                  type:
+                    - number
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
+                description:
+                  type:
+                    - string
+                    - "null"
         additionalProperties: true
   - type: DeclarativeStream
     name: user_activity
@@ -501,7 +696,7 @@ streams:
             type:
               - string
               - "null"
-          user_is_deactivated:
+          user_is_deactivated: # not in official docs, observed in API responses
             type:
               - boolean
               - "null"
@@ -525,7 +720,7 @@ streams:
             type:
               - number
               - "null"
-          num_completed_quizzes:
+          num_completed_quizzes: # not in official docs, observed in API responses
             type:
               - number
               - "null"
@@ -592,6 +787,14 @@ streams:
             type:
               - string
               - "null"
+          user_external_id:
+            type:
+              - string
+              - "null"
+          lms_user_id:
+            type:
+              - string
+              - "null"
           path_id:
             type:
               - number
@@ -620,13 +823,25 @@ streams:
             type:
               - number
               - "null"
-          path_completion_date:
+          path_completion_date: # docs call this path_completed_date, actual API returns path_completion_date
             type:
               - string
               - "null"
           is_path_assigned:
             type:
               - boolean
+              - "null"
+          path_assigned_on:
+            type:
+              - string
+              - "null"
+          path_assigned_due_date:
+            type:
+              - string
+              - "null"
+          path_assigned_by:
+            type:
+              - string
               - "null"
           path_first_activity_date:
             type:
@@ -673,7 +888,7 @@ streams:
         type: object
         $schema: http://json-schema.org/schema#
         properties:
-          user_id:
+          user_id: # not in official docs, observed in API responses
             type:
               - number
               - "null"
@@ -737,7 +952,10 @@ streams:
             type:
               - string
               - "null"
-          course_last_accessed_date:
+          # Docs instruction: "deprecated, use last_activity_date instead"
+          # However, API responses still include this field 
+          # it may differ from last_activity_date, so keeping it for now
+          course_last_accessed_date: 
             type:
               - string
               - "null"
@@ -753,7 +971,11 @@ streams:
             type:
               - string
               - "null"
-          user_is_deactivated:
+          lms_user_id:
+            type:
+              - string
+              - "null"
+          user_is_deactivated: # not in official docs, observed in API responses
             type:
               - boolean
               - "null"
