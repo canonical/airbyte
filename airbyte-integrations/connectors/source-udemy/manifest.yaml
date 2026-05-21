@@ -1,9 +1,6 @@
 # WIP manifest for a Udemy source connector
 # TODO: verify response schemas over internal official API documentation
-# TODO: add documentation URL - Udemy publishes it internally
-# TODO: add rate limit information
 # TODO: add stream descriptions
-# TODO: add error handling and retry logic based on official API documentation
 # TODO: verify primary key over official API documentation
 
 version: 7.10.0
@@ -31,6 +28,38 @@ definitions:
         type: BasicHttpAuthenticator
         password: "{{ config['client_secret'] }}"
         username: "{{ config['client_id'] }}"
+     error_handler:
+        type: CompositeErrorHandler
+        error_handlers:
+          - type: DefaultErrorHandler
+            max_retries: 5
+            response_filters:
+              - type: HttpResponseFilter
+                action: RETRY
+                http_codes:
+                  - 429
+            backoff_strategies:
+              - type: WaitTimeFromHeaderBackoffStrategy
+                regex: "([0-9]+)"
+                header: Retry-After
+                min_wait: 1
+          - type: DefaultErrorHandler
+            max_retries: 5
+            response_filters:
+              - type: HttpResponseFilter
+                action: RETRY
+                http_codes:
+                  - 500
+            backoff_strategies:
+              - type: ConstantBackoffStrategy
+                backoff_time_in_seconds: 30
+          - type: DefaultErrorHandler
+            response_filters:
+              - type: HttpResponseFilter
+                action: FAIL
+                http_codes:
+                  - 403
+                error_message: "Your Udemy API credentials have expired or lack the required scopes."
       request_parameters:
         page_size: "{{ config.get('page_size', 20) }}"
 
@@ -52,6 +81,8 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
           $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
@@ -393,6 +424,8 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
           $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
@@ -426,6 +459,8 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
           $ref: "#/definitions/linked/HttpRequester/request_parameters"
           from_date: "{{ config.get('from_date', '') }}"
@@ -525,6 +560,8 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
           $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
@@ -618,6 +655,8 @@ streams:
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
           $ref: "#/definitions/linked/HttpRequester/request_parameters"
           from_date: "{{ config.get('from_date', '') }}"
