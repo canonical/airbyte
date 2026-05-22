@@ -7,6 +7,7 @@
 # Note: `Courses` stream is excluded from local acceptance tests since it returns 28k+ records,
 # and has no filtering parameters to limit that (limiting pages number is not provided either in Airbyte Connector Acceptance Test)
 # This causes local tests to run for too long and timeout.
+# Recommendation: run `Courses` stream test in abctl Airbyte UI to monitor progress end-to-end.
 
 connector_image: airbyte/source-udemy:dev
 test_strictness_level: high
@@ -35,5 +36,3 @@ acceptance_tests:
     bypass_reason: "All streams are full refresh only; no incremental cursors are configured."
   full_refresh:
     bypass_reason: "Covered by basic_read above; full_refresh is not a recognized test category in the CDK 7.x test runner."
-
-  
