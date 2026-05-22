@@ -69,8 +69,16 @@ jobs:
 
           echo "connector-exists=true" >> "$GITHUB_OUTPUT"
           cd "$CONNECTOR_ROOT"
-          echo "connector-language=$(poe -qq get-language)" >> "$GITHUB_OUTPUT"
-          echo "connector-base-image=$(poe -qq get-base-image)" >> "$GITHUB_OUTPUT"
+          CONNECTOR_LANGUAGE="$(poe -qq get-language)"
+          CONNECTOR_BASE_IMAGE="$(poe -qq get-base-image)"
+
+          if [ -z "$CONNECTOR_LANGUAGE" ] || [ -z "$CONNECTOR_BASE_IMAGE" ]; then
+            echo "❌ Failed to resolve connector language/base image for $CONNECTOR"
+            exit 1
+          fi
+
+          echo "connector-language=$CONNECTOR_LANGUAGE" >> "$GITHUB_OUTPUT"
+          echo "connector-base-image=$CONNECTOR_BASE_IMAGE" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
         if: ${{ steps.connector-vars.outputs.connector-exists == 'true' && steps.connector-vars.outputs.connector-language == 'java' }}
@@ -111,13 +119,23 @@ jobs:
           # Extract metadata
           VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
           NAME=$(grep 'dockerRepository' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
+          if [ -z "$VERSION" ] || [ -z "$NAME" ]; then
+            echo "❌ Missing canonicalImageTag or dockerRepository in $METADATAFILE"
+            exit 1
+          fi
           IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/$NAME:$VERSION"
           DEV_IMAGE="airbyte/$CONNECTOR:dev"
+          DOCKERFILE_PATH="docker-images/Dockerfile.${CONNECTOR_LANGUAGE}-connector"
+
+          if [ ! -f "$DOCKERFILE_PATH" ]; then
+            echo "❌ Unsupported connector language '$CONNECTOR_LANGUAGE': missing $DOCKERFILE_PATH"
+            exit 1
+          fi
 
           echo "🚀 Building $CONNECTOR with direct Docker buildx flow..."
           docker buildx build \
             --load \
-            -f "docker-images/Dockerfile.${CONNECTOR_LANGUAGE}-connector" \
+            -f "$DOCKERFILE_PATH" \
             -t "$DEV_IMAGE" \
             --build-arg BASE_IMAGE="$CONNECTOR_BASE_IMAGE" \
             --build-arg CONNECTOR_NAME="$CONNECTOR" \
