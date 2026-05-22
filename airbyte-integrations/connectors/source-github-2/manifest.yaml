@@ -17,20 +17,27 @@ definitions:
         type: CompositeErrorHandler
         error_handlers:
           - type: DefaultErrorHandler
-            max_retries: 5
+            max_retries: 0
             response_filters:
               - type: HttpResponseFilter
                 action: IGNORE
                 http_codes:
                   - 403
+                error_message_contains: Forbidden
+              - type: HttpResponseFilter
+                action: IGNORE
+                http_codes:
                   - 404
                   - 409
+          - type: DefaultErrorHandler
+            max_retries: 20
+            response_filters:
               - type: HttpResponseFilter
                 action: RETRY
-                error_message_contains: rate limit
                 http_codes:
                   - 403
                   - 429
+                error_message_contains: Rate limit
             backoff_strategies:
               - type: WaitUntilTimeFromHeader
                 regex: ([0-9]+)
@@ -40,12 +47,15 @@ definitions:
                 regex: ([0-9]+)
                 header: retry-after
                 min_wait: 1
+              - type: ConstantBackoffStrategy
+                backoff_time_in_seconds: 60
           - type: DefaultErrorHandler
-            max_retries: 5
+            max_retries: 20
             response_filters:
               - type: HttpResponseFilter
                 action: RETRY
                 http_codes:
+                  - 500
                   - 502
                   - 503
                   - 504
@@ -1358,6 +1368,10 @@ streams:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_parameters:
+          sort: updated
+          state: all
+          direction: asc
       record_selector:
         type: RecordSelector
         extractor:
@@ -1491,39 +1505,6 @@ streams:
             type:
               - array
               - "null"
-            items:
-              type:
-                - object
-                - "null"
-              properties:
-                description:
-                  type:
-                    - string
-                    - "null"
-                id:
-                  type:
-                    - number
-                    - "null"
-                url:
-                  type:
-                    - string
-                    - "null"
-                name:
-                  type:
-                    - string
-                    - "null"
-                color:
-                  type:
-                    - string
-                    - "null"
-                default:
-                  type:
-                    - boolean
-                    - "null"
-                node_id:
-                  type:
-                    - string
-                    - "null"
           locked:
             type:
               - boolean
@@ -1547,6 +1528,10 @@ streams:
           assignees:
             type:
               - array
+              - "null"
+          closed_at:
+            type:
+              - string
               - "null"
           closed_by:
             type:
@@ -1717,10 +1702,6 @@ streams:
                 type:
                   - string
                   - "null"
-          state_reason:
-            type:
-              - string
-              - "null"
           timeline_url:
             type:
               - string
@@ -1735,44 +1716,10 @@ streams:
             type:
               - string
               - "null"
-          sub_issues_summary:
+          issue_field_values:
             type:
-              - object
+              - array
               - "null"
-            properties:
-              total:
-                type:
-                  - number
-                  - "null"
-              completed:
-                type:
-                  - number
-                  - "null"
-              percent_completed:
-                type:
-                  - number
-                  - "null"
-          issue_dependencies_summary:
-            type:
-              - object
-              - "null"
-            properties:
-              blocking:
-                type:
-                  - number
-                  - "null"
-              blocked_by:
-                type:
-                  - number
-                  - "null"
-              total_blocking:
-                type:
-                  - number
-                  - "null"
-              total_blocked_by:
-                type:
-                  - number
-                  - "null"
         additionalProperties: true
     transformations:
       - type: AddFields
@@ -1792,7 +1739,9 @@ streams:
       cursor_field: updated_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -1805,7 +1754,6 @@ streams:
         inject_into: request_parameter
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
-      is_client_side_incremental: true
   - type: DeclarativeStream
     name: issue_labels
     retriever:
@@ -2336,7 +2284,9 @@ streams:
       cursor_field: committer_datetime
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -2361,9 +2311,13 @@ streams:
         type: JsonDecoder
       paginator:
         type: DefaultPaginator
-        stop_condition: >-
-          {{ response.json() | selectattr('created_at', 'lt',
-          stream_interval.start_time) | list | length > 0 }}
+        stop_condition: |-
+          {{ response.json() | length > 0 and
+            (response.json()
+            | selectattr('updated_at', 'ge', stream_interval.start_time)
+            | list
+            | length == 0)
+          }}
         page_size_option:
           type: RequestOption
           field_name: per_page
@@ -2394,7 +2348,7 @@ streams:
           field_path: []
         record_filter:
           type: RecordFilter
-          condition: "{{ record['created_at'] > stream_interval.start_time }}"
+          condition: "{{ record['updated_at'] >= stream_interval.start_time }}"
       partition_router:
         type: SubstreamPartitionRouter
         parent_stream_configs:
@@ -2798,10 +2752,12 @@ streams:
               hash('md5') }}
     incremental_sync:
       type: DatetimeBasedCursor
-      cursor_field: created_at
+      cursor_field: updated_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -2810,7 +2766,6 @@ streams:
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
       is_client_side_incremental: true
   - type: DeclarativeStream
     name: pull_requests
@@ -2820,9 +2775,15 @@ streams:
         type: JsonDecoder
       paginator:
         type: DefaultPaginator
-        stop_condition: >-
-          {{ response.json() | selectattr('created_at', 'lt',
-          stream_interval.start_time) | list | length > 0 }}
+        stop_condition: |-
+          {{ response.json() | length > 0 and
+            (
+              response.json()
+              | selectattr('updated_at', 'ge', stream_interval.start_time)
+              | list
+              | length == 0
+            )
+          }}
         page_size_option:
           type: RequestOption
           field_name: per_page
@@ -2847,7 +2808,7 @@ streams:
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
-          sort: created
+          sort: updated
           state: all
           direction: desc
       record_selector:
@@ -2857,7 +2818,7 @@ streams:
           field_path: []
         record_filter:
           type: RecordFilter
-          condition: "{{ record['updated_at'] > stream_interval.start_time }}"
+          condition: "{{ record['updated_at'] >= stream_interval.start_time }}"
       partition_router:
         type: SubstreamPartitionRouter
         parent_stream_configs:
@@ -4496,7 +4457,9 @@ streams:
       cursor_field: updated_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -4505,7 +4468,6 @@ streams:
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
       is_client_side_incremental: true
   - type: DeclarativeStream
     name: reviews
@@ -4533,7 +4495,9 @@ streams:
           field_path: []
         record_filter:
           type: RecordFilter
-          condition: "{{ record['submitted_at'] > stream_interval.start_time }}"
+          condition: >-
+            {{ record['submitted_at'] and record['submitted_at'] >=
+            stream_interval.start_time }}}
       partition_router:
         type: SubstreamPartitionRouter
         parent_stream_configs:
@@ -4553,7 +4517,6 @@ streams:
         $schema: http://json-schema.org/schema#
         required:
           - airbyte_unique_id
-          - submitted_at
         properties:
           id:
             type:
@@ -4718,7 +4681,9 @@ streams:
       cursor_field: submitted_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -4728,7 +4693,875 @@ streams:
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
+      is_client_side_incremental: true
+  - type: DeclarativeStream
+    name: deployment_statuses
+    retriever:
+      type: SimpleRetriever
+      decoder:
+        type: JsonDecoder
+      paginator:
+        type: DefaultPaginator
+        stop_condition: |-
+          {{
+            response.json() | length > 0 and
+            (
+              response.json()
+              | selectattr('updated_at', 'ge', stream_interval.start_time)
+              | list
+              | length == 0
+            )
+          }}
+        page_size_option:
+          type: RequestOption
+          field_name: per_page
+          inject_into: request_parameter
+        page_token_option:
+          type: RequestOption
+          field_name: page
+          inject_into: request_parameter
+        pagination_strategy:
+          type: PageIncrement
+          page_size: 100
+          start_from_page: 1
+          inject_on_first_request: true
+      requester:
+        type: HttpRequester
+        url: >-
+          https://api.github.com/repos/{{ config['organization'] }}/{{
+          stream_slice.extra_fields.repository }}/deployments/{{
+          stream_slice.deployment_id }}/statuses
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+        record_filter:
+          type: RecordFilter
+          condition: "{{ record['updated_at'] >= stream_interval.start_time }}"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/11"
+            parent_key: id
+            extra_fields:
+              - - repository
+            partition_field: deployment_id
+            lazy_read_pointer: []
+    primary_key: airbyte_unique_id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        required:
+          - airbyte_unique_id
+          - updated_at
+        properties:
+          description:
+            type:
+              - string
+              - "null"
+          id:
+            type:
+              - number
+              - "null"
+          url:
+            type:
+              - string
+              - "null"
+          state:
+            type:
+              - string
+              - "null"
+          creator:
+            type:
+              - object
+              - "null"
+            properties:
+              type:
+                type:
+                  - string
+                  - "null"
+              id:
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              login:
+                type:
+                  - string
+                  - "null"
+              node_id:
+                type:
+                  - string
+                  - "null"
+              html_url:
+                type:
+                  - string
+                  - "null"
+              gists_url:
+                type:
+                  - string
+                  - "null"
+              repos_url:
+                type:
+                  - string
+                  - "null"
+              avatar_url:
+                type:
+                  - string
+                  - "null"
+              events_url:
+                type:
+                  - string
+                  - "null"
+              site_admin:
+                type:
+                  - boolean
+                  - "null"
+              gravatar_id:
+                type:
+                  - string
+                  - "null"
+              starred_url:
+                type:
+                  - string
+                  - "null"
+              followers_url:
+                type:
+                  - string
+                  - "null"
+              following_url:
+                type:
+                  - string
+                  - "null"
+              user_view_type:
+                type:
+                  - string
+                  - "null"
+              organizations_url:
+                type:
+                  - string
+                  - "null"
+              subscriptions_url:
+                type:
+                  - string
+                  - "null"
+              received_events_url:
+                type:
+                  - string
+                  - "null"
+          log_url:
+            type:
+              - string
+              - "null"
+          node_id:
+            type:
+              - string
+              - "null"
+          created_at:
+            type:
+              - string
+              - "null"
+          repository:
+            type:
+              - string
+              - "null"
+          target_url:
+            type:
+              - string
+              - "null"
+          updated_at:
+            type: string
+          environment:
+            type:
+              - string
+              - "null"
+          deployment_id:
+            type:
+              - number
+              - "null"
+          deployment_url:
+            type:
+              - string
+              - "null"
+          repository_url:
+            type:
+              - string
+              - "null"
+          environment_url:
+            type:
+              - string
+              - "null"
+          airbyte_unique_id:
+            type: string
+        additionalProperties: true
+    transformations:
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path:
+              - repository
+            value: "{{ stream_slice.extra_fields.repository }}"
+          - type: AddedFieldDefinition
+            path:
+              - deployment_id
+            value: "{{ stream_slice.deployment_id }}"
+          - type: AddedFieldDefinition
+            path:
+              - airbyte_unique_id
+            value: >-
+              {{ [record['node_id'], stream_slice.extra_fields.repository,
+              stream_slice.deployment_id] | join('_') | hash('md5') }}
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: updated_at
+      end_datetime:
+        type: MinMaxDatetime
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_date'] }}"
+        min_datetime: "{{ config['start_date'] }}"
+      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      cursor_datetime_formats:
+        - "%Y-%m-%dT%H:%M:%SZ"
+        - "%Y-%m-%dT%H:%M:%S.%f%z"
+      is_client_side_incremental: true
+  - type: DeclarativeStream
+    name: issue_comments
+    retriever:
+      type: SimpleRetriever
+      decoder:
+        type: JsonDecoder
+      paginator:
+        type: DefaultPaginator
+        stop_condition: |-
+          {{ 
+            response.json() 
+            | selectattr('updated_at', 'ge', stream_interval.start_time) 
+            | list 
+            | length == 0 
+          }}
+        page_size_option:
+          type: RequestOption
+          field_name: per_page
+          inject_into: request_parameter
+        page_token_option:
+          type: RequestOption
+          field_name: page
+          inject_into: request_parameter
+        pagination_strategy:
+          type: PageIncrement
+          page_size: 100
+          start_from_page: 1
+          inject_on_first_request: true
+      requester:
+        type: HttpRequester
+        url: >-
+          https://api.github.com/repos/{{ config['organization'] }}/{{
+          stream_slice.extra_fields.repository }}/issues/{{
+          stream_slice.issue_number }}/comments
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+        record_filter:
+          type: RecordFilter
+          condition: "{{ record['updated_at'] >= stream_interval.start_time }}"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/7"
+            parent_key: number
+            extra_fields:
+              - - repository
+            partition_field: issue_number
+            lazy_read_pointer: []
+    primary_key: airbyte_unique_id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        required:
+          - airbyte_unique_id
+          - updated_at
+        properties:
+          id:
+            type:
+              - number
+              - "null"
+          url:
+            type:
+              - string
+              - "null"
+          body:
+            type:
+              - string
+              - "null"
+          user:
+            type:
+              - object
+              - "null"
+            properties:
+              type:
+                type:
+                  - string
+                  - "null"
+              id:
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              login:
+                type:
+                  - string
+                  - "null"
+              node_id:
+                type:
+                  - string
+                  - "null"
+              html_url:
+                type:
+                  - string
+                  - "null"
+              gists_url:
+                type:
+                  - string
+                  - "null"
+              repos_url:
+                type:
+                  - string
+                  - "null"
+              avatar_url:
+                type:
+                  - string
+                  - "null"
+              events_url:
+                type:
+                  - string
+                  - "null"
+              site_admin:
+                type:
+                  - boolean
+                  - "null"
+              gravatar_id:
+                type:
+                  - string
+                  - "null"
+              starred_url:
+                type:
+                  - string
+                  - "null"
+              followers_url:
+                type:
+                  - string
+                  - "null"
+              following_url:
+                type:
+                  - string
+                  - "null"
+              user_view_type:
+                type:
+                  - string
+                  - "null"
+              organizations_url:
+                type:
+                  - string
+                  - "null"
+              subscriptions_url:
+                type:
+                  - string
+                  - "null"
+              received_events_url:
+                type:
+                  - string
+                  - "null"
+          node_id:
+            type:
+              - string
+              - "null"
+          html_url:
+            type:
+              - string
+              - "null"
+          issue_url:
+            type:
+              - string
+              - "null"
+          reactions:
+            type:
+              - object
+              - "null"
+            properties:
+              "+1":
+                type:
+                  - number
+                  - "null"
+              "-1":
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              eyes:
+                type:
+                  - number
+                  - "null"
+              heart:
+                type:
+                  - number
+                  - "null"
+              laugh:
+                type:
+                  - number
+                  - "null"
+              hooray:
+                type:
+                  - number
+                  - "null"
+              rocket:
+                type:
+                  - number
+                  - "null"
+              confused:
+                type:
+                  - number
+                  - "null"
+              total_count:
+                type:
+                  - number
+                  - "null"
+          created_at:
+            type:
+              - string
+              - "null"
+          repository:
+            type:
+              - string
+              - "null"
+          updated_at:
+            type: string
+          issue_number:
+            type:
+              - number
+              - "null"
+          airbyte_unique_id:
+            type: string
+          author_association:
+            type:
+              - string
+              - "null"
+        additionalProperties: true
+    transformations:
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path:
+              - repository
+            value: "{{ stream_slice.extra_fields.repository }}"
+          - type: AddedFieldDefinition
+            path:
+              - issue_number
+            value: "{{ stream_slice.issue_number }}"
+          - type: AddedFieldDefinition
+            path:
+              - airbyte_unique_id
+            value: >-
+              {{ [record['node_id'], stream_slice.extra_fields.repository,
+              stream_slice.issue_number] | join('_') | hash('md5') }}
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: updated_at
+      end_datetime:
+        type: MinMaxDatetime
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_date'] }}"
+        min_datetime: "{{ config['start_date'] }}"
+      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      cursor_datetime_formats:
+        - "%Y-%m-%dT%H:%M:%SZ"
+        - "%Y-%m-%dT%H:%M:%S.%f%z"
+      is_client_side_incremental: true
+  - type: DeclarativeStream
+    name: pr_comments
+    retriever:
+      type: SimpleRetriever
+      decoder:
+        type: JsonDecoder
+      paginator:
+        type: DefaultPaginator
+        stop_condition: |-
+          {{ 
+            response.json() 
+            | selectattr('updated_at', 'ge', stream_interval.start_time) 
+            | list 
+            | length == 0 
+          }}
+        page_size_option:
+          type: RequestOption
+          field_name: per_page
+          inject_into: request_parameter
+        page_token_option:
+          type: RequestOption
+          field_name: page
+          inject_into: request_parameter
+        pagination_strategy:
+          type: PageIncrement
+          page_size: 100
+          start_from_page: 1
+          inject_on_first_request: true
+      requester:
+        type: HttpRequester
+        url: >-
+          https://api.github.com/repos/{{ config['organization'] }}/{{
+          stream_slice.extra_fields.repository }}/pulls/{{
+          stream_slice.pr_number }}/comments
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+        record_filter:
+          type: RecordFilter
+          condition: "{{ record['updated_at'] >= stream_interval.start_time }}"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/12"
+            parent_key: number
+            extra_fields:
+              - - repository
+            partition_field: pr_number
+            lazy_read_pointer: []
+    primary_key: airbyte_unique_id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        required:
+          - airbyte_unique_id
+          - updated_at
+        properties:
+          id:
+            type:
+              - number
+              - "null"
+          url:
+            type:
+              - string
+              - "null"
+          body:
+            type:
+              - string
+              - "null"
+          path:
+            type:
+              - string
+              - "null"
+          side:
+            type:
+              - string
+              - "null"
+          user:
+            type:
+              - object
+              - "null"
+            properties:
+              type:
+                type:
+                  - string
+                  - "null"
+              id:
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              login:
+                type:
+                  - string
+                  - "null"
+              node_id:
+                type:
+                  - string
+                  - "null"
+              html_url:
+                type:
+                  - string
+                  - "null"
+              gists_url:
+                type:
+                  - string
+                  - "null"
+              repos_url:
+                type:
+                  - string
+                  - "null"
+              avatar_url:
+                type:
+                  - string
+                  - "null"
+              events_url:
+                type:
+                  - string
+                  - "null"
+              site_admin:
+                type:
+                  - boolean
+                  - "null"
+              gravatar_id:
+                type:
+                  - string
+                  - "null"
+              starred_url:
+                type:
+                  - string
+                  - "null"
+              followers_url:
+                type:
+                  - string
+                  - "null"
+              following_url:
+                type:
+                  - string
+                  - "null"
+              user_view_type:
+                type:
+                  - string
+                  - "null"
+              organizations_url:
+                type:
+                  - string
+                  - "null"
+              subscriptions_url:
+                type:
+                  - string
+                  - "null"
+              received_events_url:
+                type:
+                  - string
+                  - "null"
+          _links:
+            type:
+              - object
+              - "null"
+            properties:
+              html:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  href:
+                    type:
+                      - string
+                      - "null"
+              self:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  href:
+                    type:
+                      - string
+                      - "null"
+              pull_request:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  href:
+                    type:
+                      - string
+                      - "null"
+          node_id:
+            type:
+              - string
+              - "null"
+          html_url:
+            type:
+              - string
+              - "null"
+          position:
+            type:
+              - number
+              - "null"
+          commit_id:
+            type:
+              - string
+              - "null"
+          diff_hunk:
+            type:
+              - string
+              - "null"
+          pr_number:
+            type:
+              - number
+              - "null"
+          reactions:
+            type:
+              - object
+              - "null"
+            properties:
+              "+1":
+                type:
+                  - number
+                  - "null"
+              "-1":
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              eyes:
+                type:
+                  - number
+                  - "null"
+              heart:
+                type:
+                  - number
+                  - "null"
+              laugh:
+                type:
+                  - number
+                  - "null"
+              hooray:
+                type:
+                  - number
+                  - "null"
+              rocket:
+                type:
+                  - number
+                  - "null"
+              confused:
+                type:
+                  - number
+                  - "null"
+              total_count:
+                type:
+                  - number
+                  - "null"
+          created_at:
+            type:
+              - string
+              - "null"
+          repository:
+            type:
+              - string
+              - "null"
+          updated_at:
+            type: string
+          subject_type:
+            type:
+              - string
+              - "null"
+          original_line:
+            type:
+              - number
+              - "null"
+          in_reply_to_id:
+            type:
+              - number
+              - "null"
+          pull_request_url:
+            type:
+              - string
+              - "null"
+          airbyte_unique_id:
+            type: string
+          original_position:
+            type:
+              - number
+              - "null"
+          author_association:
+            type:
+              - string
+              - "null"
+          original_commit_id:
+            type:
+              - string
+              - "null"
+          pull_request_review_id:
+            type:
+              - number
+              - "null"
+        additionalProperties: true
+    transformations:
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path:
+              - pr_number
+            value: "{{ stream_slice.pr_number }}"
+          - type: AddedFieldDefinition
+            path:
+              - repository
+            value: "{{ stream_slice.extra_fields.repository }}"
+          - type: AddedFieldDefinition
+            path:
+              - airbyte_unique_id
+            value: >-
+              {{ [record['node_id'], stream_slice.extra_fields.repository,
+              stream_slice.pr_number] | join('_') | hash('md5') }}
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: updated_at
+      end_datetime:
+        type: MinMaxDatetime
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_date'] }}"
+        min_datetime: "{{ config['start_date'] }}"
+      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      cursor_datetime_formats:
+        - "%Y-%m-%dT%H:%M:%SZ"
+        - "%Y-%m-%dT%H:%M:%S.%f%z"
       is_client_side_incremental: true
   - type: DeclarativeStream
     name: workflows
@@ -4756,7 +5589,7 @@ streams:
             - workflows
         record_filter:
           type: RecordFilter
-          condition: "{{ record['updated_at'] > stream_interval.start_time }}"
+          condition: "{{ record['updated_at'] >= stream_interval.start_time }}"
       partition_router:
         type: SubstreamPartitionRouter
         parent_stream_configs:
@@ -4839,27 +5672,32 @@ streams:
       cursor_field: updated_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
+        min_datetime: "{{ config['start_date'] }}"
       datetime_format: "%Y-%m-%dT%H:%M:%SZ"
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
       is_client_side_incremental: true
   - type: DeclarativeStream
-    name: workflow_jobs
+    name: workflow_runs
     retriever:
       type: SimpleRetriever
       decoder:
         type: JsonDecoder
       paginator:
         type: DefaultPaginator
-        stop_condition: >-
-          {{ response.json() | selectattr('started_at', 'lt',
-          stream_interval.start_time) | list | length > 0 }}
+        stop_condition: |-
+          {{
+            response.json().get('workflow_runs', [])
+            | selectattr('run_started_at', 'lt', stream_interval.start_time)
+            | list | length > 0
+          }}
         page_size_option:
           type: RequestOption
           field_name: per_page
@@ -4877,194 +5715,12 @@ streams:
         type: HttpRequester
         url: >-
           https://api.github.com/repos/{{ config['organization'] }}/{{
-          stream_slice.extra_fields.repository }}/actions/runs/{{
-          stream_slice.workflow_run }}/jobs
-        http_method: GET
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_parameters:
-          filter: latest
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - jobs
-        record_filter:
-          type: RecordFilter
-          condition: "{{ record['started_at'] > stream_interval.start_time }}"
-      partition_router:
-        type: SubstreamPartitionRouter
-        parent_stream_configs:
-          - type: ParentStreamConfig
-            stream:
-              $ref: "#/streams/16"
-            parent_key: id
-            extra_fields:
-              - - repository
-            partition_field: workflow_run
-            lazy_read_pointer: []
-    primary_key: airbyte_unique_id
-    schema_loader:
-      type: InlineSchemaLoader
-      schema:
-        type: object
-        $schema: http://json-schema.org/schema#
-        required:
-          - run_id
-          - id
-          - airbyte_unique_id
-        properties:
-          id:
-            type: number
-          url:
-            type:
-              - string
-              - "null"
-          name:
-            type:
-              - string
-              - "null"
-          steps:
-            type:
-              - array
-              - "null"
-          labels:
-            type:
-              - array
-              - "null"
-            items:
-              type:
-                - string
-                - "null"
-          run_id:
-            type: number
-          status:
-            type:
-              - string
-              - "null"
-          node_id:
-            type:
-              - string
-              - "null"
-          run_url:
-            type:
-              - string
-              - "null"
-          head_sha:
-            type:
-              - string
-              - "null"
-          html_url:
-            type:
-              - string
-              - "null"
-          runner_id:
-            type:
-              - number
-              - "null"
-          conclusion:
-            type:
-              - string
-              - "null"
-          created_at:
-            type:
-              - string
-              - "null"
-          repository:
-            type:
-              - string
-              - "null"
-          started_at:
-            type:
-              - string
-              - "null"
-          head_branch:
-            type:
-              - string
-              - "null"
-          run_attempt:
-            type:
-              - number
-              - "null"
-          runner_name:
-            type:
-              - string
-              - "null"
-          completed_at:
-            type:
-              - string
-              - "null"
-          check_run_url:
-            type:
-              - string
-              - "null"
-          workflow_name:
-            type:
-              - string
-              - "null"
-          runner_group_id:
-            type:
-              - number
-              - "null"
-          airbyte_unique_id:
-            type: string
-          runner_group_name:
-            type:
-              - string
-              - "null"
-        additionalProperties: true
-    transformations:
-      - type: AddFields
-        fields:
-          - type: AddedFieldDefinition
-            path:
-              - repository
-            value: "{{ stream_slice.repo }}"
-          - type: AddedFieldDefinition
-            path:
-              - airbyte_unique_id
-            value: >-
-              {{ [record['node_id'], stream_slice.extra_fields.repository,
-              stream_slice.workflow_run] | join('_') | hash('md5') }}
-    incremental_sync:
-      type: DatetimeBasedCursor
-      cursor_field: started_at
-      end_datetime:
-        type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
-      start_datetime:
-        type: MinMaxDatetime
-        datetime: "{{ config['start_date'] }}"
-        min_datetime: "{{ config['start_date'] }}"
-      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
-      cursor_datetime_formats:
-        - "%Y-%m-%dT%H:%M:%SZ"
-        - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
-      is_client_side_incremental: true
-  - type: DeclarativeStream
-    name: workflow_runs
-    retriever:
-      type: SimpleRetriever
-      decoder:
-        type: JsonDecoder
-      paginator:
-        $ref: "#/definitions/linked/SimpleRetriever/paginator"
-      requester:
-        type: HttpRequester
-        url: >-
-          https://api.github.com/repos/{{ config['organization'] }}/{{
           stream_slice.repo }}/actions/runs
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_parameters:
-          created: ">{{ stream_interval.start_time }}"
       record_selector:
         type: RecordSelector
         extractor:
@@ -5073,7 +5729,7 @@ streams:
             - workflow_runs
         record_filter:
           type: RecordFilter
-          condition: "{{ record['created_at'] > stream_interval.start_time }}"
+          condition: "{{ record['run_started_at'] >= stream_interval.start_time }}"
       partition_router:
         type: SubstreamPartitionRouter
         parent_stream_configs:
@@ -6043,10 +6699,12 @@ streams:
               hash('md5') }}
     incremental_sync:
       type: DatetimeBasedCursor
-      cursor_field: created_at
+      cursor_field: run_started_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -6055,19 +6713,22 @@ streams:
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
       is_client_side_incremental: true
   - type: DeclarativeStream
-    name: deployment_statuses
+    name: workflow_jobs
     retriever:
       type: SimpleRetriever
       decoder:
         type: JsonDecoder
       paginator:
         type: DefaultPaginator
-        stop_condition: >-
-          {{ response.json() | selectattr('updated_at', 'lt',
-          stream_interval.start_time) | list | length > 0 }}
+        stop_condition: |-
+          {{ response.json() | length > 0 and
+            (response.json()
+                | selectattr('started_at', 'ge', stream_interval.start_time)
+                | list
+                | length == 0)
+          }}
         page_size_option:
           type: RequestOption
           field_name: per_page
@@ -6080,36 +6741,38 @@ streams:
           type: PageIncrement
           page_size: 100
           start_from_page: 1
-          inject_on_first_request: true
       requester:
         type: HttpRequester
         url: >-
           https://api.github.com/repos/{{ config['organization'] }}/{{
-          stream_slice.extra_fields.repository }}/deployments/{{
-          stream_slice.deployment_id }}/statuses
+          stream_slice.extra_fields.repository }}/actions/runs/{{
+          stream_slice.workflow_run }}/jobs
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_parameters:
+          filter: latest
       record_selector:
         type: RecordSelector
         extractor:
           type: DpathExtractor
-          field_path: []
+          field_path:
+            - jobs
         record_filter:
           type: RecordFilter
-          condition: "{{ record['updated_at'] > stream_interval.start_time }}"
+          condition: "{{ record['started_at'] >= stream_interval.start_time }}"
       partition_router:
         type: SubstreamPartitionRouter
         parent_stream_configs:
           - type: ParentStreamConfig
             stream:
-              $ref: "#/streams/11"
+              $ref: "#/streams/18"
             parent_key: id
             extra_fields:
               - - repository
-            partition_field: deployment_id
+            partition_field: workflow_run
             lazy_read_pointer: []
     primary_key: airbyte_unique_id
     schema_loader:
@@ -6118,111 +6781,27 @@ streams:
         type: object
         $schema: http://json-schema.org/schema#
         required:
+          - run_id
+          - id
           - airbyte_unique_id
-          - updated_at
         properties:
-          description:
-            type:
-              - string
-              - "null"
           id:
-            type:
-              - number
-              - "null"
-          url:
+            type: number
+          name:
             type:
               - string
               - "null"
-          state:
-            type:
-              - string
-              - "null"
-          creator:
-            type:
-              - object
-              - "null"
-            properties:
-              type:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - number
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-              login:
-                type:
-                  - string
-                  - "null"
-              node_id:
-                type:
-                  - string
-                  - "null"
-              html_url:
-                type:
-                  - string
-                  - "null"
-              gists_url:
-                type:
-                  - string
-                  - "null"
-              repos_url:
-                type:
-                  - string
-                  - "null"
-              avatar_url:
-                type:
-                  - string
-                  - "null"
-              events_url:
-                type:
-                  - string
-                  - "null"
-              site_admin:
-                type:
-                  - boolean
-                  - "null"
-              gravatar_id:
-                type:
-                  - string
-                  - "null"
-              starred_url:
-                type:
-                  - string
-                  - "null"
-              followers_url:
-                type:
-                  - string
-                  - "null"
-              following_url:
-                type:
-                  - string
-                  - "null"
-              user_view_type:
-                type:
-                  - string
-                  - "null"
-              organizations_url:
-                type:
-                  - string
-                  - "null"
-              subscriptions_url:
-                type:
-                  - string
-                  - "null"
-              received_events_url:
-                type:
-                  - string
-                  - "null"
-          log_url:
+          run_id:
+            type: number
+          status:
             type:
               - string
               - "null"
           node_id:
+            type:
+              - string
+              - "null"
+          conclusion:
             type:
               - string
               - "null"
@@ -6234,29 +6813,11 @@ streams:
             type:
               - string
               - "null"
-          target_url:
+          started_at:
             type:
               - string
               - "null"
-          updated_at:
-            type: string
-          environment:
-            type:
-              - string
-              - "null"
-          deployment_id:
-            type:
-              - number
-              - "null"
-          deployment_url:
-            type:
-              - string
-              - "null"
-          repository_url:
-            type:
-              - string
-              - "null"
-          environment_url:
+          completed_at:
             type:
               - string
               - "null"
@@ -6272,20 +6833,21 @@ streams:
             value: "{{ stream_slice.extra_fields.repository }}"
           - type: AddedFieldDefinition
             path:
-              - deployment_id
-            value: "{{ stream_slice.deployment_id }}"
-          - type: AddedFieldDefinition
-            path:
               - airbyte_unique_id
-            value: >-
-              {{ [record['node_id'], stream_slice.extra_fields.repository,
-              stream_slice.deployment_id] | join('_') | hash('md5') }}
+            value: |-
+              {{ [
+                  record['node_id'],
+                  stream_slice.extra_fields.repository,
+                  stream_slice.workflow_run
+                ] | join('_') | hash('md5') }}
     incremental_sync:
       type: DatetimeBasedCursor
-      cursor_field: updated_at
+      cursor_field: started_at
       end_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
+        datetime: >-
+          {{ config.get('end_date', day_delta(0, format='%Y-%m-%dT00:00:00Z'))
+          }}
       start_datetime:
         type: MinMaxDatetime
         datetime: "{{ config['start_date'] }}"
@@ -6294,762 +6856,6 @@ streams:
       cursor_datetime_formats:
         - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
-      is_client_side_incremental: true
-  - type: DeclarativeStream
-    name: issue_comments
-    retriever:
-      type: SimpleRetriever
-      decoder:
-        type: JsonDecoder
-      paginator:
-        $ref: "#/definitions/linked/SimpleRetriever/paginator"
-      requester:
-        type: HttpRequester
-        url: >-
-          https://api.github.com/repos/{{ config['organization'] }}/{{
-          stream_slice.extra_fields.repository }}/issues/{{
-          stream_slice.issue_number }}/comments
-        http_method: GET
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path: []
-        record_filter:
-          type: RecordFilter
-          condition: "{{ record['updated_at'] > stream_interval.start_time }}"
-      partition_router:
-        type: SubstreamPartitionRouter
-        parent_stream_configs:
-          - type: ParentStreamConfig
-            stream:
-              $ref: "#/streams/7"
-            parent_key: number
-            extra_fields:
-              - - repository
-            partition_field: issue_number
-            lazy_read_pointer: []
-    primary_key: airbyte_unique_id
-    schema_loader:
-      type: InlineSchemaLoader
-      schema:
-        type: object
-        $schema: http://json-schema.org/schema#
-        required:
-          - airbyte_unique_id
-          - updated_at
-        properties:
-          id:
-            type:
-              - number
-              - "null"
-          url:
-            type:
-              - string
-              - "null"
-          body:
-            type:
-              - string
-              - "null"
-          user:
-            type:
-              - object
-              - "null"
-            properties:
-              type:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - number
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-              login:
-                type:
-                  - string
-                  - "null"
-              node_id:
-                type:
-                  - string
-                  - "null"
-              html_url:
-                type:
-                  - string
-                  - "null"
-              gists_url:
-                type:
-                  - string
-                  - "null"
-              repos_url:
-                type:
-                  - string
-                  - "null"
-              avatar_url:
-                type:
-                  - string
-                  - "null"
-              events_url:
-                type:
-                  - string
-                  - "null"
-              site_admin:
-                type:
-                  - boolean
-                  - "null"
-              gravatar_id:
-                type:
-                  - string
-                  - "null"
-              starred_url:
-                type:
-                  - string
-                  - "null"
-              followers_url:
-                type:
-                  - string
-                  - "null"
-              following_url:
-                type:
-                  - string
-                  - "null"
-              user_view_type:
-                type:
-                  - string
-                  - "null"
-              organizations_url:
-                type:
-                  - string
-                  - "null"
-              subscriptions_url:
-                type:
-                  - string
-                  - "null"
-              received_events_url:
-                type:
-                  - string
-                  - "null"
-          node_id:
-            type:
-              - string
-              - "null"
-          html_url:
-            type:
-              - string
-              - "null"
-          issue_url:
-            type:
-              - string
-              - "null"
-          reactions:
-            type:
-              - object
-              - "null"
-            properties:
-              "+1":
-                type:
-                  - number
-                  - "null"
-              "-1":
-                type:
-                  - number
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-              eyes:
-                type:
-                  - number
-                  - "null"
-              heart:
-                type:
-                  - number
-                  - "null"
-              laugh:
-                type:
-                  - number
-                  - "null"
-              hooray:
-                type:
-                  - number
-                  - "null"
-              rocket:
-                type:
-                  - number
-                  - "null"
-              confused:
-                type:
-                  - number
-                  - "null"
-              total_count:
-                type:
-                  - number
-                  - "null"
-          created_at:
-            type:
-              - string
-              - "null"
-          repository:
-            type:
-              - string
-              - "null"
-          updated_at:
-            type: string
-          issue_number:
-            type:
-              - number
-              - "null"
-          airbyte_unique_id:
-            type: string
-          author_association:
-            type:
-              - string
-              - "null"
-          performed_via_github_app:
-            type:
-              - object
-              - "null"
-            properties:
-              description:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - number
-                  - "null"
-              name:
-                type:
-                  - string
-                  - "null"
-              slug:
-                type:
-                  - string
-                  - "null"
-              owner:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  type:
-                    type:
-                      - string
-                      - "null"
-                  id:
-                    type:
-                      - number
-                      - "null"
-                  url:
-                    type:
-                      - string
-                      - "null"
-                  login:
-                    type:
-                      - string
-                      - "null"
-                  node_id:
-                    type:
-                      - string
-                      - "null"
-                  html_url:
-                    type:
-                      - string
-                      - "null"
-                  gists_url:
-                    type:
-                      - string
-                      - "null"
-                  repos_url:
-                    type:
-                      - string
-                      - "null"
-                  avatar_url:
-                    type:
-                      - string
-                      - "null"
-                  events_url:
-                    type:
-                      - string
-                      - "null"
-                  site_admin:
-                    type:
-                      - boolean
-                      - "null"
-                  gravatar_id:
-                    type:
-                      - string
-                      - "null"
-                  starred_url:
-                    type:
-                      - string
-                      - "null"
-                  followers_url:
-                    type:
-                      - string
-                      - "null"
-                  following_url:
-                    type:
-                      - string
-                      - "null"
-                  user_view_type:
-                    type:
-                      - string
-                      - "null"
-                  organizations_url:
-                    type:
-                      - string
-                      - "null"
-                  subscriptions_url:
-                    type:
-                      - string
-                      - "null"
-                  received_events_url:
-                    type:
-                      - string
-                      - "null"
-              events:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-              node_id:
-                type:
-                  - string
-                  - "null"
-              html_url:
-                type:
-                  - string
-                  - "null"
-              client_id:
-                type:
-                  - string
-                  - "null"
-              created_at:
-                type:
-                  - string
-                  - "null"
-              updated_at:
-                type:
-                  - string
-                  - "null"
-              permissions:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  metadata:
-                    type:
-                      - string
-                      - "null"
-                  checks:
-                    type:
-                      - string
-                      - "null"
-                  emails:
-                    type:
-                      - string
-                      - "null"
-                  issues:
-                    type:
-                      - string
-                      - "null"
-                  members:
-                    type:
-                      - string
-                      - "null"
-                  contents:
-                    type:
-                      - string
-                      - "null"
-                  statuses:
-                    type:
-                      - string
-                      - "null"
-                  pull_requests:
-                    type:
-                      - string
-                      - "null"
-                  administration:
-                    type:
-                      - string
-                      - "null"
-              external_url:
-                type:
-                  - string
-                  - "null"
-        additionalProperties: true
-    transformations:
-      - type: AddFields
-        fields:
-          - type: AddedFieldDefinition
-            path:
-              - repository
-            value: "{{ stream_slice.extra_fields.repository }}"
-          - type: AddedFieldDefinition
-            path:
-              - issue_number
-            value: "{{ stream_slice.issue_number }}"
-          - type: AddedFieldDefinition
-            path:
-              - airbyte_unique_id
-            value: >-
-              {{ [record['node_id'], stream_slice.extra_fields.repository,
-              stream_slice.issue_number] | join('_') | hash('md5') }}
-    incremental_sync:
-      type: DatetimeBasedCursor
-      cursor_field: updated_at
-      end_datetime:
-        type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
-      start_datetime:
-        type: MinMaxDatetime
-        datetime: "{{ config['start_date'] }}"
-        min_datetime: "{{ config['start_date'] }}"
-      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
-      cursor_datetime_formats:
-        - "%Y-%m-%dT%H:%M:%SZ"
-        - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
-      is_client_side_incremental: true
-  - type: DeclarativeStream
-    name: pr_comments
-    retriever:
-      type: SimpleRetriever
-      decoder:
-        type: JsonDecoder
-      paginator:
-        $ref: "#/definitions/linked/SimpleRetriever/paginator"
-      requester:
-        type: HttpRequester
-        url: >-
-          https://api.github.com/repos/{{ config['organization'] }}/{{
-          stream_slice.extra_fields.repository }}/pulls/{{
-          stream_slice.pr_number }}/comments
-        http_method: GET
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path: []
-        record_filter:
-          type: RecordFilter
-          condition: "{{ record['updated_at'] > stream_interval.start_time }}"
-      partition_router:
-        type: SubstreamPartitionRouter
-        parent_stream_configs:
-          - type: ParentStreamConfig
-            stream:
-              $ref: "#/streams/12"
-            parent_key: number
-            extra_fields:
-              - - repository
-            partition_field: pr_number
-            lazy_read_pointer: []
-    primary_key: airbyte_unique_id
-    schema_loader:
-      type: InlineSchemaLoader
-      schema:
-        type: object
-        $schema: http://json-schema.org/schema#
-        required:
-          - airbyte_unique_id
-          - updated_at
-        properties:
-          id:
-            type:
-              - number
-              - "null"
-          url:
-            type:
-              - string
-              - "null"
-          body:
-            type:
-              - string
-              - "null"
-          path:
-            type:
-              - string
-              - "null"
-          side:
-            type:
-              - string
-              - "null"
-          user:
-            type:
-              - object
-              - "null"
-            properties:
-              type:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - number
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-              login:
-                type:
-                  - string
-                  - "null"
-              node_id:
-                type:
-                  - string
-                  - "null"
-              html_url:
-                type:
-                  - string
-                  - "null"
-              gists_url:
-                type:
-                  - string
-                  - "null"
-              repos_url:
-                type:
-                  - string
-                  - "null"
-              avatar_url:
-                type:
-                  - string
-                  - "null"
-              events_url:
-                type:
-                  - string
-                  - "null"
-              site_admin:
-                type:
-                  - boolean
-                  - "null"
-              gravatar_id:
-                type:
-                  - string
-                  - "null"
-              starred_url:
-                type:
-                  - string
-                  - "null"
-              followers_url:
-                type:
-                  - string
-                  - "null"
-              following_url:
-                type:
-                  - string
-                  - "null"
-              user_view_type:
-                type:
-                  - string
-                  - "null"
-              organizations_url:
-                type:
-                  - string
-                  - "null"
-              subscriptions_url:
-                type:
-                  - string
-                  - "null"
-              received_events_url:
-                type:
-                  - string
-                  - "null"
-          _links:
-            type:
-              - object
-              - "null"
-            properties:
-              html:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  href:
-                    type:
-                      - string
-                      - "null"
-              self:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  href:
-                    type:
-                      - string
-                      - "null"
-              pull_request:
-                type:
-                  - object
-                  - "null"
-                properties:
-                  href:
-                    type:
-                      - string
-                      - "null"
-          node_id:
-            type:
-              - string
-              - "null"
-          html_url:
-            type:
-              - string
-              - "null"
-          position:
-            type:
-              - number
-              - "null"
-          commit_id:
-            type:
-              - string
-              - "null"
-          diff_hunk:
-            type:
-              - string
-              - "null"
-          pr_number:
-            type:
-              - number
-              - "null"
-          reactions:
-            type:
-              - object
-              - "null"
-            properties:
-              "+1":
-                type:
-                  - number
-                  - "null"
-              "-1":
-                type:
-                  - number
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-              eyes:
-                type:
-                  - number
-                  - "null"
-              heart:
-                type:
-                  - number
-                  - "null"
-              laugh:
-                type:
-                  - number
-                  - "null"
-              hooray:
-                type:
-                  - number
-                  - "null"
-              rocket:
-                type:
-                  - number
-                  - "null"
-              confused:
-                type:
-                  - number
-                  - "null"
-              total_count:
-                type:
-                  - number
-                  - "null"
-          created_at:
-            type:
-              - string
-              - "null"
-          repository:
-            type:
-              - string
-              - "null"
-          updated_at:
-            type: string
-          subject_type:
-            type:
-              - string
-              - "null"
-          original_line:
-            type:
-              - number
-              - "null"
-          in_reply_to_id:
-            type:
-              - number
-              - "null"
-          pull_request_url:
-            type:
-              - string
-              - "null"
-          airbyte_unique_id:
-            type: string
-          original_position:
-            type:
-              - number
-              - "null"
-          author_association:
-            type:
-              - string
-              - "null"
-          original_commit_id:
-            type:
-              - string
-              - "null"
-          pull_request_review_id:
-            type:
-              - number
-              - "null"
-        additionalProperties: true
-    transformations:
-      - type: AddFields
-        fields:
-          - type: AddedFieldDefinition
-            path:
-              - pr_number
-            value: "{{ stream_slice.pr_number }}"
-          - type: AddedFieldDefinition
-            path:
-              - repository
-            value: "{{ stream_slice.extra_fields.repository }}"
-          - type: AddedFieldDefinition
-            path:
-              - airbyte_unique_id
-            value: >-
-              {{ [record['node_id'], stream_slice.extra_fields.repository,
-              stream_slice.pr_number] | join('_') | hash('md5') }}
-    incremental_sync:
-      type: DatetimeBasedCursor
-      cursor_field: updated_at
-      end_datetime:
-        type: MinMaxDatetime
-        datetime: "{{ config.get('end_date', now_utc().strftime('%Y-%m-%dT%H:%M:%SZ')) }}"
-      start_datetime:
-        type: MinMaxDatetime
-        datetime: "{{ config['start_date'] }}"
-        min_datetime: "{{ config['start_date'] }}"
-      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
-      cursor_datetime_formats:
-        - "%Y-%m-%dT%H:%M:%SZ"
-        - "%Y-%m-%dT%H:%M:%S.%f%z"
-      global_substream_cursor: true
       is_client_side_incremental: true
 
 spec:
@@ -7115,9 +6921,9 @@ metadata:
       primaryKeysArePresent: true
       responsesAreSuccessful: true
     issues:
-      isStale: true
+      isStale: false
       hasRecords: true
-      streamHash: e0bc0396fa8a6aa2ead239c694c8f0d0a56ff97e
+      streamHash: b6c3557300547131d4cb1d6440b2a596f9f803bb
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
@@ -7157,17 +6963,17 @@ metadata:
       primaryKeysArePresent: true
       responsesAreSuccessful: true
     workflows:
-      isStale: true
+      isStale: false
       hasRecords: false
-      streamHash: 5690238c1b33fd96f199cf3d00b0133f2f73dc63
+      streamHash: 89843d40f3aa7f10a532fafe179eadf0379270cb
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
       responsesAreSuccessful: true
     deployments:
-      isStale: true
-      hasRecords: true
-      streamHash: a8ac8206c3b14e4de60b98aa04aa6c3f77e3e013
+      isStale: false
+      hasRecords: false
+      streamHash: be2d3f9514dbb2c015a68d5df508a6fd03eb2eda
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
@@ -7213,37 +7019,25 @@ metadata:
       primaryKeysArePresent: true
       responsesAreSuccessful: true
     workflow_jobs:
-      isStale: false
-      hasRecords: false
-      streamHash: 7088bac48402728970749176ce81befae2c3c299
-      hasResponse: true
-      primaryKeysAreUnique: true
-      primaryKeysArePresent: true
-      responsesAreSuccessful: false
+      streamHash: ecc4c36c190408c0f5765e06d0d71c7ce1dc7c61
     workflow_runs:
-      isStale: false
-      hasRecords: true
-      streamHash: c448db7048527271bb03a33a9669bdf3395829e9
-      hasResponse: true
-      primaryKeysAreUnique: true
-      primaryKeysArePresent: true
-      responsesAreSuccessful: true
+      streamHash: 16b23b0ceaed8b25933bae5f29d5468bbfedc65e
     issue_comments:
       isStale: false
       hasRecords: true
-      streamHash: 1ea5353e7c5c9210e72b38776013132ba70da50b
+      streamHash: b3c0cc96cb062180b4e03579b01e0f0c5724cd8c
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
       responsesAreSuccessful: true
     deployment_statuses:
       isStale: false
-      hasRecords: true
-      streamHash: 7ea7cf42f887eaac99655ccc7cb24633d8d77245
-      hasResponse: true
-      primaryKeysAreUnique: true
-      primaryKeysArePresent: true
-      responsesAreSuccessful: true
+      hasRecords: false
+      streamHash: 9f40a5cd37561e70a3cbaa337429224d55d56ced
+      hasResponse: false
+      primaryKeysAreUnique: false
+      primaryKeysArePresent: false
+      responsesAreSuccessful: false
     contributor_activity:
       isStale: true
       hasRecords: true
@@ -7261,7 +7055,6 @@ metadata:
     reviews: true
     branches: true
     assignees: true
-    workflows: true
     i_comments: true
     deployments: true
     pr_comments: true
@@ -7269,8 +7062,6 @@ metadata:
     repositories: true
     collaborators: true
     pull_requests: true
-    workflow_jobs: true
-    workflow_runs: true
     issue_comments: true
     deployment_statuses: true
     contributor_activity: true
