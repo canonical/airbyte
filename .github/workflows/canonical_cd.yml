@@ -46,61 +46,86 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Airbyte CI
-        id: install-airbyte-ci
-        uses: ./.github/actions/install-airbyte-ci
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+
+      - name: Install Poe
+        run: |
+          uv tool install poethepoet
+
+      - name: Resolve connector build variables
+        id: connector-vars
+        env:
+          CONNECTOR: ${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          CONNECTOR_ROOT="airbyte-integrations/connectors/$CONNECTOR"
+
+          if [ ! -d "$CONNECTOR_ROOT" ]; then
+            echo "⚠️ Warning: Connector directory $CONNECTOR_ROOT not found! Skipping..."
+            echo "connector-exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "connector-exists=true" >> "$GITHUB_OUTPUT"
+          cd "$CONNECTOR_ROOT"
+          echo "connector-language=$(poe -qq get-language)" >> "$GITHUB_OUTPUT"
+          echo "connector-base-image=$(poe -qq get-base-image)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        if: ${{ steps.connector-vars.outputs.connector-exists == 'true' && steps.connector-vars.outputs.connector-language == 'java' }}
         with:
-          is_fork: ${{ inputs.is_fork }}
+          distribution: zulu
+          java-version: 21
+          cache: gradle
+
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        if: ${{ steps.connector-vars.outputs.connector-exists == 'true' && steps.connector-vars.outputs.connector-language == 'java' }}
+        with:
+          cache-read-only: false
+          cache-write-only: false
+          add-job-summary: "on-failure"
+          gradle-version: "8.14"
+
+      - name: Build Java connector tarball
+        if: ${{ steps.connector-vars.outputs.connector-exists == 'true' && steps.connector-vars.outputs.connector-language == 'java' }}
+        env:
+          CONNECTOR: ${{ matrix.dir }}
+        run: |
+          ./gradlew :airbyte-integrations:connectors:${CONNECTOR}:distTar
 
       - name: Build and push Docker images for connector ${{ matrix.dir }}
         id: build-and-push-images
+        if: ${{ steps.connector-vars.outputs.connector-exists == 'true' }}
         env:
           CI_GIT_BRANCH: ${{ github.head_ref }}
           CONNECTOR: ${{ matrix.dir }}
+          CONNECTOR_LANGUAGE: ${{ steps.connector-vars.outputs.connector-language }}
+          CONNECTOR_BASE_IMAGE: ${{ steps.connector-vars.outputs.connector-base-image }}
+          IMAGE_HTTP_PROXY: ${{ vars.HTTP_PROXY }}
+          IMAGE_HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
         run: |
-          if [ ! -d "airbyte-integrations/connectors/$CONNECTOR" ]; then
-              echo "⚠️ Warning: Connector directory airbyte-integrations/connectors/$CONNECTOR not found! Skipping..."
-              exit 0
-          fi
-
-          # install required packages
-          sudo apt update
-          sudo apt install --reinstall python3-pkg-resources python3-setuptools
-          pip install --upgrade setuptools
-
+          set -euo pipefail
           METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
 
           # Extract metadata
           VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
           NAME=$(grep 'dockerRepository' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
           IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/$NAME:$VERSION"
+          DEV_IMAGE="airbyte/$CONNECTOR:dev"
 
-          echo "🚀 Building $CONNECTOR with airbyte-ci..."
-
-          if [[ -f build_customization.py ]]; then
-            echo "⚠️ build_customization.py exists. Validating proxy config..."
-
-            # Check for proxy-related content
-            if grep -q 'IMAGE_HTTP_PROXY' build_customization.py && grep -q 'with_env_variable("HTTP_PROXY"' build_customization.py; then
-              echo "✅ Proxy configuration detected in build_customization.py."
-            else
-              echo "❌ Error: build_customization.py exists but does not include required proxy config."
-              echo "Please ensure it contains references to IMAGE_HTTP_PROXY and with_env_variable(\"HTTP_PROXY\"...)"
-              exit 1
-            fi
-          fi
-
-          .github/scripts/generate_build_customizations.sh $CONNECTOR
-
-          # Set proxy environment variables
-          export IMAGE_HTTP_PROXY=${{ vars.HTTP_PROXY }}
-          export IMAGE_HTTPS_PROXY=${{ vars.HTTPS_PROXY }}
-
-          # Build image using airbyte-ci
-          airbyte-ci connectors --name=$CONNECTOR build
+          echo "🚀 Building $CONNECTOR with direct Docker buildx flow..."
+          docker buildx build \
+            --load \
+            -f "docker-images/Dockerfile.${CONNECTOR_LANGUAGE}-connector" \
+            -t "$DEV_IMAGE" \
+            --build-arg BASE_IMAGE="$CONNECTOR_BASE_IMAGE" \
+            --build-arg CONNECTOR_NAME="$CONNECTOR" \
+            --build-arg HTTP_PROXY="$IMAGE_HTTP_PROXY" \
+            --build-arg HTTPS_PROXY="$IMAGE_HTTPS_PROXY" \
+            "airbyte-integrations/connectors/$CONNECTOR"
 
           # Ensure the dev-tagged image exists before pushing
-          DEV_IMAGE="airbyte/$CONNECTOR:dev"
           if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
             echo "✅ Found built image: $DEV_IMAGE"
             if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
