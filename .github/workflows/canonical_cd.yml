@@ -4,28 +4,76 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
+    inputs:
+      connectors:
+        description: >
+          Comma-separated list of connector names to build and push
+          (e.g. source-github-2,source-mysql). Required for manual runs.
+        required: true
+        type: string
+      dry_run:
+        description: >
+          Dry run: build the image but skip pushing to GHCR.
+          Useful for testing the build without publishing.
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   get_changed_directories_list:
     name: Get List Of Changed Directories
     runs-on: ubuntu-latest
     outputs:
-      connectors_list_json: ${{ steps.detect-changes.outputs.connectors_list_json }}
+      connectors_list_json: ${{ steps.resolve.outputs.connectors_list_json }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Ensure full history
+          fetch-depth: 0  # Ensure full history
+
+      # On manual dispatch: convert the comma-separated input to a JSON array.
+      - name: Build connector list from dispatch input
+        id: dispatch-list
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CONNECTORS_INPUT: ${{ inputs.connectors }}
+        run: |
+          JSON=$(echo "$CONNECTORS_INPUT" \
+            | tr ',' '\n' \
+            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+            | grep -v '^$' \
+            | jq -R . \
+            | jq -s -c .)
+          echo "connectors_list_json=$JSON" >> "$GITHUB_OUTPUT"
+
+      # On push: use the existing change-detection action.
       - name: Detect changed connectors
         id: detect-changes
+        if: github.event_name == 'push'
         uses: ./.github/actions/detect-changes
         with:
           base_commit: ${{ github.event.before }}
           head_commit: ${{ github.sha }}
 
+      # Merge the two possible sources into a single output.
+      - name: Resolve connector list
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "connectors_list_json=${{ steps.dispatch-list.outputs.connectors_list_json }}" \
+              >> "$GITHUB_OUTPUT"
+          else
+            echo "connectors_list_json=${{ steps.detect-changes.outputs.connectors_list_json }}" \
+              >> "$GITHUB_OUTPUT"
+          fi
+
   build_and_push:
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.connectors_list_json != '[]'
+    if: needs.get_changed_directories_list.outputs.connectors_list_json != '[]'
     needs: [get_changed_directories_list]
     strategy:
       matrix:
@@ -117,6 +165,7 @@ jobs:
           CONNECTOR_BASE_IMAGE: ${{ steps.connector-vars.outputs.connector-base-image }}
           IMAGE_HTTP_PROXY: ${{ vars.HTTP_PROXY }}
           IMAGE_HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
           METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
@@ -151,18 +200,21 @@ jobs:
           # Ensure the dev-tagged image exists before pushing
           if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
             echo "✅ Found built image: $DEV_IMAGE"
+
             if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
               echo "🛠️ Detected manifest-only connector."
               CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
-              
               .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
-
-              echo "🔄 Tagging and pushing image $CUSTOM_IMAGE to $IMAGE_NAME"
-              docker tag "$CUSTOM_IMAGE" "$IMAGE_NAME"
-              docker push "$IMAGE_NAME"
+              PUSH_IMAGE="$CUSTOM_IMAGE"
             else
-              echo "🔄 Tagging and pushing image $DEV_IMAGE to $IMAGE_NAME"
-              docker tag "$DEV_IMAGE" "$IMAGE_NAME"
+              PUSH_IMAGE="$DEV_IMAGE"
+            fi
+
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "🔄 [DRY RUN] Skipping push of $PUSH_IMAGE to $IMAGE_NAME"
+            else
+              echo "🔄 Tagging and pushing $PUSH_IMAGE to $IMAGE_NAME"
+              docker tag "$PUSH_IMAGE" "$IMAGE_NAME"
               docker push "$IMAGE_NAME"
             fi
           else
