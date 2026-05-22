@@ -123,7 +123,7 @@ jobs:
           # Extract metadata
           VERSION="$(yq eval '.data.canonicalImageTag' "$METADATAFILE")"
           NAME="$(yq eval '.data.dockerRepository' "$METADATAFILE")"
-          if [ -z "$VERSION" ] || [ -z "$NAME" ]; then
+          if [ -z "$VERSION" ] || [ -z "$NAME" ] || [ "$VERSION" = "null" ] || [ "$NAME" = "null" ]; then
             echo "❌ Missing canonicalImageTag or dockerRepository in $METADATAFILE"
             exit 1
           fi
