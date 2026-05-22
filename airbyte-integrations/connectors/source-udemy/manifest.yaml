@@ -1,8 +1,3 @@
-# WIP manifest for a Udemy source connector
-# TODO: verify response schemas over internal official API documentation
-# TODO: add stream descriptions
-# TODO: verify primary key over official API documentation
-
 version: 7.10.0
 
 type: DeclarativeSource
@@ -14,15 +9,6 @@ check:
 
 definitions:
   linked:
-    SimpleRetriever:
-      paginator:
-        type: DefaultPaginator
-        page_token_option:
-          type: RequestPath
-        pagination_strategy:
-          type: CursorPagination
-          cursor_value: "{{ response.get('next', '') }}"
-          stop_condition: "{{ response.get('next') is none }}"
     HttpRequester:
       authenticator:
         type: BasicHttpAuthenticator
@@ -40,8 +26,9 @@ definitions:
                   - 429
             backoff_strategies:
               - type: WaitTimeFromHeader
-                regex: "([0-9]+)"
+                regex: ([0-9]+)
                 header: Retry-After
+                max_wait: 120
                 min_wait: 1
           - type: DefaultErrorHandler
             max_retries: 5
@@ -59,15 +46,24 @@ definitions:
                 action: FAIL
                 http_codes:
                   - 403
-                error_message: "Your Udemy API credentials have expired or lack the required scopes."
+                error_message: >-
+                  Your Udemy API credentials have expired or lack the required
+                  scopes.
       request_parameters:
         page_size: "{{ config.get('page_size', 20) }}"
+    SimpleRetriever:
+      paginator:
+        type: DefaultPaginator
+        page_token_option:
+          type: RequestPath
+        pagination_strategy:
+          type: CursorPagination
+          cursor_value: "{{ response.get('next', '') }}"
+          stop_condition: "{{ response.get('next') is none }}"
 
 streams:
   - type: DeclarativeStream
     name: courses
-    primary_key:
-      - id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -91,137 +87,51 @@ streams:
           type: DpathExtractor
           field_path:
             - results
+    primary_key:
+      - id
     schema_loader:
       type: InlineSchemaLoader
       schema:
         type: object
         $schema: http://json-schema.org/schema#
+        required:
+          - id
         properties:
           description:
             type:
               - string
               - "null"
-          _class: # not in official docs, observed in API responses
+          id:
+            type: number
+          url:
             type:
               - string
               - "null"
-          id:
+          level:
             type:
-              - number
+              - string
               - "null"
           title:
             type:
               - string
               - "null"
-          url:
+          _class:
             type:
               - string
               - "null"
-          estimated_content_length:
-            type:
-              - number
-              - "null"
-          categories:
-            type:
-              - array
-              - "null"
-            items:
-              type:
-                - string
-                - "null"
-          topics: # not in official docs, observed in API responses
-            type:
-              - array
-              - "null"
-            items:
-              type:
-                - object
-                - "null"
-              properties:
-                _class:
-                  type:
-                    - string
-                    - "null"
-                id:
-                  type:
-                    - number
-                    - "null"
-                title:
-                  type:
-                    - string
-                    - "null"
-                url:
-                  type:
-                    - string
-                    - "null"
-          num_lectures:
-            type:
-              - number
-              - "null"
-          num_videos:
-            type:
-              - number
-              - "null"
-          promo_video_url:
-            type:
-              - array
-              - "null"
-            items:
-              type:
-                - object
-                - "null"
-              properties:
-                type:
-                  type:
-                    - string
-                    - "null"
-                label:
-                  type:
-                    - string
-                    - "null"
-                file:
-                  type:
-                    - string
-                    - "null"
-          instructors:
-            type:
-              - array
-              - "null"
-            items:
-              type:
-                - string
-                - "null"
-          requirements:
-            type:
-              - object
-              - "null"
-            properties:
-              list:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
-          what_you_will_learn:
-            type:
-              - object
-              - "null"
-            properties:
-              list:
-                type:
-                  - array
-                  - "null"
-                items:
-                  type:
-                    - string
-                    - "null"
           images:
             type:
               - object
               - "null"
             properties:
+              size_125_H:
+                type:
+                  - string
+                  - "null"
+              size_200_H:
+                type:
+                  - string
+                  - "null"
               size_48x27:
                 type:
                   - string
@@ -242,14 +152,6 @@ streams:
                 type:
                   - string
                   - "null"
-              size_125_H:
-                type:
-                  - string
-                  - "null"
-              size_200_H:
-                type:
-                  - string
-                  - "null"
               size_240x135:
                 type:
                   - string
@@ -266,10 +168,6 @@ streams:
                 type:
                   - string
                   - "null"
-          mobile_native_deeplink:
-            type:
-              - string
-              - "null"
           locale:
             type:
               - object
@@ -283,65 +181,40 @@ streams:
                 type:
                   - string
                   - "null"
-          is_practice_test_course: # not in official docs, observed in API responses
+          topics:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                id:
+                  type:
+                    - number
+                    - "null"
+                url:
+                  type:
+                    - string
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
+                _class:
+                  type:
+                    - string
+                    - "null"
+          headline:
+            type:
+              - string
+              - "null"
+          is_custom:
             type:
               - boolean
               - "null"
-          primary_category:
-            type:
-              - object
-              - "null"
-            properties:
-              _class:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - number
-                  - "null"
-              title:
-                type:
-                  - string
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-          primary_subcategory:
-            type:
-              - object
-              - "null"
-            properties:
-              _class:
-                type:
-                  - string
-                  - "null"
-              id:
-                type:
-                  - number
-                  - "null"
-              title:
-                type:
-                  - string
-                  - "null"
-              url:
-                type:
-                  - string
-                  - "null"
-          num_quizzes:
-            type:
-              - number
-              - "null"
-          num_practice_tests:
-            type:
-              - number
-              - "null"
-          has_closed_caption:
-            type:
-              - boolean
-              - "null"
-          caption_languages:
+          categories:
             type:
               - array
               - "null"
@@ -349,6 +222,47 @@ streams:
               type:
                 - string
                 - "null"
+          num_videos:
+            type:
+              - number
+              - "null"
+          instructors:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          is_imported:
+            type:
+              - boolean
+              - "null"
+          num_quizzes:
+            type:
+              - number
+              - "null"
+          num_lectures:
+            type:
+              - number
+              - "null"
+          requirements:
+            type:
+              - object
+              - "null"
+            properties:
+              list:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+          accreditations:
+            type:
+              - array
+              - "null"
           caption_locales:
             type:
               - array
@@ -358,6 +272,10 @@ streams:
                 - object
                 - "null"
               properties:
+                title:
+                  type:
+                    - string
+                    - "null"
                 _class:
                   type:
                     - string
@@ -366,27 +284,11 @@ streams:
                   type:
                     - string
                     - "null"
-                title:
-                  type:
-                    - string
-                    - "null"
                 english_title:
                   type:
                     - string
                     - "null"
-          estimated_content_length_video:
-            type:
-              - number
-              - "null"
-          last_update_date:
-            type:
-              - string
-              - "null"
-          xapi_activity_id:
-            type:
-              - string
-              - "null"
-          accreditations:
+          promo_video_url:
             type:
               - array
               - "null"
@@ -399,49 +301,112 @@ streams:
                   type:
                     - string
                     - "null"
-                compliant_since:
+                file:
                   type:
                     - string
                     - "null"
-                field_of_study:
+                label:
                   type:
                     - string
                     - "null"
-                program_level:
-                  type:
-                    - string
-                    - "null"
-                num_credits:
-                  type:
-                    - number
-                    - "null"
-          is_custom:
-            type:
-              - boolean
-              - "null"
-          is_imported:
-            type:
-              - boolean
-              - "null"
-          headline:
+          last_update_date:
             type:
               - string
               - "null"
-          level:
+          primary_category:
+            type:
+              - object
+              - "null"
+            properties:
+              id:
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              title:
+                type:
+                  - string
+                  - "null"
+              _class:
+                type:
+                  - string
+                  - "null"
+          xapi_activity_id:
             type:
               - string
               - "null"
-            enum:
-              - Beginner
-              - Intermediate
-              - Expert
-              - All levels
-              - null
+          caption_languages:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - string
+                - "null"
+          has_closed_caption:
+            type:
+              - boolean
+              - "null"
+          num_practice_tests:
+            type:
+              - number
+              - "null"
+          primary_subcategory:
+            type:
+              - object
+              - "null"
+            properties:
+              id:
+                type:
+                  - number
+                  - "null"
+              url:
+                type:
+                  - string
+                  - "null"
+              title:
+                type:
+                  - string
+                  - "null"
+              _class:
+                type:
+                  - string
+                  - "null"
+          what_you_will_learn:
+            type:
+              - object
+              - "null"
+            properties:
+              list:
+                type:
+                  - array
+                  - "null"
+                items:
+                  type:
+                    - string
+                    - "null"
+          mobile_native_deeplink:
+            type:
+              - string
+              - "null"
+          is_practice_test_course:
+            type:
+              - boolean
+              - "null"
+          estimated_content_length:
+            type:
+              - number
+              - "null"
+          estimated_content_length_video:
+            type:
+              - number
+              - "null"
         additionalProperties: true
   - type: DeclarativeStream
     name: learning_paths
-    primary_key:
-      - id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -465,12 +430,18 @@ streams:
           type: DpathExtractor
           field_path:
             - results
+    primary_key:
+      - id
     schema_loader:
       type: InlineSchemaLoader
       schema:
         type: object
         $schema: http://json-schema.org/draft-07/schema#
         properties:
+          description:
+            type:
+              - string
+              - "null"
           id:
             type:
               - number
@@ -483,7 +454,7 @@ streams:
             type:
               - string
               - "null"
-          description:
+          created:
             type:
               - string
               - "null"
@@ -496,6 +467,10 @@ streams:
                 - object
                 - "null"
               properties:
+                lms_user_id:
+                  type:
+                    - string
+                    - "null"
                 display_name:
                   type:
                     - string
@@ -504,30 +479,35 @@ streams:
                   type:
                     - string
                     - "null"
-                lms_user_id:
+          folders:
+            type:
+              - array
+              - "null"
+            items:
+              type:
+                - object
+                - "null"
+              properties:
+                description:
                   type:
                     - string
                     - "null"
-          created:
+                id:
+                  type:
+                    - number
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
+          locales:
             type:
-              - string
+              - array
               - "null"
-          last_modified:
-            type:
-              - string
-              - "null"
-          estimated_content_length:
-            type:
-              - number
-              - "null"
-          number_of_content_items:
-            type:
-              - number
-              - "null"
-          is_pro_path:
-            type:
-              - boolean
-              - "null"
+            items:
+              type:
+                - string
+                - "null"
           sections:
             type:
               - array
@@ -537,19 +517,11 @@ streams:
                 - object
                 - "null"
               properties:
-                id:
-                  type:
-                    - number
-                    - "null"
-                title:
-                  type:
-                    - string
-                    - "null"
                 description:
                   type:
                     - string
                     - "null"
-                order:
+                id:
                   type:
                     - number
                     - "null"
@@ -562,7 +534,19 @@ streams:
                       - object
                       - "null"
                     properties:
+                      type:
+                        type:
+                          - string
+                          - "null"
                       id:
+                        type:
+                          - number
+                          - "null"
+                      url:
+                        type:
+                          - string
+                          - "null"
+                      order:
                         type:
                           - number
                           - "null"
@@ -570,23 +554,7 @@ streams:
                         type:
                           - string
                           - "null"
-                      url:
-                        type:
-                          - string
-                          - "null"
-                      type:
-                        type:
-                          - string
-                          - "null"
                       duration:
-                        type:
-                          - number
-                          - "null"
-                      number_of_items:
-                        type:
-                          - number
-                          - "null"
-                      order:
                         type:
                           - number
                           - "null"
@@ -598,14 +566,18 @@ streams:
                         type:
                           - string
                           - "null"
-          locales:
-            type:
-              - array
-              - "null"
-            items:
-              type:
-                - string
-                - "null"
+                      number_of_items:
+                        type:
+                          - number
+                          - "null"
+                order:
+                  type:
+                    - number
+                    - "null"
+                title:
+                  type:
+                    - string
+                    - "null"
           categories:
             type:
               - array
@@ -614,33 +586,25 @@ streams:
               type:
                 - string
                 - "null"
-          folders:
+          is_pro_path:
             type:
-              - array
+              - boolean
               - "null"
-            items:
-              type:
-                - object
-                - "null"
-              properties:
-                id:
-                  type:
-                    - number
-                    - "null"
-                title:
-                  type:
-                    - string
-                    - "null"
-                description:
-                  type:
-                    - string
-                    - "null"
+          last_modified:
+            type:
+              - string
+              - "null"
+          number_of_content_items:
+            type:
+              - number
+              - "null"
+          estimated_content_length:
+            type:
+              - number
+              - "null"
         additionalProperties: true
   - type: DeclarativeStream
     name: user_activity
-    primary_key:
-      - user_email
-      - user_joined_date
     retriever:
       type: SimpleRetriever
       paginator:
@@ -657,30 +621,28 @@ streams:
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
-          $ref: "#/definitions/linked/HttpRequester/request_parameters"
-          from_date: "{{ config.get('from_date', '') }}"
           to_date: "{{ config.get('to_date', '') }}"
+          from_date: "{{ config.get('from_date', '') }}"
+          page_size: "{{ config.get('page_size', 20) }}"
       record_selector:
         type: RecordSelector
         extractor:
           type: DpathExtractor
           field_path:
             - results
+    primary_key:
+      - user_email
+      - user_joined_date
     schema_loader:
       type: InlineSchemaLoader
       schema:
         type: object
         $schema: http://json-schema.org/schema#
+        required:
+          - user_email
+          - user_joined_date
         properties:
           user_name:
-            type:
-              - string
-              - "null"
-          user_surname:
-            type:
-              - string
-              - "null"
-          user_email:
             type:
               - string
               - "null"
@@ -688,7 +650,13 @@ streams:
             type:
               - string
               - "null"
-          user_joined_date:
+          user_email:
+            type: string
+          user_surname:
+            type:
+              - string
+              - "null"
+          last_date_visit:
             type:
               - string
               - "null"
@@ -696,19 +664,13 @@ streams:
             type:
               - string
               - "null"
-          user_is_deactivated: # not in official docs, observed in API responses
+          user_joined_date:
+            type: string
+          user_is_deactivated:
             type:
               - boolean
               - "null"
-          num_new_enrolled_courses:
-            type:
-              - number
-              - "null"
-          num_new_assigned_courses:
-            type:
-              - number
-              - "null"
-          num_new_started_courses:
+          num_web_visited_days:
             type:
               - number
               - "null"
@@ -716,11 +678,23 @@ streams:
             type:
               - number
               - "null"
+          num_completed_quizzes:
+            type:
+              - number
+              - "null"
           num_completed_lectures:
             type:
               - number
               - "null"
-          num_completed_quizzes: # not in official docs, observed in API responses
+          num_new_started_courses:
+            type:
+              - number
+              - "null"
+          num_new_assigned_courses:
+            type:
+              - number
+              - "null"
+          num_new_enrolled_courses:
             type:
               - number
               - "null"
@@ -728,20 +702,9 @@ streams:
             type:
               - number
               - "null"
-          num_web_visited_days:
-            type:
-              - number
-              - "null"
-          last_date_visit:
-            type:
-              - string
-              - "null"
         additionalProperties: true
   - type: DeclarativeStream
     name: user_path_activity
-    primary_key:
-      - user_email
-      - path_id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -765,21 +728,21 @@ streams:
           type: DpathExtractor
           field_path:
             - results
+    primary_key:
+      - user_email
+      - path_id
     schema_loader:
       type: InlineSchemaLoader
       schema:
         type: object
         $schema: http://json-schema.org/schema#
+        required:
+          - user_email
+          - path_id
         properties:
+          path_id:
+            type: number
           user_name:
-            type:
-              - string
-              - "null"
-          user_surname:
-            type:
-              - string
-              - "null"
-          user_email:
             type:
               - string
               - "null"
@@ -787,25 +750,19 @@ streams:
             type:
               - string
               - "null"
-          user_external_id:
-            type:
-              - string
-              - "null"
-          lms_user_id:
-            type:
-              - string
-              - "null"
-          path_id:
-            type:
-              - number
-              - "null"
           path_title:
             type:
               - string
               - "null"
+          user_email:
+            type: string
           is_pro_path:
             type:
               - boolean
+              - "null"
+          user_surname:
+            type:
+              - string
               - "null"
           is_private_path:
             type:
@@ -815,7 +772,15 @@ streams:
             type:
               - number
               - "null"
+          is_path_assigned:
+            type:
+              - boolean
+              - "null"
           path_enrolled_date:
+            type:
+              - string
+              - "null"
+          path_completion_date:
             type:
               - string
               - "null"
@@ -823,23 +788,7 @@ streams:
             type:
               - number
               - "null"
-          path_completion_date: # docs call this path_completed_date, actual API returns path_completion_date
-            type:
-              - string
-              - "null"
-          is_path_assigned:
-            type:
-              - boolean
-              - "null"
-          path_assigned_on:
-            type:
-              - string
-              - "null"
-          path_assigned_due_date:
-            type:
-              - string
-              - "null"
-          path_assigned_by:
+          path_last_activity_date:
             type:
               - string
               - "null"
@@ -847,16 +796,9 @@ streams:
             type:
               - string
               - "null"
-          path_last_activity_date:
-            type:
-              - string
-              - "null"
         additionalProperties: true
   - type: DeclarativeStream
     name: user_course_activity
-    primary_key:
-      - user_id
-      - course_id
     retriever:
       type: SimpleRetriever
       paginator:
@@ -873,34 +815,32 @@ streams:
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
         request_parameters:
-          $ref: "#/definitions/linked/HttpRequester/request_parameters"
-          from_date: "{{ config.get('from_date', '') }}"
           to_date: "{{ config.get('to_date', '') }}"
+          from_date: "{{ config.get('from_date', '') }}"
+          page_size: "{{ config.get('page_size', 20) }}"
       record_selector:
         type: RecordSelector
         extractor:
           type: DpathExtractor
           field_path:
             - results
+    primary_key:
+      - user_id
+      - course_id
     schema_loader:
       type: InlineSchemaLoader
       schema:
         type: object
         $schema: http://json-schema.org/schema#
+        required:
+          - user_id
+          - course_id
         properties:
-          user_id: # not in official docs, observed in API responses
-            type:
-              - number
-              - "null"
+          user_id:
+            type: number
+          course_id:
+            type: number
           user_name:
-            type:
-              - string
-              - "null"
-          user_surname:
-            type:
-              - string
-              - "null"
-          user_email:
             type:
               - string
               - "null"
@@ -908,15 +848,23 @@ streams:
             type:
               - string
               - "null"
-          user_external_id:
+          user_email:
             type:
               - string
               - "null"
-          course_id:
+          assigned_by:
             type:
-              - number
+              - string
+              - "null"
+          is_assigned:
+            type:
+              - boolean
               - "null"
           course_title:
+            type:
+              - string
+              - "null"
+          user_surname:
             type:
               - string
               - "null"
@@ -932,30 +880,11 @@ streams:
             type:
               - number
               - "null"
-          num_video_consumed_minutes:
-            type:
-              - number
-              - "null"
-          course_enroll_date:
-            type:
-              - string
-              - "null"
           course_start_date:
             type:
               - string
               - "null"
-          course_completion_date:
-            type:
-              - string
-              - "null"
-          course_first_completion_date:
-            type:
-              - string
-              - "null"
-          # Docs instruction: "deprecated, use last_activity_date instead"
-          # However, API responses still include this field 
-          # it may differ from last_activity_date, so keeping it for now
-          course_last_accessed_date: 
+          course_enroll_date:
             type:
               - string
               - "null"
@@ -963,21 +892,25 @@ streams:
             type:
               - string
               - "null"
-          is_assigned:
+          user_is_deactivated:
             type:
               - boolean
               - "null"
-          assigned_by:
+          course_completion_date:
             type:
               - string
               - "null"
-          lms_user_id:
+          course_last_accessed_date:
             type:
               - string
               - "null"
-          user_is_deactivated: # not in official docs, observed in API responses
+          num_video_consumed_minutes:
             type:
-              - boolean
+              - number
+              - "null"
+          course_first_completion_date:
+            type:
+              - string
               - "null"
         additionalProperties: true
 
@@ -993,8 +926,26 @@ spec:
       - client_id
       - client_secret
     properties:
+      to_date:
+        type: string
+        description: >-
+          Optional. Filter user-activity and user-course-activity records up to
+          this date (format: YYYY-MM-DD).
       client_id:
         type: string
+      from_date:
+        type: string
+        description: >-
+          Optional. Filter user-activity and user-course-activity records from
+          this date (format: YYYY-MM-DD).
+      page_size:
+        type: integer
+        description: >-
+          Optional. Number of records per page for paginated API requests.
+          Defaults to 20.
+        default: 20
+        maximum: 100
+        minimum: 1
       account_id:
         type: string
       account_name:
@@ -1002,67 +953,52 @@ spec:
       client_secret:
         type: string
         airbyte_secret: true
-      from_date:
-        type: string
-        description: >-
-          Optional. Filter user-activity and user-course-activity records from this date (format: YYYY-MM-DD).
-      to_date:
-        type: string
-        description: >-
-          Optional. Filter user-activity and user-course-activity records up to this date (format: YYYY-MM-DD).
-      page_size:
-        type: integer
-        default: 20
-        minimum: 1
-        maximum: 100
-        description: >-
-          Optional. Number of records per page for paginated API requests. Defaults to 20.
 
 metadata:
   testedStreams:
     courses:
-      streamHash: 27003ddab2fe7d43a6928811dacaab8138432e58
-      isStale: true
-      hasResponse: true
-      responsesAreSuccessful: true
+      isStale: false
       hasRecords: true
-      primaryKeysArePresent: true
-      primaryKeysAreUnique: true
-    learning_paths:
-      streamHash: 8cdd105f221da04ae04d85f1e45683360a3ef79d
-      isStale: true
+      streamHash: 2d0a87b7bb9fc81c2f00330f8d1f60cbe74882d0
       hasResponse: true
-      responsesAreSuccessful: true
-      hasRecords: false
-      primaryKeysArePresent: true
       primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
     user_activity:
-      streamHash: 60c2e685d0e6f321721c7d36eb250e7752e45a3b
-      isStale: true
-      hasResponse: true
-      responsesAreSuccessful: true
+      isStale: false
       hasRecords: true
-      primaryKeysArePresent: true
+      streamHash: 7ca19e3cb14a9531755ea1f8b30c644d162ba84a
+      hasResponse: true
       primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+    learning_paths:
+      isStale: false
+      hasRecords: false
+      streamHash: feaf751ad4891375c3d9a9bf37c0cc54e1a73069
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
     user_path_activity:
-      streamHash: 9d26a7876d338ab90e260f76b3f4d7d2a7054108
-      isStale: true
-      hasResponse: true
-      responsesAreSuccessful: true
+      isStale: false
       hasRecords: true
-      primaryKeysArePresent: true
+      streamHash: 6053f671a86488d153cf7bb2c6d32be087ee69d4
+      hasResponse: true
       primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
     user_course_activity:
-      streamHash: 3f744ac1cfe9b06b14a247a9c9879191f7477895
-      isStale: true
-      hasResponse: true
-      responsesAreSuccessful: true
+      isStale: false
       hasRecords: true
-      primaryKeysArePresent: true
+      streamHash: 7e5baf78dd74b5205b2e43cdc059c3f5b447238c
+      hasResponse: true
       primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
   autoImportSchema:
     courses: true
-    learning_paths: true
     user_activity: true
+    learning_paths: true
     user_path_activity: true
     user_course_activity: true

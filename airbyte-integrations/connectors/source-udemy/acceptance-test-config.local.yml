@@ -1,10 +1,10 @@
 # [Connector Acceptance Tests](https://docs.airbyte.com/connector-development/testing-connectors/connector-acceptance-tests-reference)
-# 
+#
 # Version to run local machine-specific environment (e.g. in development),
 # since secrets are not available in CI
 # CI version is configured in acceptance-test-config.yml
-# 
-# Note: `Courses` stream is excluded from local acceptance tests since it returns 28k+ records, 
+#
+# Note: `Courses` stream is excluded from local acceptance tests since it returns 28k+ records,
 # and has no filtering parameters to limit that (limiting pages number is not provided either in Airbyte Connector Acceptance Test)
 # This causes local tests to run for too long and timeout.
 
@@ -35,3 +35,5 @@ acceptance_tests:
     bypass_reason: "All streams are full refresh only; no incremental cursors are configured."
   full_refresh:
     bypass_reason: "Covered by basic_read above; full_refresh is not a recognized test category in the CDK 7.x test runner."
+
+  
