@@ -60,6 +60,10 @@ jobs:
         run: |
           set -euo pipefail
           CONNECTOR_ROOT="airbyte-integrations/connectors/$CONNECTOR"
+          if [[ ! "$CONNECTOR" =~ ^[a-z0-9-]+$ ]]; then
+            echo "❌ Invalid connector name: $CONNECTOR"
+            exit 1
+          fi
 
           if [ ! -d "$CONNECTOR_ROOT" ]; then
             echo "⚠️ Warning: Connector directory $CONNECTOR_ROOT not found! Skipping..."
@@ -117,8 +121,8 @@ jobs:
           METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
 
           # Extract metadata
-          VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
-          NAME=$(grep 'dockerRepository' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
+          VERSION="$(yq eval '.data.canonicalImageTag' "$METADATAFILE")"
+          NAME="$(yq eval '.data.dockerRepository' "$METADATAFILE")"
           if [ -z "$VERSION" ] || [ -z "$NAME" ]; then
             echo "❌ Missing canonicalImageTag or dockerRepository in $METADATAFILE"
             exit 1
