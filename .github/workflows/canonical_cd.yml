@@ -52,6 +52,7 @@ jobs:
       - name: Install Poe
         run: |
           uv tool install poethepoet
+          sudo snap install yq || sudo snap refresh yq
 
       - name: Resolve connector build variables
         id: connector-vars
@@ -104,7 +105,7 @@ jobs:
         env:
           CONNECTOR: ${{ matrix.dir }}
         run: |
-          ./gradlew :airbyte-integrations:connectors:${CONNECTOR}:distTar
+          ./gradlew ":airbyte-integrations:connectors:${CONNECTOR}:distTar"
 
       - name: Build and push Docker images for connector ${{ matrix.dir }}
         id: build-and-push-images
