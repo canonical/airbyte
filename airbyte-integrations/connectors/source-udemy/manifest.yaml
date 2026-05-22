@@ -1,4 +1,4 @@
-version: 7.10.0
+version: 6.60.16
 
 type: DeclarativeSource
 
@@ -26,10 +26,8 @@ definitions:
                   - 429
             backoff_strategies:
               - type: WaitTimeFromHeader
-                regex: ([0-9]+)
                 header: Retry-After
-                max_wait: 120
-                min_wait: 1
+                regex: ([0-9]+)
           - type: DefaultErrorHandler
             max_retries: 5
             response_filters:
@@ -37,6 +35,9 @@ definitions:
                 action: RETRY
                 http_codes:
                   - 500
+                  - 502
+                  - 503
+                  - 504
             backoff_strategies:
               - type: ConstantBackoffStrategy
                 backoff_time_in_seconds: 60
