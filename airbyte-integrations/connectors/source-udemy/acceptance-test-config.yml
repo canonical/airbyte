@@ -1,0 +1,16 @@
+connector_image: airbyte/source-udemy:dev
+test_strictness_level: "high"
+acceptance_tests:
+  spec:
+    tests:
+      - spec_path: "manifest.yaml"
+  connection:
+    bypass_reason: "Secrets are not available in CI"
+  discovery:
+    bypass_reason: "Secrets are not available in CI"
+  basic_read:
+    bypass_reason: "Secrets are not available in CI"
+  incremental:
+    bypass_reason: "Secrets are not available in CI"
+  full_refresh:
+    bypass_reason: "Secrets are not available in CI"
