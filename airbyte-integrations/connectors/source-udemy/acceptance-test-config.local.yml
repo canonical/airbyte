@@ -33,6 +33,6 @@ acceptance_tests:
         timeout_seconds: 1200
         fail_on_extra_columns: false
   incremental:
-    bypass_reason: "All streams are full refresh only; no incremental cursors are configured."
+    bypass_reason: "All streams are full refresh only - no incremental cursors are configured."
   full_refresh:
-    bypass_reason: "Covered by basic_read above; full_refresh is not a recognized test category in the CDK 7.x test runner."
+    bypass_reason: "Covered by basic_read above with needed constraints to limit runtime."

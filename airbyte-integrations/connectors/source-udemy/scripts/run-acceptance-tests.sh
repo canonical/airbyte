@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 CONNECTOR_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,11 +17,19 @@ restore() {
 }
 trap restore EXIT
 
+verify_dockerfile() {
+  if [[ ! -f build/docker/Dockerfile ]]; then
+    echo "ERROR: Connector Dockerfile not found. Run 'make build'." >&2
+    exit 1
+  fi
+}
+
 cp "$CI_CONFIG" "$BACKUP"
 cp "$LOCAL_CONFIG" "$CI_CONFIG"
 
 cd "$CONNECTOR_DIR"
 poe install-cdk-cli
+verify_dockerfile
 docker build . --file build/docker/Dockerfile -t airbyte/source-udemy:dev
 airbyte-cdk connector test "$CONNECTOR_DIR" --pytest-arg "-k not docker_image_build"
 

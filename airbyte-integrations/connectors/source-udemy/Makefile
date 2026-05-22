@@ -2,7 +2,7 @@ IMAGE = airbyte/source-udemy:dev
 CONFIG = secrets/config.json
 CATALOG = integration_tests/configured_catalog.json
 
-.PHONY: build spec check discover read test
+.PHONY: build check discover read test
 
 build:
 	airbyte-cdk image build . --tag dev
