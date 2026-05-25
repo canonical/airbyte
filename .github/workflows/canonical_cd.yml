@@ -4,73 +4,25 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:
-    inputs:
-      connectors:
-        description: >
-          Comma-separated list of connector names to build and push
-          (e.g. source-github-2,source-mysql). Required for manual runs.
-        required: true
-        type: string
-      dry_run:
-        description: >
-          Dry run: build the image but skip pushing to GHCR.
-          Useful for testing the build without publishing.
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
 
 jobs:
   get_changed_directories_list:
     name: Get List Of Changed Directories
     runs-on: ubuntu-latest
     outputs:
-      connectors_list_json: ${{ steps.resolve.outputs.connectors_list_json }}
+      connectors_list_json: ${{ steps.detect-changes.outputs.connectors_list_json }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Ensure full history
 
-      # On manual dispatch: convert the comma-separated input to a JSON array.
-      - name: Build connector list from dispatch input
-        id: dispatch-list
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          CONNECTORS_INPUT: ${{ inputs.connectors }}
-        run: |
-          JSON=$(echo "$CONNECTORS_INPUT" \
-            | tr ',' '\n' \
-            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
-            | grep -v '^$' \
-            | jq -R . \
-            | jq -s -c .)
-          echo "connectors_list_json=$JSON" >> "$GITHUB_OUTPUT"
-
-      # On push: use the existing change-detection action.
       - name: Detect changed connectors
         id: detect-changes
-        if: github.event_name == 'push'
         uses: ./.github/actions/detect-changes
         with:
           base_commit: ${{ github.event.before }}
           head_commit: ${{ github.sha }}
-
-      # Merge the two possible sources into a single output.
-      - name: Resolve connector list
-        id: resolve
-        env:
-          DISPATCH_LIST: ${{ steps.dispatch-list.outputs.connectors_list_json }}
-          DETECT_LIST: ${{ steps.detect-changes.outputs.connectors_list_json }}
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "connectors_list_json=$DISPATCH_LIST" >> "$GITHUB_OUTPUT"
-          else
-            echo "connectors_list_json=$DETECT_LIST" >> "$GITHUB_OUTPUT"
-          fi
 
   build_and_push:
     runs-on: ubuntu-latest
@@ -166,7 +118,6 @@ jobs:
           CONNECTOR_BASE_IMAGE: ${{ steps.connector-vars.outputs.connector-base-image }}
           IMAGE_HTTP_PROXY: ${{ vars.HTTP_PROXY }}
           IMAGE_HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
-          DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
           METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
@@ -211,13 +162,9 @@ jobs:
               PUSH_IMAGE="$DEV_IMAGE"
             fi
 
-            if [[ "$DRY_RUN" == "true" ]]; then
-              echo "🔄 [DRY RUN] Skipping push of $PUSH_IMAGE to $IMAGE_NAME"
-            else
-              echo "🔄 Tagging and pushing $PUSH_IMAGE to $IMAGE_NAME"
-              docker tag "$PUSH_IMAGE" "$IMAGE_NAME"
-              docker push "$IMAGE_NAME"
-            fi
+            echo "🔄 Tagging and pushing $PUSH_IMAGE to $IMAGE_NAME"
+            docker tag "$PUSH_IMAGE" "$IMAGE_NAME"
+            docker push "$IMAGE_NAME"
           else
             echo "❌ Error: Image $DEV_IMAGE was not found after build."
             exit 1
