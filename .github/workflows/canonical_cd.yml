@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - copilot/update-canonical-cd-workflow  # TEST ONLY – remove after verification
   workflow_dispatch:
     inputs:
       connectors:
@@ -167,7 +166,7 @@ jobs:
           CONNECTOR_BASE_IMAGE: ${{ steps.connector-vars.outputs.connector-base-image }}
           IMAGE_HTTP_PROXY: ${{ vars.HTTP_PROXY }}
           IMAGE_HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
-          DRY_RUN: ${{ inputs.dry_run || 'true' }}  # TEST ONLY – restore to 'false' after verification
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
           METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
