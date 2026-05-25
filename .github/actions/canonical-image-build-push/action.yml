@@ -1,0 +1,163 @@
+name: "Canonical Connector Image Build and Push"
+description: >
+  Builds a Canonical connector image (manifest-only or python) and pushes it to
+  GHCR. Applies the manifest-only proxy wrapper for declarative-manifest
+  connectors, and supports a dry-run mode for verifying builds without
+  publishing.
+
+inputs:
+  connector:
+    description: "Connector name (matches the directory under airbyte-integrations/connectors/)"
+    required: true
+  image-version-override:
+    description: "Optional GHCR tag override. If empty, uses canonicalImageTag from the connector's metadata.yaml."
+    required: false
+    default: ""
+  dry-run:
+    description: "If 'true', build the image but skip pushing to GHCR."
+    required: false
+    default: "false"
+  http-proxy:
+    description: "Optional HTTP proxy passed as a build arg and baked into the manifest-only proxy wrapper."
+    required: false
+    default: ""
+  https-proxy:
+    description: "Optional HTTPS proxy passed as a build arg and baked into the manifest-only proxy wrapper."
+    required: false
+    default: ""
+
+outputs:
+  image-name:
+    description: "The full GHCR image name (registry/name:tag) that was built and (optionally) pushed."
+    value: ${{ steps.build.outputs.image-name }}
+  pushed:
+    description: "Whether the image was pushed ('true' or 'false')."
+    value: ${{ steps.build.outputs.pushed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install build dependencies (uv, yq, poethepoet)
+      shell: bash
+      run: |
+        sudo snap install astral-uv --classic || sudo snap refresh astral-uv
+        sudo snap install yq || sudo snap refresh yq
+        sudo snap alias astral-uv.uv uv
+        uv tool install poethepoet
+
+    - name: Resolve connector build variables
+      id: vars
+      shell: bash
+      env:
+        CONNECTOR: ${{ inputs.connector }}
+      run: |
+        set -euo pipefail
+        CONNECTOR_ROOT="airbyte-integrations/connectors/$CONNECTOR"
+        if [[ ! "$CONNECTOR" =~ ^[a-z0-9-]+$ ]]; then
+          echo "❌ Invalid connector name: $CONNECTOR"
+          exit 1
+        fi
+        if [ ! -d "$CONNECTOR_ROOT" ]; then
+          echo "❌ Connector directory $CONNECTOR_ROOT not found"
+          exit 1
+        fi
+        cd "$CONNECTOR_ROOT"
+        CONNECTOR_LANGUAGE="$(poe -qq get-language)"
+        CONNECTOR_BASE_IMAGE="$(poe -qq get-base-image)"
+        if [ -z "$CONNECTOR_LANGUAGE" ] || [ -z "$CONNECTOR_BASE_IMAGE" ]; then
+          echo "❌ Failed to resolve connector language/base image for $CONNECTOR"
+          exit 1
+        fi
+        echo "connector-language=$CONNECTOR_LANGUAGE" >> "$GITHUB_OUTPUT"
+        echo "connector-base-image=$CONNECTOR_BASE_IMAGE" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Build and (optionally) push connector image
+      id: build
+      shell: bash
+      env:
+        CONNECTOR: ${{ inputs.connector }}
+        CONNECTOR_LANGUAGE: ${{ steps.vars.outputs.connector-language }}
+        CONNECTOR_BASE_IMAGE: ${{ steps.vars.outputs.connector-base-image }}
+        IMAGE_VERSION_OVERRIDE: ${{ inputs.image-version-override }}
+        IMAGE_HTTP_PROXY: ${{ inputs.http-proxy }}
+        IMAGE_HTTPS_PROXY: ${{ inputs.https-proxy }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -euo pipefail
+        METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
+
+        NAME="$(yq eval '.data.dockerRepository' "$METADATAFILE")"
+        if [ -z "$NAME" ] || [ "$NAME" = "null" ]; then
+          echo "❌ Missing dockerRepository in $METADATAFILE"
+          exit 1
+        fi
+
+        if [ -n "$IMAGE_VERSION_OVERRIDE" ]; then
+          VERSION="$IMAGE_VERSION_OVERRIDE"
+        else
+          VERSION="$(yq eval '.data.canonicalImageTag' "$METADATAFILE")"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "❌ Missing canonicalImageTag in $METADATAFILE (and no image-version-override provided)"
+            exit 1
+          fi
+        fi
+
+        IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/$NAME:$VERSION"
+        DEV_IMAGE="airbyte/$CONNECTOR:dev"
+        DOCKERFILE_PATH="docker-images/Dockerfile.${CONNECTOR_LANGUAGE}-connector"
+
+        if [ ! -f "$DOCKERFILE_PATH" ]; then
+          echo "❌ Unsupported connector language '$CONNECTOR_LANGUAGE': missing $DOCKERFILE_PATH"
+          exit 1
+        fi
+
+        echo "🚀 Building $CONNECTOR with direct Docker buildx flow..."
+        docker buildx build \
+          --load \
+          -f "$DOCKERFILE_PATH" \
+          -t "$DEV_IMAGE" \
+          --build-arg BASE_IMAGE="$CONNECTOR_BASE_IMAGE" \
+          --build-arg CONNECTOR_NAME="$CONNECTOR" \
+          --build-arg HTTP_PROXY="$IMAGE_HTTP_PROXY" \
+          --build-arg HTTPS_PROXY="$IMAGE_HTTPS_PROXY" \
+          "airbyte-integrations/connectors/$CONNECTOR"
+
+        if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
+          echo "❌ Error: Image $DEV_IMAGE was not found after build."
+          exit 1
+        fi
+        echo "✅ Found built image: $DEV_IMAGE"
+
+        if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
+          echo "🛠️ Detected manifest-only connector."
+          CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
+          .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
+          PUSH_IMAGE="$CUSTOM_IMAGE"
+        else
+          PUSH_IMAGE="$DEV_IMAGE"
+        fi
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+          echo "🔄 [DRY RUN] Skipping push of $PUSH_IMAGE to $IMAGE_NAME"
+          PUSHED="false"
+        else
+          echo "🔄 Tagging and pushing $PUSH_IMAGE to $IMAGE_NAME"
+          docker tag "$PUSH_IMAGE" "$IMAGE_NAME"
+          docker push "$IMAGE_NAME"
+          PUSHED="true"
+        fi
+
+        {
+          echo "image-name=$IMAGE_NAME"
+          echo "pushed=$PUSHED"
+        } >> "$GITHUB_OUTPUT"
