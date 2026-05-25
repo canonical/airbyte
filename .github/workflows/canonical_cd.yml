@@ -33,7 +33,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensure full history
+          fetch-depth: 0 # Ensure full history
 
       # On manual dispatch: convert the comma-separated input to a JSON array.
       - name: Build connector list from dispatch input
