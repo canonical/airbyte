@@ -2,7 +2,11 @@ IMAGE = airbyte/source-udemy:dev
 CONFIG = secrets/config.json
 CATALOG = integration_tests/configured_catalog.json
 
-.PHONY: build check discover read test
+.PHONY: install build check discover read test
+
+# Install dependencies for local development and running commands below
+install:
+	./scripts/install-deps.sh
 
 build:
 	airbyte-cdk image build . --tag dev
