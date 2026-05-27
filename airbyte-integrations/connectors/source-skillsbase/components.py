@@ -1,12 +1,14 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 """
 Custom OAuth 2.0 client_credentials authenticator for Skills Base with Thread-Locking.
 """
 
+import threading
+import time
 from dataclasses import InitVar, dataclass, field
 from datetime import datetime, timedelta, timezone
 from logging import getLogger
-import threading
-import time
 from typing import Any, Mapping, Union
 
 import requests
@@ -17,6 +19,7 @@ from airbyte_cdk.sources.declarative.auth.declarative_authenticator import Decla
 from airbyte_cdk.sources.declarative.interpolation.interpolated_string import InterpolatedString
 from airbyte_cdk.sources.declarative.types import Config
 from airbyte_cdk.utils import AirbyteTracedException
+
 
 logger = getLogger("airbyte")
 
@@ -43,15 +46,9 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
     _client_secret: str = field(init=False, repr=False, default="")
 
     def __post_init__(self, parameters: Mapping[str, Any]) -> None:
-        self._token_refresh_endpoint = InterpolatedString.create(
-            self.token_refresh_endpoint, parameters=parameters
-        ).eval(self.config)
-        self._client_id = InterpolatedString.create(
-            self.client_id, parameters=parameters
-        ).eval(self.config)
-        self._client_secret = InterpolatedString.create(
-            self.client_secret, parameters=parameters
-        ).eval(self.config)
+        self._token_refresh_endpoint = InterpolatedString.create(self.token_refresh_endpoint, parameters=parameters).eval(self.config)
+        self._client_id = InterpolatedString.create(self.client_id, parameters=parameters).eval(self.config)
+        self._client_secret = InterpolatedString.create(self.client_secret, parameters=parameters).eval(self.config)
 
     @property
     def auth_header(self) -> str:
@@ -85,9 +82,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
             return True
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
-        return datetime.now(timezone.utc) >= expiry - timedelta(
-            seconds=_REFRESH_SAFETY_MARGIN_SECONDS
-        )
+        return datetime.now(timezone.utc) >= expiry - timedelta(seconds=_REFRESH_SAFETY_MARGIN_SECONDS)
 
     def _refresh_and_persist_token(self) -> str:
         max_auth_retries = 3
@@ -124,7 +119,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
                         continue
                     except ValueError:
                         pass
-                
+
                 logger.warning("Skills Base Rate limit header missing. Sleeping for 60 seconds as a safety backup...")
                 time.sleep(60)
                 continue
@@ -165,7 +160,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
 
             logger.info("Skills Base access token refreshed; expires in %s seconds.", expires_in)
             return access_token
-            
+
         raise AirbyteTracedException(
             message="Exhausted maximum retries attempting to authenticate due to active Skills Base account rate limits.",
             internal_message="Token refresh endpoint returned persistent rate limit restrictions.",
