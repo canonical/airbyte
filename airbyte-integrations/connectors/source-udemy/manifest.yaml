@@ -50,17 +50,22 @@ definitions:
                 error_message: >-
                   Your Udemy API credentials have expired or lack the required
                   scopes.
-      request_parameters:
-        page_size: "{{ config.get('page_size', 20) }}"
     SimpleRetriever:
       paginator:
         type: DefaultPaginator
-        page_token_option:
-          type: RequestPath
+        page_size_option:
+          type: RequestOption
+          inject_into: request_parameter
+          field_name: page_size
         pagination_strategy:
-          type: CursorPagination
-          cursor_value: "{{ response.get('next', '') }}"
-          stop_condition: "{{ response.get('next') is none }}"
+          type: PageIncrement
+          page_size: "{{ config.get('page_size', 20) }}"
+          start_from_page: 1
+        page_token_option:
+          type: RequestOption
+          inject_into: request_parameter
+          field_name: page
+        
 
 streams:
   - type: DeclarativeStream
@@ -80,8 +85,6 @@ streams:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_parameters:
-          $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
         type: RecordSelector
         extractor:
@@ -423,8 +426,6 @@ streams:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_parameters:
-          $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
         type: RecordSelector
         extractor:
@@ -624,7 +625,6 @@ streams:
         request_parameters:
           to_date: "{{ config.get('to_date', '') }}"
           from_date: "{{ config.get('from_date', '') }}"
-          page_size: "{{ config.get('page_size', 20) }}"
       record_selector:
         type: RecordSelector
         extractor:
@@ -721,8 +721,6 @@ streams:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
         error_handler:
           $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_parameters:
-          $ref: "#/definitions/linked/HttpRequester/request_parameters"
       record_selector:
         type: RecordSelector
         extractor:
@@ -818,7 +816,6 @@ streams:
         request_parameters:
           to_date: "{{ config.get('to_date', '') }}"
           from_date: "{{ config.get('from_date', '') }}"
-          page_size: "{{ config.get('page_size', 20) }}"
       record_selector:
         type: RecordSelector
         extractor:
@@ -949,10 +946,20 @@ spec:
         minimum: 1
       account_id:
         type: string
+        description: >-
+          Your Udemy Business organization identifier used in API paths. This
+          is the numeric value in URLs like
+          /api-2.0/organizations/{account_id}/.
       account_name:
         type: string
+        description: >-
+          Your Udemy Business subdomain (the part before .udemy.com), for
+          example "acme" in https://acme.udemy.com.
       client_secret:
         type: string
+        description: >-
+          The API client secret associated with your Udemy Business API client
+          ID.
         airbyte_secret: true
 
 metadata:

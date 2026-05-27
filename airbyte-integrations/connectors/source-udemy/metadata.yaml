@@ -19,7 +19,7 @@ data:
   dockerImageTag: 1.0.0
   canonicalImageTag: 1.0.0-canonical-1.0.0
   dockerRepository: airbyte/source-udemy
-  documentationUrl: https://docs.airbyte.com/integrations/sources/udemy
+  documentationUrl: https://github.com/canonical/airbyte/blob/master/airbyte-integrations/connectors/source-udemy/README.md
   externalDocumentationUrls:
     # Udemy exposes the API docs at the organization level
     # To read it, you need to have an account and be part of the organization
