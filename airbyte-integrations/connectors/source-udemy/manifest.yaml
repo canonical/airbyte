@@ -931,6 +931,9 @@ spec:
           this date (format: YYYY-MM-DD).
       client_id:
         type: string
+        description: >-
+          API client ID for authenticating with the Udemy Business API. 
+          Can be obtained from the Udemy Business admin interface.
       from_date:
         type: string
         description: >-
@@ -947,19 +950,18 @@ spec:
       account_id:
         type: string
         description: >-
-          Your Udemy Business organization identifier used in API paths. This
-          is the numeric value in URLs like
-          /api-2.0/organizations/{account_id}/.
+          Udemy Business organization identifier.
+          A numeric value in URLs like /api-2.0/organizations/{account_id}/.
       account_name:
         type: string
         description: >-
-          Your Udemy Business subdomain (the part before .udemy.com), for
-          example "acme" in https://acme.udemy.com.
+          Udemy Business subdomain (the part before .udemy.com).
+          For instance, "canonical" in https://canonical.udemy.com.
       client_secret:
         type: string
         description: >-
-          The API client secret associated with your Udemy Business API client
-          ID.
+          API client secret associated with your Udemy Business API client ID.
+          Can be obtained from the Udemy Business admin interface.
         airbyte_secret: true
 
 metadata:
