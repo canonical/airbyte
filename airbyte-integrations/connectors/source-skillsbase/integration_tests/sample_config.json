@@ -1,0 +1,8 @@
+{
+  "api_host": "https://api.skills-base.com",
+  "client_id": "<replace-with-client-id>",
+  "client_secret": "<replace-with-client-secret>",
+  "start_date": "2024-01-01",
+  "access_token": "<to-be-replaced-with-access-token>",
+  "token_expiry_date": "<to-be-replaced-with-token-expiry-date>"
+}

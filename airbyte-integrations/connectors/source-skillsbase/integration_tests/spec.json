@@ -1,0 +1,64 @@
+{
+  "connectionSpecification": {
+    "type": "object",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "required": [
+      "api_host",
+      "client_id",
+      "client_secret",
+      "start_date"
+    ],
+    "properties": {
+      "api_host": {
+        "type": "string",
+        "description": "The API host for your Skills Base instance, for example https://api.skills-base.com. Do not include a trailing slash.",
+        "order": 0,
+        "title": "API Host",
+        "examples": [
+          "https://api.skills-base.com"
+        ]
+      },
+      "client_id": {
+        "type": "string",
+        "description": "Skills Base API client ID used to fetch access tokens.",
+        "order": 1,
+        "title": "Client ID",
+        "airbyte_secret": true
+      },
+      "start_date": {
+        "type": "string",
+        "description": "Start date for incremental skill_ratings sync, in YYYY-MM-DD format.",
+        "order": 3,
+        "title": "Start Date",
+        "format": "date",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+        "examples": [
+          "2024-01-01"
+        ]
+      },
+      "client_secret": {
+        "type": "string",
+        "description": "Skills Base API client secret used to fetch access tokens.",
+        "order": 2,
+        "title": "Client Secret",
+        "airbyte_secret": true
+      },
+      "access_token": {
+        "type": "string",
+        "title": "Access Token (auto-managed)",
+        "description": "OAuth access token cached by the connector after a successful client_credentials exchange. Do not set manually; populated and refreshed automatically.",
+        "airbyte_secret": true,
+        "order": 4
+      },
+      "token_expiry_date": {
+        "type": "string",
+        "title": "Token Expiry (auto-managed)",
+        "description": "ISO-8601 timestamp marking when the cached access token expires. Auto-managed by the connector.",
+        "order": 5
+      }
+    },
+    "additionalProperties": true
+  },
+  "supportsNormalization": false,
+  "supportsDBT": false
+}
