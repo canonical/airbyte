@@ -64,8 +64,11 @@ Behaviour, per call to `token`:
    - **`403` / `429` with `rate limit`** in the body → sleep until `X-RateLimit-Reset` (or 60 s
      if absent), retry up to 3 times.
    - **`403` / `429` with `allowance exceeded`** → raise an
-     `AirbyteTracedException(config_error)` instructing the user to revoke
-     unused tokens, since retrying cannot help while another token is alive.
+     `AirbyteTracedException(config_error)` instructing the user to wait for the
+     existing token to expire on Skills Base's side. Empirically Skills Base does
+     not send `X-RateLimit-Reset` / `Retry-After` on these responses, so the
+     connector cannot self-schedule a retry — the slot release lives entirely on
+     the server side.
    - **Other non-`2xx`** → raise `AirbyteTracedException(config_error)` with the
      HTTP status and body for debugging.
 4. On success, mutate `self.config[access_token]` and
@@ -118,6 +121,7 @@ what Skills Base considers active.
 | `make read`           | Read all streams using `integration_tests/configured_catalog.json`.          |
 | `make read-qualifications` | Read only `qualifications_assignments` (smallest stream — useful for quick end-to-end checks). |
 | `make test-acceptance` | Run Connector Acceptance Tests (rebuilds the image and pre-warms the token first). |
+| `make unit-test`      | Run pure-Python unit tests for `components.py` (no Docker, no Skills Base). First run sets up `unit_tests/.venv` automatically. |
 | `make clean`          | Remove the local dev Docker image.                                            |
 
 ### Typical first-run workflow
@@ -155,6 +159,35 @@ jq 'del(.access_token, .token_expiry_date)' secrets/config.json > /tmp/c.json \
   && mv /tmp/c.json secrets/config.json
 make check
 ```
+
+## Unit tests
+
+`unit_tests/test_authenticator.py` exercises the custom authenticator in
+`components.py` directly with `pytest` + `requests-mock` — no Docker, no
+Skills Base, no manifest parsing. Each test runs in milliseconds and covers:
+
+- `_is_expired` boundary cases (past, future, inside the 60 s safety margin,
+  malformed, naive vs tz-aware timestamps).
+- `_get_or_refresh_token` cache decision (hit returns cached with zero HTTP;
+  miss for any of `access_token` empty, `token_expiry_date` empty, or expired
+  → triggers a refresh).
+- `_refresh_and_persist_token` happy path (token + expiry written into
+  `self.config`, expiry equals `now + expires_in`, `expires_in` defaults to
+  3600 when the response omits it).
+- `_refresh_and_persist_token` error branches (`403`/`429` "allowance
+  exceeded" → `config_error`; `403`/`429` "rate limit" with
+  `X-RateLimit-Reset` → retry; same response without the header → 60 s
+  fallback retry; persistent rate limit → `transient_error`; other 4xx →
+  `config_error`; network exception → `transient_error`).
+
+Run with:
+
+```bash
+make unit-test
+```
+
+The first invocation creates `unit_tests/.venv` and installs `pytest`,
+`requests-mock`, and `airbyte-cdk` into it. Subsequent runs reuse the venv.
 
 ## Connector Acceptance Tests
 

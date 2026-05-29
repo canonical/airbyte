@@ -351,6 +351,8 @@ spec:
       - client_id
       - client_secret
       - start_date
+      - access_token
+      - token_expiry_date
     properties:
       api_host:
         type: string
@@ -390,6 +392,8 @@ spec:
           client_credentials exchange. Do not set manually; populated and
           refreshed automatically.
         airbyte_secret: true
+        airbyte_hidden: true
+        default: ""
         order: 4
       token_expiry_date:
         type: string
@@ -397,6 +401,8 @@ spec:
         description: >-
           ISO-8601 timestamp marking when the cached access token expires.
           Auto-managed by the connector.
+        airbyte_hidden: true
+        default: ""
         order: 5
     additionalProperties: true
 

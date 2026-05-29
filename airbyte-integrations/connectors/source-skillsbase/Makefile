@@ -29,7 +29,10 @@ QA_CATALOG := /work/integration_tests/qualifications_catalog.json
 
 PERSIST := scripts/persist_token.sh secrets/config.json
 
-.PHONY: help build spec check check-invalid discover read read-qualifications test-acceptance clean
+.PHONY: help build spec check check-invalid discover read read-qualifications \
+        test-acceptance clean unit-test
+
+UNIT_PYTEST := $(shell test -x unit_tests/.venv/bin/pytest && echo "unit_tests/.venv/bin/pytest" || echo "pytest")
 
 help:  ## Show this help.
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) \
@@ -91,3 +94,12 @@ test-acceptance: build  ## Run Connector Acceptance Tests via the official Docke
 
 clean:  ## Remove the local dev Docker image.
 	-docker rmi $(IMAGE)
+
+unit-test:  ## Run pure-Python unit tests for components.py (no Docker, no Skills Base).
+	@if [ ! -x unit_tests/.venv/bin/pytest ]; then \
+	  echo "First-time setup: creating unit_tests/.venv and installing deps..."; \
+	  python3 -m venv unit_tests/.venv && \
+	  unit_tests/.venv/bin/pip install -q --upgrade pip && \
+	  unit_tests/.venv/bin/pip install -q -r unit_tests/requirements.txt; \
+	fi
+	$(UNIT_PYTEST) unit_tests/ -v

@@ -63,13 +63,6 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
         with _AUTH_LOCK:
             cached = self.config.get(_ACCESS_TOKEN_KEY)
             expiry_iso = self.config.get(_EXPIRY_KEY)
-            logger.info(
-                "AUTH_CACHE_DEBUG cached_present=%s expiry_iso=%r now=%s config_keys=%s",
-                bool(cached),
-                expiry_iso,
-                datetime.now(timezone.utc).isoformat(),
-                sorted(self.config.keys()),
-            )
             if cached and expiry_iso and not self._is_expired(expiry_iso):
                 return cached
             return self._refresh_and_persist_token()

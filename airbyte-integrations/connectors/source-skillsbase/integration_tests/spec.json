@@ -2,7 +2,14 @@
   "connectionSpecification": {
     "type": "object",
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "required": ["api_host", "client_id", "client_secret", "start_date"],
+    "required": [
+      "api_host",
+      "client_id",
+      "client_secret",
+      "start_date",
+      "access_token",
+      "token_expiry_date"
+    ],
     "properties": {
       "api_host": {
         "type": "string",
@@ -39,12 +46,16 @@
         "title": "Access Token (auto-managed)",
         "description": "OAuth access token cached by the connector after a successful client_credentials exchange. Do not set manually; populated and refreshed automatically.",
         "airbyte_secret": true,
+        "airbyte_hidden": true,
+        "default": "",
         "order": 4
       },
       "token_expiry_date": {
         "type": "string",
         "title": "Token Expiry (auto-managed)",
         "description": "ISO-8601 timestamp marking when the cached access token expires. Auto-managed by the connector.",
+        "airbyte_hidden": true,
+        "default": "",
         "order": 5
       }
     },
