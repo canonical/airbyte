@@ -33,7 +33,6 @@ def _make_auth(
         "api_host": API_HOST,
         "client_id": "cid",
         "client_secret": "csec",
-        "start_date": "2024-01-01",
         "access_token": "",
         "token_expiry_date": "",
     }
