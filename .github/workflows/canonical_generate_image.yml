@@ -51,6 +51,9 @@ jobs:
     runs-on: ubuntu-latest
     if: needs.resolve_connectors.outputs.connectors_list_json != '[]'
     needs: [resolve_connectors]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         dir: ${{ fromJson(needs.resolve_connectors.outputs.connectors_list_json) }}
