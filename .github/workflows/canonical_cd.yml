@@ -28,6 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     if: needs.get_changed_directories_list.outputs.connectors_list_json != '[]'
     needs: [get_changed_directories_list]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         dir: ${{ fromJson(needs.get_changed_directories_list.outputs.connectors_list_json) }}
