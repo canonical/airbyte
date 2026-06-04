@@ -9,8 +9,7 @@ from typing import Any, ClassVar, Mapping, MutableMapping, Optional
 
 from airbyte_cdk.sources.declarative.auth.oauth import DeclarativeSingleUseRefreshTokenOauth2Authenticator
 from airbyte_cdk.sources.declarative.requesters.http_requester import HttpRequester
-from airbyte_cdk.sources.declarative.types import Config
-from airbyte_cdk.sources.declarative.types import StreamSlice, StreamState
+from airbyte_cdk.sources.declarative.types import Config, StreamSlice, StreamState
 
 
 @dataclass
