@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Ensure full history
+
       - name: Detect changed connectors
         id: detect-changes
         uses: ./.github/actions/detect-changes
@@ -25,8 +26,11 @@ jobs:
 
   build_and_push:
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.connectors_list_json != '[]'
+    if: needs.get_changed_directories_list.outputs.connectors_list_json != '[]'
     needs: [get_changed_directories_list]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         dir: ${{ fromJson(needs.get_changed_directories_list.outputs.connectors_list_json) }}
@@ -36,88 +40,9 @@ jobs:
         with:
           fetch-depth: 0 # Ensure full history
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Build and push image for ${{ matrix.dir }}
+        uses: ./.github/actions/canonical-image-build-push
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Airbyte CI
-        id: install-airbyte-ci
-        uses: ./.github/actions/install-airbyte-ci
-        with:
-          is_fork: ${{ inputs.is_fork }}
-
-      - name: Build and push Docker images for connector ${{ matrix.dir }}
-        id: build-and-push-images
-        env:
-          CI_GIT_BRANCH: ${{ github.head_ref }}
-          CONNECTOR: ${{ matrix.dir }}
-        run: |
-          if [ ! -d "airbyte-integrations/connectors/$CONNECTOR" ]; then
-              echo "⚠️ Warning: Connector directory airbyte-integrations/connectors/$CONNECTOR not found! Skipping..."
-              exit 0
-          fi
-
-          # install required packages
-          sudo apt update
-          sudo apt install --reinstall python3-pkg-resources python3-setuptools
-          pip install --upgrade setuptools
-
-          METADATAFILE="airbyte-integrations/connectors/$CONNECTOR/metadata.yaml"
-
-          # Extract metadata
-          VERSION=$(grep 'canonicalImageTag' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
-          NAME=$(grep 'dockerRepository' $METADATAFILE | cut -d':' -f2 | tr -d '" ')
-          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/$NAME:$VERSION"
-
-          echo "🚀 Building $CONNECTOR with airbyte-ci..."
-
-          if [[ -f build_customization.py ]]; then
-            echo "⚠️ build_customization.py exists. Validating proxy config..."
-
-            # Check for proxy-related content
-            if grep -q 'IMAGE_HTTP_PROXY' build_customization.py && grep -q 'with_env_variable("HTTP_PROXY"' build_customization.py; then
-              echo "✅ Proxy configuration detected in build_customization.py."
-            else
-              echo "❌ Error: build_customization.py exists but does not include required proxy config."
-              echo "Please ensure it contains references to IMAGE_HTTP_PROXY and with_env_variable(\"HTTP_PROXY\"...)"
-              exit 1
-            fi
-          fi
-
-          .github/scripts/generate_build_customizations.sh $CONNECTOR
-
-          # Set proxy environment variables
-          export IMAGE_HTTP_PROXY=${{ vars.HTTP_PROXY }}
-          export IMAGE_HTTPS_PROXY=${{ vars.HTTPS_PROXY }}
-
-          # Build image using airbyte-ci
-          airbyte-ci connectors --name=$CONNECTOR build
-
-          # Ensure the dev-tagged image exists before pushing
-          DEV_IMAGE="airbyte/$CONNECTOR:dev"
-          if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
-            echo "✅ Found built image: $DEV_IMAGE"
-            if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
-              echo "🛠️ Detected manifest-only connector."
-              CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
-              
-              .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
-
-              echo "🔄 Tagging and pushing image $CUSTOM_IMAGE to $IMAGE_NAME"
-              docker tag "$CUSTOM_IMAGE" "$IMAGE_NAME"
-              docker push "$IMAGE_NAME"
-            else
-              echo "🔄 Tagging and pushing image $DEV_IMAGE to $IMAGE_NAME"
-              docker tag "$DEV_IMAGE" "$IMAGE_NAME"
-              docker push "$IMAGE_NAME"
-            fi
-          else
-            echo "❌ Error: Image $DEV_IMAGE was not found after build."
-            exit 1
-          fi
+          connector: ${{ matrix.dir }}
+          http-proxy: ${{ vars.HTTP_PROXY }}
+          https-proxy: ${{ vars.HTTPS_PROXY }}
