@@ -1,10 +1,7 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
-"""Unit tests for source-skillsbase's custom authenticator (components.py).
-
-These tests exercise the dataclass directly — no Docker, no Skills Base API,
-no manifest parsing. Run via `make unit-test`.
-"""
+"""Unit tests for the custom authenticator. Exercise the dataclass directly
+(no Docker, no live API); run via `make unit-test`."""
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -47,11 +44,6 @@ def _make_auth(
     )
 
 
-# ---------------------------------------------------------------------------
-# _is_expired boundary cases
-# ---------------------------------------------------------------------------
-
-
 class TestIsExpired:
     def test_far_future_is_not_expired(self):
         auth = _make_auth()
@@ -62,7 +54,7 @@ class TestIsExpired:
         assert auth._is_expired("2000-01-01T00:00:00+00:00") is True
 
     def test_within_safety_margin_is_expired(self):
-        # 30 s into the future sits inside the 60 s safety margin → treated as expired.
+        # 30s ahead sits inside the 60s safety margin → treated as expired.
         auth = _make_auth()
         soon = datetime.now(timezone.utc) + timedelta(seconds=30)
         assert auth._is_expired(soon.isoformat()) is True
@@ -80,11 +72,6 @@ class TestIsExpired:
         auth = _make_auth()
         soon_naive = (datetime.now(timezone.utc) + timedelta(hours=1)).replace(tzinfo=None)
         assert auth._is_expired(soon_naive.isoformat()) is False
-
-
-# ---------------------------------------------------------------------------
-# _get_or_refresh_token cache decision
-# ---------------------------------------------------------------------------
 
 
 class TestCacheDecision:
@@ -124,11 +111,6 @@ class TestCacheDecision:
             assert auth.token == "Bearer NEW"
 
 
-# ---------------------------------------------------------------------------
-# _refresh_and_persist_token happy path
-# ---------------------------------------------------------------------------
-
-
 class TestRefreshHappyPath:
     def test_refresh_writes_new_token_into_config(self):
         auth = _make_auth()
@@ -155,11 +137,6 @@ class TestRefreshHappyPath:
             assert auth.token == "Bearer NEW"
         delta = datetime.fromisoformat(auth.config[_EXPIRY_KEY]) - datetime.now(timezone.utc)
         assert timedelta(seconds=3590) <= delta <= timedelta(seconds=3610)
-
-
-# ---------------------------------------------------------------------------
-# _refresh_and_persist_token error branches
-# ---------------------------------------------------------------------------
 
 
 class TestRefreshErrors:

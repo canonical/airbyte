@@ -27,7 +27,7 @@ _ACCESS_TOKEN_KEY = "access_token"
 _EXPIRY_KEY = "token_expiry_date"
 _REFRESH_SAFETY_MARGIN_SECONDS = 60
 
-# Global lock to prevent concurrent streams from slamming the token endpoint simultaneously
+# Serializes token refreshes so concurrent streams don't slam the endpoint at once.
 _AUTH_LOCK = threading.Lock()
 
 
@@ -59,7 +59,6 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
         return f"Bearer {self._get_or_refresh_token()}"
 
     def _get_or_refresh_token(self) -> str:
-        # Wrap checking and refreshing in a lock so concurrent streams cooperate
         with _AUTH_LOCK:
             cached = self.config.get(_ACCESS_TOKEN_KEY)
             expiry_iso = self.config.get(_EXPIRY_KEY)
@@ -98,7 +97,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
                     failure_type=FailureType.transient_error,
                 ) from e
 
-            # 1. Handle API Rate Limits on the Auth Endpoint itself (403 or 429)
+            # Rate limit on the auth endpoint (403/429): back off until reset, then retry.
             if response.status_code in [403, 429] and "rate limit" in response.text.lower():
                 reset_timestamp = response.headers.get("X-RateLimit-Reset")
                 if reset_timestamp:
@@ -117,7 +116,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
                 time.sleep(60)
                 continue
 
-            # 2. Handle Concurrent Active Token Cap Allowance Exceeded (Encountered as 403 or 429)
+            # Concurrent active-token cap reached (403/429): unrecoverable without user action.
             if response.status_code in [403, 429] and "allowance exceeded" in response.text.lower():
                 raise AirbyteTracedException(
                     message=(
@@ -130,7 +129,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
                     failure_type=FailureType.config_error,
                 )
 
-            # 3. Handle general authentication failures
+            # Any other failure: bad credentials or subdomain.
             if not response.ok:
                 raise AirbyteTracedException(
                     message=(
@@ -146,7 +145,7 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
             expires_in = int(payload.get("expires_in", 3600))
             expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
-            # Update shared config mapping across all active stream workers
+            # Persist to the shared config and emit a control message so the token survives the run.
             self.config[_ACCESS_TOKEN_KEY] = access_token
             self.config[_EXPIRY_KEY] = expiry.isoformat()
             emit_configuration_as_airbyte_control_message(self.config)

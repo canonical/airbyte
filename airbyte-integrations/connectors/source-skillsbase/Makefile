@@ -1,17 +1,14 @@
-# Reusable commands for local dev and testing of source-skillsbase.
+# Local dev and testing commands for source-skillsbase.
 #
-# Conventions:
-#   - Real Skills Base credentials live in ./secrets/config.json (gitignored).
-#   - integration_tests/invalid_config.json holds an intentionally-bad config.
-#   - integration_tests/configured_catalog.json lists every supported stream.
-#   - integration_tests/qualifications_catalog.json is the smallest catalog
-#     (just qualifications_assignments) for quick end-to-end sync checks.
+# Configs (under secrets/ and integration_tests/):
+#   - secrets/config.json           real credentials (gitignored)
+#   - invalid_config.json           intentionally-bad config
+#   - configured_catalog.json       every supported stream
+#   - qualifications_catalog.json   smallest stream, for quick sync checks
 #
-# Token caching: Skills Base limits the number of concurrent active access
-# tokens, so each authenticated run is piped through scripts/persist_token.sh
-# which writes the CDK's CONNECTOR_CONFIG control message back into
-# secrets/config.json. That way the next invocation reuses the cached token
-# instead of requesting a new one and getting 'Access token allowance exceeded'.
+# Authenticated runs pipe through scripts/persist_token.sh, which caches the
+# refreshed token in secrets/config.json so the next cold run reuses it instead
+# of tripping Skills Base's concurrent-token allowance.
 
 SHELL := /bin/bash
 .SHELLFLAGS := -o pipefail -c
@@ -77,14 +74,11 @@ read-qualifications:  ## Read only qualifications_assignments (smallest stream, 
 	$(DOCKER_RUN) read --config $(CONFIG) --catalog $(QA_CATALOG) | $(PERSIST)
 
 test-acceptance: build  ## Run Connector Acceptance Tests via the official Docker image (rebuilds image and pre-warms token first).
-	# Pre-warm the access_token cache so the parallel CAT containers reuse it
-	# instead of each calling /oauth/access_token and tripping Skills Base's
-	# concurrent-token allowance.
+	# Pre-warm the token cache so parallel CAT containers reuse it instead of
+	# each hitting /oauth/access_token and tripping the concurrent-token allowance.
 	$(DOCKER_RUN) check --config $(CONFIG) | $(PERSIST)
-	# CAT's backward-compatibility fixture (test_backward_compatibility) tries
-	# to docker-pull $(DOCKER_REPO):latest from Docker Hub at setup time, which
-	# fails for Canonical-only connectors that aren't published there. Deselect
-	# those tests at pytest collection time so the fixture never runs.
+	# Deselect test_backward_compatibility: its fixture docker-pulls
+	# $(DOCKER_REPO):latest, which doesn't exist for this Canonical-only connector.
 	docker run --rm \
 	  -v "$(CURDIR):/test_input" \
 	  -v /var/run/docker.sock:/var/run/docker.sock \

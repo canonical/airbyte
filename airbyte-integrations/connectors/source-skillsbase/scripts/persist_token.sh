@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Streams an Airbyte CDK invocation's stdout through this filter to persist
-# any CONNECTOR_CONFIG control messages back to the given config.json path.
+# Filters a connector's stdout and writes any CONNECTOR_CONFIG control message
+# back to config.json, persisting the cached token across cold `docker run`s.
 #
-# Why: Skills Base caps the number of concurrent active access tokens. Each
-# `docker run` of the connector starts cold, so without persisting the
-# cached token between invocations the next run requests a new token and
-# Skills Base rejects it with "Access token allowance exceeded". Production
-# Airbyte handles this via the platform; locally the same behaviour is replayed
-# by writing the updated config back to disk.
+# Why: Skills Base caps concurrent active tokens, so a fresh token each run is
+# rejected with "Access token allowance exceeded". Production Airbyte persists
+# config via the platform; this replays that locally.
 #
 # Usage: <connector cmd> | scripts/persist_token.sh secrets/config.json
 
