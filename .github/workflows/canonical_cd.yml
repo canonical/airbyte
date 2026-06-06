@@ -46,3 +46,4 @@ jobs:
           connector: ${{ matrix.dir }}
           http-proxy: ${{ vars.HTTP_PROXY }}
           https-proxy: ${{ vars.HTTPS_PROXY }}
+          dry-run: true
