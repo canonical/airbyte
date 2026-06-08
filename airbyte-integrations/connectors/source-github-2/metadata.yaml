@@ -14,7 +14,7 @@ data:
   connectorSubtype: api
   connectorType: source
   dockerImageTag: 1.0.0
-  canonicalImageTag: 1.0.0-canonical-1.1.2-test
+  canonicalImageTag: 1.0.0-canonical-1.1.2
   dockerRepository: airbyte/source-github-2
   documentationUrl: https://docs.airbyte.com/integrations/sources/github-2
   githubIssueLabel: source-github-2
