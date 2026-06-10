@@ -33,7 +33,8 @@ runs:
           echo "connectors_list_json=[]" >> "$GITHUB_OUTPUT"
         else
           echo "Changed connectors: $CHANGED_DIRS"
-          echo "connectors_list=$CHANGED_DIRS" >> $GITHUB_ENV
+          CONNECTORS_LIST=$(echo "$CHANGED_DIRS" | paste -sd' ' -)
+          echo "connectors_list=$CONNECTORS_LIST" >> "$GITHUB_ENV"
           JSON=$(echo "$CHANGED_DIRS" | tr ' ' '\n' | jq -R . | jq -s -c .)
           echo "🧪 JSON array: $JSON"
           echo "connectors_list_json=$JSON" >> "$GITHUB_OUTPUT"
