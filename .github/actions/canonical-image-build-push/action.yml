@@ -25,6 +25,14 @@ inputs:
     description: "Optional HTTPS proxy passed as a build arg and baked into the manifest-only proxy wrapper."
     required: false
     default: ""
+  grpc-proxy:
+    description: "Optional gRPC proxy passed as a build arg (sets grpc_proxy env var in the image)."
+    required: false
+    default: ""
+  grpc-proxy-exp:
+    description: "Optional gRPC experimental proxy passed as a build arg (sets GRPC_PROXY_EXP env var in the image)."
+    required: false
+    default: ""
 
 outputs:
   image-name:
@@ -91,6 +99,8 @@ runs:
         IMAGE_VERSION_OVERRIDE: ${{ inputs.image-version-override }}
         IMAGE_HTTP_PROXY: ${{ inputs.http-proxy }}
         IMAGE_HTTPS_PROXY: ${{ inputs.https-proxy }}
+        IMAGE_GRPC_PROXY: ${{ inputs.grpc-proxy }}
+        IMAGE_GRPC_PROXY_EXP: ${{ inputs.grpc-proxy-exp }}
         DRY_RUN: ${{ inputs.dry-run }}
       run: |
         set -euo pipefail
@@ -130,6 +140,10 @@ runs:
           --build-arg CONNECTOR_NAME="$CONNECTOR" \
           --build-arg HTTP_PROXY="$IMAGE_HTTP_PROXY" \
           --build-arg HTTPS_PROXY="$IMAGE_HTTPS_PROXY" \
+          --build-arg http_proxy="$IMAGE_HTTP_PROXY" \
+          --build-arg https_proxy="$IMAGE_HTTPS_PROXY" \
+          --build-arg grpc_proxy="$IMAGE_GRPC_PROXY" \
+          --build-arg GRPC_PROXY_EXP="$IMAGE_GRPC_PROXY_EXP" \
           "airbyte-integrations/connectors/$CONNECTOR"
 
         if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
