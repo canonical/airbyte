@@ -146,21 +146,6 @@ runs:
         fi
         echo "✅ Found built image: $DEV_IMAGE"
 
-        # Bake proxy env vars into the image as a thin layer on top,
-        # so they are present at runtime without interfering with the build.
-        if [ -n "$IMAGE_HTTP_PROXY" ]; then
-          echo "🔧 Injecting proxy env vars into image..."
-          docker build --load -t "$DEV_IMAGE" - <<EOF
-FROM $DEV_IMAGE
-ENV HTTP_PROXY=${IMAGE_HTTP_PROXY}
-ENV HTTPS_PROXY=${IMAGE_HTTPS_PROXY}
-ENV http_proxy=${IMAGE_HTTP_PROXY}
-ENV https_proxy=${IMAGE_HTTPS_PROXY}
-ENV grpc_proxy=${IMAGE_GRPC_PROXY}
-ENV GRPC_PROXY_EXP=${IMAGE_GRPC_PROXY_EXP}
-EOF
-        fi
-
         if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
           echo "🛠️ Detected manifest-only connector."
           IMAGE_USER="$({
@@ -173,6 +158,11 @@ EOF
             .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
           PUSH_IMAGE="$CUSTOM_IMAGE"
         else
+          # For non-manifest connectors, inject proxy env vars as a thin layer.
+          if [ -n "$IMAGE_HTTP_PROXY" ]; then
+            echo "🔧 Injecting proxy env vars into image..."
+            .github/scripts/build_custom_docker_image.sh "$DEV_IMAGE" "$DEV_IMAGE"
+          fi
           PUSH_IMAGE="$DEV_IMAGE"
         fi
 
