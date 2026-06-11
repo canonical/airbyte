@@ -154,8 +154,14 @@ runs:
 
         if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
           echo "🛠️ Detected manifest-only connector."
+          IMAGE_USER="$({
+            docker run --rm --user root --entrypoint sh "$CONNECTOR_BASE_IMAGE" \
+              -c 'cut -d: -f1 /etc/passwd | grep -qx airbyte && echo airbyte || echo root'
+          })"
+          echo "ℹ️ Resolved manifest-only image user '$IMAGE_USER' from base image $CONNECTOR_BASE_IMAGE"
           CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
-          .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
+          IMAGE_USER="$IMAGE_USER" \
+            .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
           PUSH_IMAGE="$CUSTOM_IMAGE"
         else
           PUSH_IMAGE="$DEV_IMAGE"
