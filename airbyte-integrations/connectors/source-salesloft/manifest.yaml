@@ -1448,7 +1448,6 @@ definitions:
           request_parameters:
             sort_by: updated_at
             sort_direction: ASC
-            type: "{{ config.get('activity_histories_action_type', '') }}"
         record_selector:
           type: RecordSelector
           extractor:
@@ -1481,6 +1480,7 @@ definitions:
           - "%Y-%m-%dT%H:%M:%S.%f%z"
         datetime_format: "%Y-%m-%dT%H:%M:%S.%fZ"
         step: P30D
+        cursor_granularity: PT1S
         start_datetime:
           type: MinMaxDatetime
           datetime: "{{ config['start_date'] }}"
