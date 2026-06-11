@@ -134,6 +134,7 @@ runs:
         echo "🚀 Building $CONNECTOR with direct Docker buildx flow..."
         docker buildx build \
           --load \
+          --network=host \
           -f "$DOCKERFILE_PATH" \
           -t "$DEV_IMAGE" \
           --build-arg BASE_IMAGE="$CONNECTOR_BASE_IMAGE" \
