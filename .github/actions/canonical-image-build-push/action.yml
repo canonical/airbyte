@@ -138,12 +138,6 @@ runs:
           -t "$DEV_IMAGE" \
           --build-arg BASE_IMAGE="$CONNECTOR_BASE_IMAGE" \
           --build-arg CONNECTOR_NAME="$CONNECTOR" \
-          --build-arg HTTP_PROXY="$IMAGE_HTTP_PROXY" \
-          --build-arg HTTPS_PROXY="$IMAGE_HTTPS_PROXY" \
-          --build-arg http_proxy="$IMAGE_HTTP_PROXY" \
-          --build-arg https_proxy="$IMAGE_HTTPS_PROXY" \
-          --build-arg grpc_proxy="$IMAGE_GRPC_PROXY" \
-          --build-arg GRPC_PROXY_EXP="$IMAGE_GRPC_PROXY_EXP" \
           "airbyte-integrations/connectors/$CONNECTOR"
 
         if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
@@ -164,6 +158,11 @@ runs:
             .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
           PUSH_IMAGE="$CUSTOM_IMAGE"
         else
+          # For non-manifest connectors, inject proxy env vars as a thin layer.
+          if [ -n "$IMAGE_HTTP_PROXY" ]; then
+            echo "🔧 Injecting proxy env vars into image..."
+            .github/scripts/build_custom_docker_image.sh "$DEV_IMAGE" "$DEV_IMAGE"
+          fi
           PUSH_IMAGE="$DEV_IMAGE"
         fi
 
