@@ -55,34 +55,83 @@ This connector supports the following entities and actions. For more details, se
 | Ticket Fields | [List](./REFERENCE.md#ticket-fields-list), [Get](./REFERENCE.md#ticket-fields-get), [Context Store Search](./REFERENCE.md#ticket-fields-context-store-search) |
 | Brands | [List](./REFERENCE.md#brands-list), [Get](./REFERENCE.md#brands-get), [Context Store Search](./REFERENCE.md#brands-context-store-search) |
 | Views | [List](./REFERENCE.md#views-list), [Get](./REFERENCE.md#views-get) |
-| Macros | [Get](./REFERENCE.md#macros-get), [List](./REFERENCE.md#macros-list) |
-| Triggers | [List](./REFERENCE.md#triggers-list), [Get](./REFERENCE.md#triggers-get) |
-| Automations | [List](./REFERENCE.md#automations-list), [Get](./REFERENCE.md#automations-get) |
+| Macros | [Get](./REFERENCE.md#macros-get), [List](./REFERENCE.md#macros-list), [Context Store Search](./REFERENCE.md#macros-context-store-search) |
+| Triggers | [List](./REFERENCE.md#triggers-list), [Get](./REFERENCE.md#triggers-get), [Context Store Search](./REFERENCE.md#triggers-context-store-search) |
+| Automations | [List](./REFERENCE.md#automations-list), [Get](./REFERENCE.md#automations-get), [Context Store Search](./REFERENCE.md#automations-context-store-search) |
 | Tags | [List](./REFERENCE.md#tags-list), [Context Store Search](./REFERENCE.md#tags-context-store-search) |
 | Satisfaction Ratings | [List](./REFERENCE.md#satisfaction-ratings-list), [Get](./REFERENCE.md#satisfaction-ratings-get), [Context Store Search](./REFERENCE.md#satisfaction-ratings-context-store-search) |
-| Group Memberships | [List](./REFERENCE.md#group-memberships-list) |
-| Organization Memberships | [List](./REFERENCE.md#organization-memberships-list) |
-| Sla Policies | [List](./REFERENCE.md#sla-policies-list), [Get](./REFERENCE.md#sla-policies-get) |
+| Group Memberships | [List](./REFERENCE.md#group-memberships-list), [Context Store Search](./REFERENCE.md#group-memberships-context-store-search) |
+| Organization Memberships | [List](./REFERENCE.md#organization-memberships-list), [Context Store Search](./REFERENCE.md#organization-memberships-context-store-search) |
+| Sla Policies | [List](./REFERENCE.md#sla-policies-list), [Get](./REFERENCE.md#sla-policies-get), [Context Store Search](./REFERENCE.md#sla-policies-context-store-search) |
 | Ticket Forms | [List](./REFERENCE.md#ticket-forms-list), [Get](./REFERENCE.md#ticket-forms-get), [Context Store Search](./REFERENCE.md#ticket-forms-context-store-search) |
-| Articles | [List](./REFERENCE.md#articles-list), [Get](./REFERENCE.md#articles-get) |
-| Article Attachments | [List](./REFERENCE.md#article-attachments-list), [Get](./REFERENCE.md#article-attachments-get), [Download](./REFERENCE.md#article-attachments-download) |
+| Articles | [List](./REFERENCE.md#articles-list), [Get](./REFERENCE.md#articles-get), [Context Store Search](./REFERENCE.md#articles-context-store-search) |
+| Article Attachments | [List](./REFERENCE.md#article-attachments-list), [Get](./REFERENCE.md#article-attachments-get), [Download](./REFERENCE.md#article-attachments-download), [Context Store Search](./REFERENCE.md#article-attachments-context-store-search) |
 
 
 ## Zendesk-Support API docs
 
 See the official [Zendesk-Support API reference](https://developer.zendesk.com/api-reference/ticketing/introduction/).
 
-## SDK installation
+## Interfaces
+
+Use the Zendesk-Support connector through the Airbyte Agent CLI, the Python SDK, or the API.
+
+### CLI
+
+Install the CLI:
+
+```bash
+curl -fsSL https://airbyte.ai/install.sh | bash
+```
+
+Authenticate with Airbyte:
+
+```bash
+airbyte-agent login
+```
+
+Create the connector. The CLI opens the hosted setup flow:
+
+```bash
+airbyte-agent connectors create --json '{
+  "workspace": "<your_workspace_name>",
+  "name": "zendesk-support"
+}'
+```
+
+Describe the connector to see its supported entities and actions:
+
+```bash
+airbyte-agent connectors describe --json '{
+  "workspace": "<your_workspace_name>",
+  "name": "zendesk-support"
+}'
+```
+
+Execute an action:
+
+```bash
+airbyte-agent connectors execute --json '{
+  "workspace": "<your_workspace_name>",
+  "name": "zendesk-support",
+  "entity": "tickets",
+  "action": "list"
+}'
+```
+
+### Python SDK
+
+#### Installation
 
 ```bash
 uv pip install airbyte-agent-sdk
 ```
 
-## SDK usage
+#### Usage
 
 Connectors can run in hosted or open source mode.
 
-### Hosted
+##### Hosted
 
 In hosted mode, API credentials are stored securely in Airbyte Agents. You provide your Airbyte credentials instead.
 If your Airbyte client can access multiple organizations, also set `organization_id`.
@@ -272,7 +321,7 @@ async def zendesk_support_execute(entity: str, action: str, params: dict | None 
     return result.model_dump(mode="json") if hasattr(result, "model_dump") else result
 ```
 
-### Open source
+##### Open source
 
 In open source mode, you provide API credentials directly to the connector.
 
@@ -374,6 +423,10 @@ async def zendesk_support_execute(entity: str, action: str, params: dict | None 
 ## Authentication
 
 For all authentication options, see the connector's [authentication documentation](AUTH.md).
+
+## IP allow list
+
+If your organization restricts access to specific IPs, add the [Airbyte Agents IP addresses](https://docs.airbyte.com/ai-agents/admin/ip-allowlist) to your allow list.
 
 ## Version information
 
