@@ -48,8 +48,9 @@ class ActivityHistoriesHttpRequester(HttpRequester):
             stream_slice=stream_slice,
             next_page_token=next_page_token,
         )
-        if params.get("type") in ("", None, "None"):
-            params.pop("type", None)
+        action_type = self.config.get("activity_histories_action_type", "")
+        if action_type:
+            params["type"] = action_type
         return params
 
     def send_request(self, *args: Any, **kwargs: Any) -> Any:

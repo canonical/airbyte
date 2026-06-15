@@ -25,6 +25,14 @@ inputs:
     description: "Optional HTTPS proxy passed as a build arg and baked into the manifest-only proxy wrapper."
     required: false
     default: ""
+  grpc-proxy:
+    description: "Optional gRPC proxy passed as a build arg (sets grpc_proxy env var in the image)."
+    required: false
+    default: ""
+  grpc-proxy-exp:
+    description: "Optional gRPC experimental proxy passed as a build arg (sets GRPC_PROXY_EXP env var in the image)."
+    required: false
+    default: ""
 
 outputs:
   image-name:
@@ -91,6 +99,8 @@ runs:
         IMAGE_VERSION_OVERRIDE: ${{ inputs.image-version-override }}
         IMAGE_HTTP_PROXY: ${{ inputs.http-proxy }}
         IMAGE_HTTPS_PROXY: ${{ inputs.https-proxy }}
+        IMAGE_GRPC_PROXY: ${{ inputs.grpc-proxy }}
+        IMAGE_GRPC_PROXY_EXP: ${{ inputs.grpc-proxy-exp }}
         DRY_RUN: ${{ inputs.dry-run }}
       run: |
         set -euo pipefail
@@ -128,8 +138,6 @@ runs:
           -t "$DEV_IMAGE" \
           --build-arg BASE_IMAGE="$CONNECTOR_BASE_IMAGE" \
           --build-arg CONNECTOR_NAME="$CONNECTOR" \
-          --build-arg HTTP_PROXY="$IMAGE_HTTP_PROXY" \
-          --build-arg HTTPS_PROXY="$IMAGE_HTTPS_PROXY" \
           "airbyte-integrations/connectors/$CONNECTOR"
 
         if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$DEV_IMAGE"; then
@@ -140,10 +148,21 @@ runs:
 
         if grep -q "docker.io/airbyte/source-declarative-manifest" "$METADATAFILE"; then
           echo "🛠️ Detected manifest-only connector."
+          IMAGE_USER="$({
+            docker run --rm --user root --entrypoint sh "$CONNECTOR_BASE_IMAGE" \
+              -c 'cut -d: -f1 /etc/passwd | grep -qx airbyte && echo airbyte || echo root'
+          })"
+          echo "ℹ️ Resolved manifest-only image user '$IMAGE_USER' from base image $CONNECTOR_BASE_IMAGE"
           CUSTOM_IMAGE="airbyte/$CONNECTOR:custom"
-          .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
+          IMAGE_USER="$IMAGE_USER" \
+            .github/scripts/build_custom_docker_image.sh "$CUSTOM_IMAGE" "$DEV_IMAGE"
           PUSH_IMAGE="$CUSTOM_IMAGE"
         else
+          # For non-manifest connectors, inject proxy env vars as a thin layer.
+          if [ -n "$IMAGE_HTTP_PROXY" ]; then
+            echo "🔧 Injecting proxy env vars into image..."
+            .github/scripts/build_custom_docker_image.sh "$DEV_IMAGE" "$DEV_IMAGE"
+          fi
           PUSH_IMAGE="$DEV_IMAGE"
         fi
 

@@ -22,7 +22,7 @@ data:
   connectorSubtype: api
   connectorType: source
   definitionId: 41991d12-d4b5-439e-afd0-260a31d4c53f
-  canonicalImageTag: 1.5.2-canonical-1.2.3
+  canonicalImageTag: 1.5.2-canonical-1.2.6
   dockerImageTag: 1.5.2
   dockerRepository: airbyte/source-salesloft
   githubIssueLabel: source-salesloft
