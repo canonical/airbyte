@@ -228,8 +228,8 @@ class MarketoExportBase(IncrementalMarketoStream):
         date_slices = super().stream_slices(sync_mode, stream_state, **kwargs)
 
         for date_slice in date_slices:
-            # TODO: this implementation is overriden in the upstream airbyte. we need to revisit it. 
-            # param = {"fields": [], "filter": {self.export_date_filter_field: date_slice}}
+            # this implementation is overriden in the upstream airbyte. we need to revisit it.
+            # param = {"fields": [], "filter": {self.export_date_filter_field: date_slice}}
             param = {"fields": [], "filter": {self.filter_field: date_slice}}
             param["fields"].extend(self.stream_fields)
             param["filter"].update(self.stream_filter)
