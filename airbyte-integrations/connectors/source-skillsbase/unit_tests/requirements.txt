@@ -1,0 +1,5 @@
+# The connector itself is manifest-only and ships no runtime Python deps; this
+# file is for the host-side `make unit-test` target only.
+pytest>=8.0
+requests-mock>=1.12
+airbyte-cdk>=7.10

@@ -1,0 +1,632 @@
+version: 6.60.16
+
+type: DeclarativeSource
+
+description: >-
+  Skills Base source connector. This connector reads person-linked skill ratings
+  and qualification assignments from the Skills Base REST API.
+
+check:
+  type: CheckStream
+  stream_names:
+    - people
+
+definitions:
+  linked:
+    HttpRequester:
+      authenticator:
+        type: CustomAuthenticator
+        client_id: "{{ config['client_id'] }}"
+        class_name: components.ClientCredentialsConfigUpdaterAuthenticator
+        client_secret: "{{ config['client_secret'] }}"
+        token_refresh_endpoint: "{{ config['api_host'] }}/oauth/access_token"
+      error_handler:
+        type: CompositeErrorHandler
+        error_handlers:
+          - type: DefaultErrorHandler
+            max_retries: 8
+            response_filters:
+              - type: HttpResponseFilter
+                action: IGNORE
+                http_codes:
+                  - 404
+              - type: HttpResponseFilter
+                action: IGNORE
+                http_codes:
+                  - 409
+              - type: HttpResponseFilter
+                action: RATE_LIMITED
+                predicate: >-
+                  {{ 'rate limit exceeded' in (response.get('message', '') |
+                  lower) }}
+                http_codes:
+                  - 403
+              - type: HttpResponseFilter
+                action: RATE_LIMITED
+                http_codes:
+                  - 429
+              - type: HttpResponseFilter
+                action: RETRY
+                http_codes:
+                  - 502
+                  - 503
+                  - 504
+            backoff_strategies:
+              - type: WaitUntilTimeFromHeader
+                header: x-ratelimit-reset
+                datetime_format: "%s"
+              - type: WaitTimeFromHeader
+                header: retry-after
+              - type: ConstantBackoffStrategy
+                backoff_time_in_seconds: 180
+      request_headers:
+        Content-Type: application/json
+    SimpleRetriever:
+      paginator:
+        type: DefaultPaginator
+        page_token_option:
+          type: RequestOption
+          field_name: start_index
+          inject_into: request_parameter
+        pagination_strategy:
+          type: PageIncrement
+          page_size: 500
+          start_from_page: 0
+          inject_on_first_request: true
+
+streams:
+  - type: DeclarativeStream
+    name: people
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/people"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          email:
+            type: [string, "null"]
+          locked:
+            type: [boolean, "null"]
+          source:
+            type: [string, "null"]
+          role_id:
+            type: [integer, "null"]
+          surname:
+            type: [string, "null"]
+          team_id:
+            type: [integer, "null"]
+          role_ids:
+            type: [array, "null"]
+            items:
+              type: [integer, "null"]
+          skillset:
+            type: [string, "null"]
+          full_name:
+            type: [string, "null"]
+          first_name:
+            type: [string, "null"]
+          last_login:
+            type: [string, "null"]
+          location_id:
+            type: [integer, "null"]
+          login_enabled:
+            type: [boolean, "null"]
+          security_group_id:
+            type: [integer, "null"]
+          last_self_assessment:
+            type: [string, "null"]
+          self_assessment_status:
+            type: [string, "null"]
+          supervisor_assessment_status:
+            type: [string, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: skill_ratings
+    retriever:
+      type: SimpleRetriever
+      requester:
+        type: HttpRequester
+        url: >-
+          {{ config['api_host'] }}/1.0/skillratings/person/{{
+          stream_partition['person_id'] }}
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/0"
+            parent_key: id
+            partition_field: person_id
+    primary_key:
+      - person_id
+      - skill_id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          type:
+            type: [string, "null"]
+          skill_id:
+            type: [integer, "null"]
+          person_id:
+            type: [integer, "null"]
+          synced_at:
+            type: [string, "null"]
+          skill_name:
+            type: [string, "null"]
+          skill_level:
+            type: [string, "null"]
+          target_level:
+            type: [integer, "null"]
+          interest_level:
+            type: [string, "null"]
+        additionalProperties: true
+    transformations:
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path:
+              - person_id
+            value: "{{ stream_partition['person_id'] }}"
+          - type: AddedFieldDefinition
+            path:
+              - synced_at
+            value: "{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+
+  - type: DeclarativeStream
+    name: qualifications_assignments
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/2.0/qualificationassignments"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          url:
+            type: [string, "null"]
+          issuer:
+            type: [string, "null"]
+          status:
+            type: [string, "null"]
+          end_date:
+            type: [string, "null"]
+          badge_url:
+            type: [string, "null"]
+          person_id:
+            type: [integer, "null"]
+          start_date:
+            type: [string, "null"]
+          qualification_id:
+            type: [integer, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: skills
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/skills"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          name:
+            type: [string, "null"]
+          description:
+            type: [string, "null"]
+          skill_category_id:
+            type: [integer, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: skill_categories
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/skillcategories"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          name:
+            type: [string, "null"]
+          description:
+            type: [string, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: teams
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/teams"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          name:
+            type: [string, "null"]
+          parent_team_id:
+            type: [integer, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: qualifications
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/2.0/qualifications"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          name:
+            type: [string, "null"]
+          description:
+            type: [string, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: courses
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/courses"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          name:
+            type: [string, "null"]
+          description:
+            type: [string, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: training_completions
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/trainingcompletions"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          id:
+            type: [integer, "null"]
+          person_id:
+            type: [integer, "null"]
+          course_id:
+            type: [integer, "null"]
+          status:
+            type: [string, "null"]
+          completion_date:
+            type: [string, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: skill_rating_averages
+    retriever:
+      type: SimpleRetriever
+      paginator:
+        $ref: "#/definitions/linked/SimpleRetriever/paginator"
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/1.0/skillratings"
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+    primary_key:
+      - skill_id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          type:
+            type: [string, "null"]
+          skill_id:
+            type: [integer, "null"]
+          skill_name:
+            type: [string, "null"]
+          skill_level:
+            type: [string, "null"]
+          interest_level:
+            type: [string, "null"]
+        additionalProperties: true
+
+spec:
+  type: Spec
+  connection_specification:
+    type: object
+    $schema: http://json-schema.org/draft-07/schema#
+    required:
+      - api_host
+      - client_id
+      - client_secret
+      - access_token
+      - token_expiry_date
+    properties:
+      api_host:
+        type: string
+        description: >-
+          The API host for your Skills Base instance, for example
+          https://api.skills-base.com. Do not include a trailing slash.
+        order: 0
+        title: API Host
+        examples:
+          - https://api.skills-base.com
+      client_id:
+        type: string
+        description: Skills Base API client ID used to fetch access tokens.
+        order: 1
+        title: Client ID
+        airbyte_secret: true
+      access_token:
+        type: string
+        description: >-
+          OAuth access token cached by the connector after a successful
+          client_credentials exchange. Do not set manually; populated and
+          refreshed automatically.
+        order: 3
+        title: Access Token (auto-managed)
+        airbyte_hidden: true
+        airbyte_secret: true
+        default: ""
+      client_secret:
+        type: string
+        description: Skills Base API client secret used to fetch access tokens.
+        order: 2
+        title: Client Secret
+        airbyte_secret: true
+      token_expiry_date:
+        type: string
+        description: >-
+          ISO-8601 timestamp marking when the cached access token expires.
+          Auto-managed by the connector.
+        order: 4
+        title: Token Expiry (auto-managed)
+        airbyte_hidden: true
+        default: ""
+    additionalProperties: true
+
+metadata:
+  testedStreams:
+    people:
+      isStale: false
+      hasRecords: true
+      streamHash: 14c57a523cdd06e284e4e22af46425348a5e0503
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+    skill_ratings:
+      isStale: false
+      hasRecords: true
+      streamHash: f2ecc3b28fd91b79944d0a8b98b422b12fc4fad2
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+    qualifications_assignments:
+      isStale: false
+      hasRecords: false
+      streamHash: c7562241785b705ed9e2522592107994d20282e3
+      hasResponse: false
+      primaryKeysAreUnique: false
+      primaryKeysArePresent: false
+      responsesAreSuccessful: false
+  autoImportSchema: {}
+  applied_migrations:
+    - migration: HttpRequesterUrlBaseToUrl
+      to_version: "*"
+      migrated_at: "2026-05-20T09:13:25.270281+00:00"
+      from_version: 4.6.2
+    - migration: HttpRequesterPathToUrl
+      to_version: "*"
+      migrated_at: "2026-05-20T09:13:25.270784+00:00"
+      from_version: 4.6.2

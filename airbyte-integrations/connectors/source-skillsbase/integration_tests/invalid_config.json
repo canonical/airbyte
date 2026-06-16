@@ -1,0 +1,7 @@
+{
+  "api_host": "https://api.skills-base.com",
+  "client_id": "invalid-client-id",
+  "client_secret": "invalid-client-secret",
+  "access_token": "",
+  "token_expiry_date": ""
+}

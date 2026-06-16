@@ -1,0 +1,42 @@
+# See [Connector Acceptance Tests](https://docs.airbyte.com/connector-development/testing-connectors/connector-acceptance-tests-reference)
+# for more information about how to configure these tests
+connector_image: airbyte/source-skillsbase:dev
+acceptance_tests:
+  spec:
+    tests:
+      - spec_path: "integration_tests/spec.json"
+        # Canonical-only connector: no Docker Hub image to diff the spec against.
+        backward_compatibility_tests_config:
+          disable_for_version: "1.0.0"
+  connection:
+    tests:
+      - config_path: "secrets/config.json"
+        status: "succeed"
+      - config_path: "integration_tests/invalid_config.json"
+        status: "failed"
+  discovery:
+    tests:
+      - config_path: "secrets/config.json"
+        # No Docker Hub image to diff the catalog against (see `spec` above).
+        backward_compatibility_tests_config:
+          disable_for_version: "1.0.0"
+  basic_read:
+    tests:
+      - config_path: "secrets/config.json"
+        # Restrict CAT to the smallest stream (~15 records); the people/skill_ratings
+        # substream makes one call per person and hits rate limits. Full multi-stream
+        # sync stays available via `make read`.
+        configured_catalog_path: "integration_tests/qualifications_catalog.json"
+        empty_streams: []
+        # Schemas aren't yet exhaustive; allow extra columns. Set true once confirmed.
+        fail_on_extra_columns: false
+        # CDK interleaves a traceback with JSON on stdout, so CAT's line parser can't
+        # reconstruct the AirbyteTraceMessage. Disable until the CDK output is fixed.
+        expect_trace_message_on_failure: false
+  incremental:
+    bypass_reason: "Incremental test requires an abnormal_state fixture; will be added once a baseline sync has been verified against the sandbox."
+  full_refresh:
+    tests:
+      - config_path: "secrets/config.json"
+        # Smallest stream only, to avoid rate limits (see `basic_read` above).
+        configured_catalog_path: "integration_tests/qualifications_catalog.json"
