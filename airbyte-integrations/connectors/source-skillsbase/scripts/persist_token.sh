@@ -35,7 +35,7 @@ while IFS= read -r line; do
 done
 
 if [ -n "$LATEST" ]; then
-  printf '%s' "$LATEST" | jq '.' > "$CONFIG_PATH.tmp"
+  jq -s '.[0] * .[1]' "$CONFIG_PATH" <(printf '%s' "$LATEST") > "$CONFIG_PATH.tmp"
   mv "$CONFIG_PATH.tmp" "$CONFIG_PATH"
   echo "🔑 Persisted refreshed Skills Base token to $CONFIG_PATH" >&2
 fi

@@ -148,7 +148,9 @@ class ClientCredentialsConfigUpdaterAuthenticator(DeclarativeAuthenticator):
             # Persist to the shared config and emit a control message so the token survives the run.
             self.config[_ACCESS_TOKEN_KEY] = access_token
             self.config[_EXPIRY_KEY] = expiry.isoformat()
-            emit_configuration_as_airbyte_control_message(self.config)
+            emit_configuration_as_airbyte_control_message(
+                {_ACCESS_TOKEN_KEY: access_token, _EXPIRY_KEY: expiry.isoformat()}
+            )
 
             logger.info("Skills Base access token refreshed; expires in %s seconds.", expires_in)
             return access_token

@@ -5,9 +5,7 @@
     "required": [
       "api_host",
       "client_id",
-      "client_secret",
-      "access_token",
-      "token_expiry_date"
+      "client_secret"
     ],
     "properties": {
       "api_host": {
