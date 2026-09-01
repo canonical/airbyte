@@ -1,0 +1,21 @@
+documentationUrl: https://docs.airbyte.com/integrations/sources/expensify
+connectionSpecification:
+  $schema: http://json-schema.org/draft-07/schema#
+  title: Expensify Spec
+  type: object
+  required:
+    - partner_user_id
+    - partner_user_secret
+  additionalProperties: true
+  properties:
+    partner_user_id:
+      type: string
+      title: Partner User ID
+      description: The Partner User ID, generated from the Expensify Integration Server credentials page.
+      order: 0
+    partner_user_secret:
+      type: string
+      title: Partner User Secret
+      description: The Partner User Secret, generated from the Expensify Integration Server credentials page.
+      airbyte_secret: true
+      order: 1

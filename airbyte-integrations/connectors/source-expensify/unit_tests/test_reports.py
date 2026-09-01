@@ -9,7 +9,7 @@ from airbyte_cdk.models import SyncMode
 
 @pytest.fixture
 def stream():
-    return ExpensifyReports(partner_user_id="user-id", partner_user_secret="user-secret")
+    return ExpensifyReports(name="reports", partner_user_id="user-id", partner_user_secret="user-secret")
 
 
 class TestReadRecords:
