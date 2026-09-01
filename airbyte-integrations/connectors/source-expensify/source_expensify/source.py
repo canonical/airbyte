@@ -1,13 +1,17 @@
+import csv
+import time
+from io import StringIO
 from typing import Any, Iterable, List, Mapping, Optional, Tuple
+
+import requests
+
+from airbyte_cdk.models import SyncMode
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
-from airbyte_cdk.models import SyncMode
-import requests
-import time
-import csv
-from io import StringIO
+
 
 EXPENSIFY_URL = "https://integrations.expensify.com/Integration-Server/ExpensifyIntegrations"
+
 
 class ExpensifyReports(Stream):
     # Airbyte uses this to know what column uniquely identifies a row
@@ -25,7 +29,6 @@ class ExpensifyReports(Stream):
         stream_slice: Mapping[str, Any] = None,
         stream_state: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
-        
         # Step 1: Trigger the Export Job
         file_name = self._trigger_export()
 
@@ -38,7 +41,7 @@ class ExpensifyReports(Stream):
         # Step 4: Parse CSV in memory and yield rows to Airbyte
         reader = csv.DictReader(StringIO(csv_data))
         for row in reader:
-            # Airbyte takes these yielded dicts, validates them against your schema, 
+            # Airbyte takes these yielded dicts, validates them against your schema,
             # and streams them to Postgres
             yield row
 
@@ -46,16 +49,13 @@ class ExpensifyReports(Stream):
         payload = {
             "requestJobDescription": {
                 "type": "file",
-                "credentials": {
-                    "partnerUserID": self.partner_user_id,
-                    "partnerUserSecret": self.partner_user_secret
-                },
+                "credentials": {"partnerUserID": self.partner_user_id, "partnerUserSecret": self.partner_user_secret},
                 "onReceive": {"immediateResponse": ["returnRandomFileName"]},
                 "inputSettings": {"type": "combinedReportData"},
-                "outputSettings": {"fileExtension": "csv"}
+                "outputSettings": {"fileExtension": "csv"},
             },
             # Tell Expensify exactly what columns to output
-            "template": "<#list reports as report>${report.reportID},${report.amount}<#lt></#list>"
+            "template": "<#list reports as report>${report.reportID},${report.amount}<#lt></#list>",
         }
         response = requests.post(EXPENSIFY_URL, data=payload)
         response.raise_for_status()
@@ -68,25 +68,22 @@ class ExpensifyReports(Stream):
             payload = {
                 "requestJobDescription": {
                     "type": "download",
-                    "credentials": {
-                        "partnerUserID": self.partner_user_id,
-                        "partnerUserSecret": self.partner_user_secret
-                    },
+                    "credentials": {"partnerUserID": self.partner_user_id, "partnerUserSecret": self.partner_user_secret},
                     "fileName": file_name,
-                    "fileSystem": "integrationServer"
+                    "fileSystem": "integrationServer",
                 }
             }
             response = requests.post(EXPENSIFY_URL, data=payload)
             if response.status_code == 200:
-                return # File is ready
-            time.sleep(30) # Wait 30 seconds before polling again
-            
+                return  # File is ready
+            time.sleep(30)  # Wait 30 seconds before polling again
+
         raise Exception(f"Expensify file {file_name} failed to generate in time.")
 
     def _download_file(self, file_name: str) -> str:
         # Re-request the download now that we know it's ready
         payload = {
-             # ... same payload as _wait_for_file ...
+            # ... same payload as _wait_for_file ...
         }
         response = requests.post(EXPENSIFY_URL, data=payload)
         response.raise_for_status()
@@ -104,9 +101,4 @@ class SourceExpensify(AbstractSource):
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         # Pass the credentials from the Airbyte UI into your stream
-        return [
-            ExpensifyReports(
-                partner_user_id=config["partner_user_id"],
-                partner_user_secret=config["partner_user_secret"]
-            )
-        ]
+        return [ExpensifyReports(partner_user_id=config["partner_user_id"], partner_user_secret=config["partner_user_secret"])]

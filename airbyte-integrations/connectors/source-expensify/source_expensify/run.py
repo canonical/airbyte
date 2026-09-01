@@ -6,9 +6,9 @@
 import sys
 
 from airbyte_cdk.entrypoint import launch
-from source_braintree import SourceBraintree
+from source_expensify.source import SourceExpensify
 
 
 def run():
-    source = SourceBraintree()
+    source = SourceExpensify()
     launch(source, sys.argv[1:])
