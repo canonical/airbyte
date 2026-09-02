@@ -3,84 +3,94 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
-    "reportID": {
+    "accountEmail": {
       "type": ["string", "null"]
     },
-    "reportName": {
+    "accountID": {
       "type": ["string", "null"]
     },
-    "amount": {
+    "actionList": {
+      "type": ["string", "null"]
+    },
+    "approved": {
+      "type": ["string", "null"]
+    },
+    "approvers": {
+      "type": ["string", "null"]
+    },
+    "created": {
       "type": ["string", "null"]
     },
     "currency": {
       "type": ["string", "null"]
     },
-    "state": {
+    "entryID": {
       "type": ["string", "null"]
     },
-    "stateNum": {
-      "type": ["string", "null"]
-    },
-    "employeeEmail": {
-      "type": ["string", "null"]
-    },
-    "employeeName": {
+    "isACHReimbursed": {
       "type": ["string", "null"]
     },
     "managerEmail": {
       "type": ["string", "null"]
     },
-    "managerName": {
+    "managerUserID": {
       "type": ["string", "null"]
     },
-    "created": {
-      "type": ["string", "null"],
-      "format": "date-time"
+    "managerPayrollID": {
+      "type": ["string", "null"]
     },
-    "submitted": {
-      "type": ["string", "null"],
-      "format": "date-time"
+    "managerFirstName": {
+      "type": ["string", "null"]
     },
-    "approved": {
-      "type": ["string", "null"],
-      "format": "date-time"
+    "managerLastName": {
+      "type": ["string", "null"]
     },
-    "reimbursed": {
-      "type": ["string", "null"],
-      "format": "date-time"
-    },
-    "policyID": {
+    "managerFullName": {
       "type": ["string", "null"]
     },
     "policyName": {
       "type": ["string", "null"]
     },
-    "reportID_expense": {
+    "policyID": {
       "type": ["string", "null"]
     },
-    "transactionID": {
+    "reimbursed": {
       "type": ["string", "null"]
     },
-    "merchant": {
+    "reportID": {
       "type": ["string", "null"]
     },
-    "category": {
+    "oldReportID": {
       "type": ["string", "null"]
     },
-    "tag": {
+    "reportName": {
       "type": ["string", "null"]
     },
-    "comment": {
+    "status": {
       "type": ["string", "null"]
     },
-    "date": {
-      "type": ["string", "null"],
-      "format": "date"
-    },
-    "billable": {
+    "displayStatus": {
       "type": ["string", "null"]
     },
-    "reimbursable": {
+    "submitted": {
+      "type": ["string", "null"]
+    },
+    "employeeCustomField1": {
+      "type": ["string", "null"]
+    },
+    "employeeCustomField2": {
+      "type": ["string", "null"]
+    },
+    "submitterFirstName": {
+      "type": ["string", "null"]
+    },
+    "submitterLastName": {
+      "type": ["string", "null"]
+    },
+    "submitterFullName": {
+      "type": ["string", "null"]
+    },
+    "total": {
       "type": ["string", "null"]
     }
   }

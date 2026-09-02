@@ -6,6 +6,8 @@ connectionSpecification:
   required:
     - partner_user_id
     - partner_user_secret
+    - start_date
+    - end_date
   additionalProperties: true
   properties:
     partner_user_id:
@@ -19,3 +21,19 @@ connectionSpecification:
       description: The Partner User Secret, generated from the Expensify Integration Server credentials page.
       airbyte_secret: true
       order: 1
+    start_date:
+      type: string
+      title: Start Date
+      description: The start date (inclusive) used to filter Expensify reports for export, in the format YYYY-MM-DD.
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      examples:
+        - "2026-08-30"
+      order: 2
+    end_date:
+      type: string
+      title: End Date
+      description: The end date (inclusive) used to filter Expensify reports for export, in the format YYYY-MM-DD.
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      examples:
+        - "2026-08-31"
+      order: 3

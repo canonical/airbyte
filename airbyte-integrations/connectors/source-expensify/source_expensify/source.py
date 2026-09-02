@@ -86,11 +86,13 @@ class ExpensifyReports(Stream):
     # Airbyte uses this to know what column uniquely identifies a row
     primary_key = "reportID"
 
-    def __init__(self, name: str, partner_user_id: str, partner_user_secret: str, **kwargs):
+    def __init__(self, name: str, partner_user_id: str, partner_user_secret: str, start_date: str, end_date: str, **kwargs):
         super().__init__(**kwargs)
         self._name = name
         self.partner_user_id = partner_user_id
         self.partner_user_secret = partner_user_secret
+        self.start_date = start_date
+        self.end_date = end_date
 
     @property
     def name(self) -> str:
@@ -139,8 +141,8 @@ class ExpensifyReports(Stream):
             "inputSettings": {
                 "type": "combinedReportData",
                 "filters": {
-                    "startDate": "2026-08-30",
-                    "endDate": "2026-08-31",
+                    "startDate": self.start_date,
+                    "endDate": self.end_date,
                 },
                 "reportState": "REIMBURSED",
             },
@@ -233,5 +235,7 @@ class SourceExpensify(AbstractSource):
                 name="reports",
                 partner_user_id=config["partner_user_id"],
                 partner_user_secret=config["partner_user_secret"],
+                start_date=config["start_date"],
+                end_date=config["end_date"],
             )
         ]
