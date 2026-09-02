@@ -20,14 +20,18 @@ EXPENSIFY_URL = "https://integrations.expensify.com/Integration-Server/Expensify
 RAW_CSV_DEBUG_DIR = Path("/tmp/source_expensify_debug")
 REPORTS_EXPORT_TEMPLATE_PATH = "templates/reports_export_template.ftl"
 
+
 class PolicyNotFoundError(Exception):
     """Raised when the Expensify policy doesn't exist (HTTP 410)."""
+
 
 class CredentialsInvalidError(Exception):
     """Raised when the Expensify credentials are invalid (HTTP 401)."""
 
+
 class RateLimitExceededError(Exception):
-    """Raised when the Expensify API rate limit is exceeded."""
+    """Raised when the Expensify API rate limit is exceeded (HTTP 429)."""
+
 
 def _load_reports_export_template() -> str:
     """Load the Expensify export template used to shape the combined report CSV output."""
@@ -37,17 +41,19 @@ def _load_reports_export_template() -> str:
         raise FileNotFoundError(f"Unable to find {REPORTS_EXPORT_TEMPLATE_PATH} in the package.")
     return template_bytes.decode("utf-8")
 
+
 def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
     """Map an Expensify response code to an exception."""
     if response_code == 410:
         # Expensify returns 410 if the policy doesn't exist
-        raise PolicyNotFoundError(f"Expensify credentials are invalid.")
+        raise PolicyNotFoundError(f"Expensify policy not found.")
     elif response_code == 401:
         # Expensify returns 401 if the credentials are invalid
         raise CredentialsInvalidError(f"Expensify credentials are invalid.")
     elif response_code == 429:
         # Expensify returns 429 if the API rate limit is exceeded
         raise RateLimitExceededError(f"Expensify API rate limit exceeded.")
+
 
 def _post_job_description(job_description: Mapping[str, Any], template: Optional[str] = None) -> requests.Response:
     """
@@ -110,17 +116,11 @@ class ExpensifyReports(Stream):
         file_name = self._trigger_export()
         self.logger.info(f"Triggered Expensify export for file {file_name}.")
 
-        # Step 2: Poll until the file is ready
-        self._wait_for_file(file_name)
-        self.logger.info(f"Expensify export file {file_name} is ready.")
-
-        # Step 3: Download the CSV
+        # Step 2: Download the CSV
         csv_data = self._download_file(file_name)
         self.logger.info(f"Downloaded Expensify export ({len(csv_data)} bytes) for file {file_name}.")
-        debug_path = self._store_raw_csv(csv_data, file_name)
-        self.logger.info(f"Stored raw Expensify CSV export at {debug_path} for debugging.")
 
-        # Step 4: Parse CSV in memory and yield rows to Airbyte
+        # Step 3: Parse CSV in memory and yield rows to Airbyte
         reader = csv.DictReader(StringIO(csv_data))
         record_count = 0
         for row in reader:
@@ -152,28 +152,6 @@ class ExpensifyReports(Stream):
         response = _post_job_description(job_description, template=_load_reports_export_template())
         return response.text.strip()
 
-    def _wait_for_file(self, file_name: str):
-        # Polling loop: Expensify returns a 400 or 500 series error if the file isn't ready yet
-        max_retries = 20
-        job_description = {
-            "type": "download",
-            "credentials": {"partnerUserID": self.partner_user_id, "partnerUserSecret": self.partner_user_secret},
-            "fileName": file_name,
-            "fileSystem": "integrationServer",
-        }
-        for attempt in range(max_retries):
-            try:
-                _post_job_description(job_description)
-                self.logger.info(f"Expensify file {file_name} is ready after {attempt + 1} attempt(s).")
-                return  # File is ready
-            except Exception as error:
-                self.logger.info(
-                    f"Expensify file {file_name} not ready yet ({error}), retrying in 30s (attempt {attempt + 1}/{max_retries})."
-                )
-                time.sleep(30)  # Wait 30 seconds before polling again
-
-        raise Exception(f"Expensify file {file_name} failed to generate in time.")
-
     def _download_file(self, file_name: str) -> str:
         # Re-request the download now that we know it's ready
         job_description = {
@@ -185,36 +163,23 @@ class ExpensifyReports(Stream):
         response = _post_job_description(job_description)
         return response.text
 
-    def _store_raw_csv(self, csv_data: str, file_name: str) -> Path:
-        """Persist the raw CSV export to disk for debugging purposes."""
-        RAW_CSV_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        safe_file_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in file_name)
-        suffix = "" if safe_file_name.lower().endswith(".csv") else ".csv"
-        debug_path = RAW_CSV_DEBUG_DIR / f"{timestamp}_{safe_file_name}{suffix}"
-        debug_path.write_text(csv_data, encoding="utf-8")
-        return debug_path
-
 
 class SourceExpensify(AbstractSource):
     def check_connection(self, logger, config) -> Tuple[bool, Any]:
         # Validate that the provided credentials actually work
         try:
             # Request a non-existent policy to ensure credentials are valid
-            job_description= {
-              "type": "get",
-              "credentials": {
-                "partnerUserID": config["partner_user_id"],
-                "partnerUserSecret": config["partner_user_secret"],
-              },
-              "inputSettings": {
-                "type": "policy",
-                "fields": ["reportFields"],
-                "policyIDList": ["abc"]
-              }
+            job_description = {
+                "type": "get",
+                "credentials": {
+                    "partnerUserID": config["partner_user_id"],
+                    "partnerUserSecret": config["partner_user_secret"],
+                },
+                "inputSettings": {"type": "policy", "fields": ["reportFields"], "policyIDList": ["abc"]},
             }
             response = _post_job_description(job_description)
-            json_response = response.json()
+            # Ensure the response is valid JSON
+            response.json()
             return True, None
         except PolicyNotFoundError:
             # Expensify returns 410 if the policy doesn't exist
