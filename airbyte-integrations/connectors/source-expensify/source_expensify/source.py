@@ -20,6 +20,14 @@ EXPENSIFY_URL = "https://integrations.expensify.com/Integration-Server/Expensify
 RAW_CSV_DEBUG_DIR = Path("/tmp/source_expensify_debug")
 REPORTS_EXPORT_TEMPLATE_PATH = "templates/reports_export_template.ftl"
 
+class PolicyNotFoundError(Exception):
+    """Raised when the Expensify policy doesn't exist (HTTP 410)."""
+
+class CredentialsInvalidError(Exception):
+    """Raised when the Expensify credentials are invalid (HTTP 401)."""
+
+class RateLimitExceededError(Exception):
+    """Raised when the Expensify API rate limit is exceeded."""
 
 def _load_reports_export_template() -> str:
     """Load the Expensify export template used to shape the combined report CSV output."""
@@ -29,6 +37,17 @@ def _load_reports_export_template() -> str:
         raise FileNotFoundError(f"Unable to find {REPORTS_EXPORT_TEMPLATE_PATH} in the package.")
     return template_bytes.decode("utf-8")
 
+def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
+    """Map an Expensify response code to an exception."""
+    if response_code == 410:
+        # Expensify returns 410 if the policy doesn't exist
+        raise PolicyNotFoundError(f"Expensify credentials are invalid.")
+    elif response_code == 401:
+        # Expensify returns 401 if the credentials are invalid
+        raise CredentialsInvalidError(f"Expensify credentials are invalid.")
+    elif response_code == 429:
+        # Expensify returns 429 if the API rate limit is exceeded
+        raise RateLimitExceededError(f"Expensify API rate limit exceeded.")
 
 def _post_job_description(job_description: Mapping[str, Any], template: Optional[str] = None) -> requests.Response:
     """
@@ -57,7 +76,8 @@ def _post_job_description(job_description: Mapping[str, Any], template: Optional
         except json.JSONDecodeError:
             error_body = None
         if error_body and "responseCode" in error_body:
-            raise Exception(f"Expensify API error: {error_body.get('responseMessage', stripped)}")
+            response_code = error_body.get("responseCode")
+            _map_response_code_to_exception(response_code)
 
     return response
 
@@ -178,9 +198,32 @@ class SourceExpensify(AbstractSource):
     def check_connection(self, logger, config) -> Tuple[bool, Any]:
         # Validate that the provided credentials actually work
         try:
-            # You can trigger a tiny dummy request here to ensure credentials are valid
+            # Request a non-existent policy to ensure credentials are valid
+            job_description= {
+              "type": "get",
+              "credentials": {
+                "partnerUserID": config["partner_user_id"],
+                "partnerUserSecret": config["partner_user_secret"],
+              },
+              "inputSettings": {
+                "type": "policy",
+                "fields": ["reportFields"],
+                "policyIDList": ["abc"]
+              }
+            }
+            response = _post_job_description(job_description)
+            json_response = response.json()
             return True, None
+        except PolicyNotFoundError:
+            # Expensify returns 410 if the policy doesn't exist
+            logger.info("Credentials are valid.")
+            return True, None
+        except CredentialsInvalidError:
+            # Expensify returns 401 if the credentials are invalid
+            logger.info("Credentials are invalid.")
+            return False, None
         except Exception as e:
+            logger.info(f"Other issue connecting to Expensify: {e}")
             return False, e
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
