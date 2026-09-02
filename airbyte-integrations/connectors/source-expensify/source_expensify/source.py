@@ -45,7 +45,7 @@ def _post_job_description(job_description: Mapping[str, Any], template: Optional
     payload = {"requestJobDescription": json.dumps(job_description)}
     if template is not None:
         payload["template"] = template
-    response = requests.post(EXPENSIFY_URL, data=payload)
+    response = requests.post(EXPENSIFY_URL, data=payload, timeout=60)
     response.raise_for_status()
 
     # Expensify returns HTTP 200 even for some error conditions, with a JSON error body
