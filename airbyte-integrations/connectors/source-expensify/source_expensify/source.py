@@ -144,8 +144,7 @@ class ExpensifyReports(Stream):
                 return  # File is ready
             except Exception as error:
                 self.logger.info(
-                    f"Expensify file {file_name} not ready yet ({error}), retrying in 30s "
-                    f"(attempt {attempt + 1}/{max_retries})."
+                    f"Expensify file {file_name} not ready yet ({error}), retrying in 30s (attempt {attempt + 1}/{max_retries})."
                 )
                 time.sleep(30)  # Wait 30 seconds before polling again
 
