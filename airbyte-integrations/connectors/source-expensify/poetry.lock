@@ -1104,6 +1104,21 @@ files = [
 referencing = ">=0.31.0"
 
 [[package]]
+name = "licenseheaders"
+version = "0.8.8"
+description = "Add or change license headers for all files in a directory"
+optional = false
+python-versions = ">=3.5"
+groups = ["dev"]
+files = [
+    {file = "licenseheaders-0.8.8-py3-none-any.whl", hash = "sha256:3b159228b37bbba98bd01448c41a5eff773ab26ac5b14ac98c53d06dbc807696"},
+    {file = "licenseheaders-0.8.8.tar.gz", hash = "sha256:feb49c1a869f415431503ed56f4f3be48a4161495d3082f44af76c42c6a7e9ef"},
+]
+
+[package.dependencies]
+regex = "*"
+
+[[package]]
 name = "markdown-it-py"
 version = "4.2.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -2206,7 +2221,7 @@ version = "2026.9.3"
 description = "Alternative regular expression module, to replace re."
 optional = false
 python-versions = ">=3.10"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "regex-2026.9.3-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:6d416ed4058ea38f69884f3db523b0414c0094d262dde63694aa254e32a433e6"},
     {file = "regex-2026.9.3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:107319f437fc382e1e445d0abf8923db07f76e5fb3245ac5b09604e5dc8d4f63"},
@@ -2954,4 +2969,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "e3e6fbe8f8e97e493557b89fa89ec010cbbe932bfd567e8454fdf4b625d97c34"
+content-hash = "1367d99d04ab56edd4021631079615b39312def7fb365599977230da12b824f5"
