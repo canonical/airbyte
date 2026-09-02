@@ -8,9 +8,8 @@ name = "source-expensify"
 description = "Source implementation for Expensify."
 authors = ["Renan Greca <renan.greca@canonical.com>"]
 readme = "README.md"
-documentation = "https://docs.airbyte.com/integrations/sources/braintree"
 homepage = "https://airbyte.com"
-repository = "https://github.com/airbytehq/airbyte"
+repository = "https://github.com/canonical/airbyte"
 [[tool.poetry.packages]]
 include = "source_expensify"
 
