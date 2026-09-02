@@ -11,7 +11,13 @@ from airbyte_cdk.models import SyncMode
 
 @pytest.fixture
 def stream():
-    return ExpensifyReports(name="reports", partner_user_id="user-id", partner_user_secret="user-secret")
+    return ExpensifyReports(
+        name="reports",
+        partner_user_id="user-id",
+        partner_user_secret="user-secret",
+        start_date="2026-08-30",
+        end_date="2026-08-31",
+    )
 
 
 class TestReadRecords:
@@ -103,3 +109,17 @@ class TestReadRecords:
         ):
             with pytest.raises(requests.exceptions.HTTPError):
                 list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+
+class TestTriggerExport:
+    def test_trigger_export_uses_configured_date_range(self, stream):
+        with patch("source_expensify.source._post_job_description") as mock_post:
+            mock_post.return_value.text = "file.csv"
+
+            stream._trigger_export()
+
+        job_description = mock_post.call_args.args[0]
+        assert job_description["inputSettings"]["filters"] == {
+            "startDate": "2026-08-30",
+            "endDate": "2026-08-31",
+        }
