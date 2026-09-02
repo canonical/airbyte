@@ -173,7 +173,7 @@ class ExpensifyReports(Stream):
 
 
 class SourceExpensify(AbstractSource):
-    def check_connection(self, logger, config) -> Tuple[bool, any]:
+    def check_connection(self, logger, config) -> Tuple[bool, Any]:
         # Validate that the provided credentials actually work
         try:
             # You can trigger a tiny dummy request here to ensure credentials are valid
