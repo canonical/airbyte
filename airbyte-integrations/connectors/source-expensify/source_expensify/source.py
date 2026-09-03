@@ -14,11 +14,21 @@ import requests
 from airbyte_cdk.models import SyncMode
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
+from airbyte_cdk.sources.streams.http.exceptions import DefaultBackoffException, UserDefinedBackoffException
+from airbyte_cdk.sources.streams.http.rate_limiting import default_backoff_handler, user_defined_backoff_handler
 
 
 EXPENSIFY_URL = "https://integrations.expensify.com/Integration-Server/ExpensifyIntegrations"
 RAW_CSV_DEBUG_DIR = Path("/tmp/source_expensify_debug")
 REPORTS_EXPORT_TEMPLATE_PATH = "templates/reports_export_template.ftl"
+
+# Bounded retry configuration for requests to the Expensify Integration Server, using the
+# Airbyte CDK's standard backoff handlers: transient 5xx/connection errors are retried with
+# exponential backoff, 429s honor the `Retry-After` header, and all other 4xx errors are
+# treated as permanent failures and are not retried.
+MAX_RETRIES = 5
+RETRY_FACTOR = 5
+DEFAULT_RETRY_AFTER_SECONDS = 5.0
 
 
 class PolicyNotFoundError(Exception):
@@ -55,6 +65,36 @@ def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
         raise RateLimitExceededError(f"Expensify API rate limit exceeded.")
 
 
+def _parse_retry_after(response: requests.Response) -> float:
+    """Return how long to wait (in seconds) before retrying, honoring the `Retry-After` header if present."""
+    retry_after = response.headers.get("Retry-After")
+    if retry_after is not None:
+        try:
+            return float(retry_after)
+        except ValueError:
+            pass
+    return DEFAULT_RETRY_AFTER_SECONDS
+
+
+@user_defined_backoff_handler(max_tries=MAX_RETRIES)
+@default_backoff_handler(max_tries=MAX_RETRIES, factor=RETRY_FACTOR)
+def _send_request(payload: Mapping[str, Any]) -> requests.Response:
+    """
+    Send the actual HTTP request to the Expensify Integration Server, retrying it using the
+    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for the duration
+    indicated by the `Retry-After` header, transient 5xx/connection errors are retried with
+    exponential backoff, and all other 4xx errors are treated as permanent failures and raised
+    immediately without retrying.
+    """
+    response = requests.post(EXPENSIFY_URL, data=payload, timeout=60)
+    if response.status_code == requests.codes.too_many_requests:
+        raise UserDefinedBackoffException(backoff=_parse_retry_after(response), request=response.request, response=response)
+    if response.status_code >= 500:
+        raise DefaultBackoffException(request=response.request, response=response)
+    response.raise_for_status()
+    return response
+
+
 def _post_job_description(job_description: Mapping[str, Any], template: Optional[str] = None) -> requests.Response:
     """
     Send a requestJobDescription to the Expensify Integration Server.
@@ -70,8 +110,7 @@ def _post_job_description(job_description: Mapping[str, Any], template: Optional
     payload = {"requestJobDescription": json.dumps(job_description)}
     if template is not None:
         payload["template"] = template
-    response = requests.post(EXPENSIFY_URL, data=payload, timeout=60)
-    response.raise_for_status()
+    response = _send_request(payload)
 
     # Expensify returns HTTP 200 even for some error conditions, with a JSON error body
     # like {"responseMessage": "...", "responseCode": 500}. Detect and surface those.
