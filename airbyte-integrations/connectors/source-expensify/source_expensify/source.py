@@ -24,11 +24,14 @@ REPORTS_EXPORT_TEMPLATE_PATH = "templates/reports_export_template.ftl"
 
 # Bounded retry configuration for requests to the Expensify Integration Server, using the
 # Airbyte CDK's standard backoff handlers: transient 5xx/connection errors are retried with
-# exponential backoff, 429s honor the `Retry-After` header, and all other 4xx errors are
-# treated as permanent failures and are not retried.
+# exponential backoff, 429s back off for a fixed duration (Expensify's API doesn't return a
+# `Retry-After` header), and all other 4xx errors are treated as permanent failures and are
+# not retried.
 MAX_RETRIES = 5
 RETRY_FACTOR = 5
-DEFAULT_RETRY_AFTER_SECONDS = 5.0
+# Expensify documents rate limits of up to 5 requests/10 seconds and 20 requests/60 seconds,
+# so waiting 10 seconds before retrying a 429 should be enough to fall back within the limit.
+RATE_LIMIT_BACKOFF_SECONDS = 10.0
 
 
 class PolicyNotFoundError(Exception):
@@ -65,30 +68,19 @@ def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
         raise RateLimitExceededError(f"Expensify API rate limit exceeded.")
 
 
-def _parse_retry_after(response: requests.Response) -> float:
-    """Return how long to wait (in seconds) before retrying, honoring the `Retry-After` header if present."""
-    retry_after = response.headers.get("Retry-After")
-    if retry_after is not None:
-        try:
-            return float(retry_after)
-        except ValueError:
-            pass
-    return DEFAULT_RETRY_AFTER_SECONDS
-
-
 @user_defined_backoff_handler(max_tries=MAX_RETRIES)
 @default_backoff_handler(max_tries=MAX_RETRIES, factor=RETRY_FACTOR)
 def _send_request(payload: Mapping[str, Any]) -> requests.Response:
     """
     Send the actual HTTP request to the Expensify Integration Server, retrying it using the
-    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for the duration
-    indicated by the `Retry-After` header, transient 5xx/connection errors are retried with
-    exponential backoff, and all other 4xx errors are treated as permanent failures and raised
-    immediately without retrying.
+    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for a fixed duration
+    (Expensify's API doesn't return a `Retry-After` header), transient 5xx/connection errors
+    are retried with exponential backoff, and all other 4xx errors are treated as permanent
+    failures and raised immediately without retrying.
     """
     response = requests.post(EXPENSIFY_URL, data=payload, timeout=60)
     if response.status_code == requests.codes.too_many_requests:
-        raise UserDefinedBackoffException(backoff=_parse_retry_after(response), request=response.request, response=response)
+        raise UserDefinedBackoffException(backoff=RATE_LIMIT_BACKOFF_SECONDS, request=response.request, response=response)
     if response.status_code >= 500:
         raise DefaultBackoffException(request=response.request, response=response)
     response.raise_for_status()

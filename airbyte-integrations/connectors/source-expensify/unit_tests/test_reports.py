@@ -105,11 +105,11 @@ class TestTriggerExport:
 
 class TestSendRequestRetries:
     @patch("time.sleep", return_value=None)
-    def test_retries_on_rate_limit_and_honors_retry_after(self, mock_sleep, requests_mock):
+    def test_retries_on_rate_limit_with_fixed_backoff(self, mock_sleep, requests_mock):
         requests_mock.post(
             EXPENSIFY_URL,
             [
-                {"status_code": 429, "headers": {"Retry-After": "2"}, "text": "rate limited"},
+                {"status_code": 429, "json": {"responseMessage": "Too many requests. Please try again later", "responseCode": 429}},
                 {"status_code": 200, "text": "ok"},
             ],
         )
@@ -118,7 +118,7 @@ class TestSendRequestRetries:
 
         assert response.text == "ok"
         assert requests_mock.call_count == 2
-        mock_sleep.assert_any_call(3)  # Retry-After (2) + 1 extra second
+        mock_sleep.assert_any_call(11)  # fixed rate-limit backoff (10) + 1 extra second
 
     @patch("time.sleep", return_value=None)
     def test_retries_on_transient_server_error(self, mock_sleep, requests_mock):
