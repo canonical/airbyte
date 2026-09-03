@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
-from source_expensify.source import ExpensifyReports
+from source_expensify.source import EXPENSIFY_URL, ExpensifyReports, _send_request
 
 from airbyte_cdk.models import SyncMode
 
@@ -101,3 +101,54 @@ class TestTriggerExport:
             "startDate": "2026-08-30",
             "endDate": "2026-08-31",
         }
+
+
+class TestSendRequestRetries:
+    @patch("time.sleep", return_value=None)
+    def test_retries_on_rate_limit_and_honors_retry_after(self, mock_sleep, requests_mock):
+        requests_mock.post(
+            EXPENSIFY_URL,
+            [
+                {"status_code": 429, "headers": {"Retry-After": "2"}, "text": "rate limited"},
+                {"status_code": 200, "text": "ok"},
+            ],
+        )
+
+        response = _send_request({"requestJobDescription": "{}"})
+
+        assert response.text == "ok"
+        assert requests_mock.call_count == 2
+        mock_sleep.assert_any_call(3)  # Retry-After (2) + 1 extra second
+
+    @patch("time.sleep", return_value=None)
+    def test_retries_on_transient_server_error(self, mock_sleep, requests_mock):
+        requests_mock.post(
+            EXPENSIFY_URL,
+            [
+                {"status_code": 503, "text": "unavailable"},
+                {"status_code": 200, "text": "ok"},
+            ],
+        )
+
+        response = _send_request({"requestJobDescription": "{}"})
+
+        assert response.text == "ok"
+        assert requests_mock.call_count == 2
+
+    @patch("time.sleep", return_value=None)
+    def test_gives_up_immediately_on_permanent_client_error(self, mock_sleep, requests_mock):
+        requests_mock.post(EXPENSIFY_URL, status_code=401, text="unauthorized")
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            _send_request({"requestJobDescription": "{}"})
+
+        assert requests_mock.call_count == 1
+
+    @patch("time.sleep", return_value=None)
+    def test_gives_up_after_max_retries_on_persistent_server_error(self, mock_sleep, requests_mock):
+        requests_mock.post(EXPENSIFY_URL, status_code=500, text="server error")
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            _send_request({"requestJobDescription": "{}"})
+
+        assert requests_mock.call_count > 1
