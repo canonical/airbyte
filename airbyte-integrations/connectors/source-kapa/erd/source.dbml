@@ -14,3 +14,66 @@ Table "threads" {
 
     Note: "Kapa project threads. Nested question-answer, tag, user, feedback, and integration values are retained as JSON objects or arrays."
 }
+
+Table "activity" {
+    "aggregate_statistics" object [not null]
+    "statistics_by_integration" object [not null]
+
+    Note: "One full-refresh record for the configured date range. Statistics remain nested because the API returns aggregate and per-integration metrics together."
+}
+
+Table "top_questions_periods" {
+    "id" string [pk, not null]
+    "interval" string
+    "start_date" string
+    "end_date" string
+    "total_conversations" integer
+    "analytics_interval" string [not null]
+}
+
+Table "top_questions_clusters" {
+    "period_id" string [not null]
+    "id" string [not null]
+    "title" string
+    "summary" string
+    "thread_count" integer
+    "num_unique_users" integer
+    "threads" object
+    "analytics_interval" string [not null]
+
+    indexes {
+        (period_id, id) [pk]
+    }
+
+    Note: "Frequently asked question clusters. threads contains up to 100 recent thread summaries; thread_count is the authoritative total."
+}
+
+Table "coverage_gaps_periods" {
+    "id" string [pk, not null]
+    "interval" string
+    "start_date" string
+    "end_date" string
+    "total_conversations" integer
+    "analytics_interval" string [not null]
+}
+
+Table "coverage_gaps_clusters" {
+    "period_id" string [not null]
+    "id" string [not null]
+    "title" string
+    "summary" string
+    "suggestion" string
+    "thread_count" integer
+    "num_unique_users" integer
+    "threads" object
+    "analytics_interval" string [not null]
+
+    indexes {
+        (period_id, id) [pk]
+    }
+
+    Note: "Uncertain-answer clusters with documentation suggestions. threads contains up to 100 recent thread summaries; thread_count is the authoritative total."
+}
+
+Ref: "top_questions_periods"."id" < "top_questions_clusters"."period_id"
+Ref: "coverage_gaps_periods"."id" < "coverage_gaps_clusters"."period_id"

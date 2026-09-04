@@ -1,24 +1,34 @@
 # Kapa Source Connector
 
-The Kapa source connector syncs project threads and their question-answer pairs from the Kapa Query API. It is a manifest-only connector using API-key authentication, cursor pagination, and incremental state based on `last_activity_at`.
+The Kapa source connector syncs project threads and analytics from the Kapa Query API v1. It is a manifest-only connector using API-key authentication, cursor pagination, and incremental state for threads.
 
 For user-facing setup instructions, see the [Kapa source documentation](https://docs.airbyte.com/integrations/sources/kapa).
 
 ## Streams
 
-| Stream | Primary key | Cursor | Sync modes |
-| --- | --- | --- | --- |
-| `threads` | `id` | `last_activity_at` | Full refresh, incremental |
+| Stream                   | Primary key       | Cursor             | Sync modes                |
+| ------------------------ | ----------------- | ------------------ | ------------------------- |
+| `threads`                | `id`              | `last_activity_at` | Full refresh, incremental |
+| `activity`               | None              | None               | Full refresh              |
+| `top_questions_periods`  | `id`              | None               | Full refresh              |
+| `top_questions_clusters` | `period_id`, `id` | None               | Full refresh              |
+| `coverage_gaps_periods`  | `id`              | None               | Full refresh              |
+| `coverage_gaps_clusters` | `period_id`, `id` | None               | Full refresh              |
 
 Incremental requests send the saved cursor as the inclusive `updated_since` lower bound and sort by `last_activity_at` ascending. A record at the state boundary can be read again; append-dedup mode uses `id` to remove that boundary duplicate.
 
+`activity` emits one record containing aggregate statistics and statistics grouped by integration for the range from `start_date` through the sync start time. The period streams return completed weekly, monthly, or quarterly analytics periods. Their cluster substreams make one paginated detail traversal per period and attach `period_id` and `analytics_interval` to each record.
+
+Cluster records include inline thread summaries. Kapa returns at most 100 recent threads per cluster, so `thread_count` is authoritative when it exceeds the length of `threads`.
+
 ## Configuration
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `api_key` | Yes | Kapa API key sent in the `X-API-KEY` header. |
-| `project_id` | Yes | UUID of the Kapa project to sync. |
-| `start_date` | Yes | Earliest activity timestamp, in ISO 8601 format with whole-second precision. |
+| Field                | Required | Description                                                                                                  |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `api_key`            | Yes      | Kapa API key sent in the `X-API-KEY` header.                                                                 |
+| `project_id`         | Yes      | UUID of the Kapa project to sync.                                                                            |
+| `start_date`         | Yes      | Earliest thread activity and aggregate activity timestamp, in ISO 8601 format with whole-second precision.   |
+| `analytics_interval` | No       | Period size for Top Questions and Coverage Gaps: `weekly`, `monthly`, or `quarterly`. Defaults to `monthly`. |
 
 Keep real credentials in `.secrets/config.json`. The tracked values under `integration_tests/` are non-production placeholders.
 
@@ -66,14 +76,16 @@ docker run --rm \
 
 `unit_tests/` loads the real manifest through the CDK and mocks Kapa HTTP responses. It covers authentication, request parameters, pagination, incremental lower bounds, resource errors, rate limiting, and transient service errors.
 
-Credential-dependent acceptance tests are bypassed until a dedicated Kapa test project is available. When credentials are available, place them in `.secrets/config.json`, replace the bypasses in `acceptance-test-config.yml` with test scenarios, and run `make test` from an initialized `airbyte-ci/connectors/pipelines` Poetry environment.
+`acceptance-test-config.yml` runs the manifest specification check. Run `make test` from an initialized `airbyte-ci/connectors/pipelines` Poetry environment.
 
 ## Known Limitations
 
-- Only the Query API v1 project threads endpoint is supported.
+- Analytics streams use full refresh because Kapa does not expose a correctness-safe incremental cursor for them.
+- Cluster detail reads fan out once per completed period and can make many requests for projects with long analytics histories.
+- Inline cluster threads are limited to 100 recent records; use `thread_count` for the true total.
 - Kapa does not document endpoint-specific rate limits or every error payload. The connector applies bounded fallback handling for 403 rate-limit responses, 429, and transient 502/503/504 responses.
-- Expected integration records are not tracked because thread data is specific to each Kapa project.
+- Expected integration records are not tracked because threads and analytics are specific to each Kapa project.
 
 ## Publishing
 
-The initial connector and canonical image tags are both `0.1.0`. Update `dockerImageTag`, `canonicalImageTag`, and the changelog in the user documentation together for a release.
+The initial Airbyte image tag is `0.1.0`, and the Canonical image tag is `0.1.0-canonical-0.1.0`. Update `dockerImageTag`, `canonicalImageTag`, and the changelog in the user documentation together for a release.

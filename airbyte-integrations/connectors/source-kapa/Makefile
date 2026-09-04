@@ -57,7 +57,7 @@ unit-test:  ## Run manifest runtime tests in an isolated CDK environment.
 		--with 'requests-mock>=1.12,<2' \
 		pytest unit_tests -q
 
-connector-test:  ## Run credential-free CDK standard tests and configured bypasses.
+connector-test:  ## Run CDK standard connector tests.
 	$(AIRBYTE_CDK) connector test $(CURDIR)
 
 test:  ## Run connector acceptance through airbyte-ci (requires its Poetry environment).

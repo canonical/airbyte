@@ -53,6 +53,22 @@ definitions:
     request_headers:
       Accept: application/json
 
+  analytics_paginator:
+    type: DefaultPaginator
+    page_size_option:
+      type: RequestOption
+      field_name: page_size
+      inject_into: request_parameter
+    page_token_option:
+      type: RequestOption
+      field_name: cursor
+      inject_into: request_parameter
+    pagination_strategy:
+      type: CursorPagination
+      cursor_value: "{{ response.next_cursor }}"
+      stop_condition: "{{ response.next_cursor is none }}"
+      page_size: 500
+
   threads:
     type: DeclarativeStream
     name: threads
@@ -107,8 +123,178 @@ definitions:
       schema:
         $ref: "#/schemas/threads"
 
+  activity:
+    type: DeclarativeStream
+    name: activity
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/activity/"
+        request_parameters:
+          start_date_time: "{{ config['start_date'] }}"
+          end_date_time: "{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/activity"
+
+  top_questions_periods:
+    type: DeclarativeStream
+    name: top_questions_periods
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/top-questions/periods/"
+        request_parameters:
+          interval: "{{ config.get('analytics_interval', 'monthly') }}"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - periods
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_period"
+
+  top_questions_clusters:
+    type: DeclarativeStream
+    name: top_questions_clusters
+    primary_key:
+      - period_id
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/top-questions/periods/{{ stream_partition.period_id }}/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - clusters
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            parent_key: id
+            partition_field: period_id
+            stream:
+              $ref: "#/definitions/top_questions_periods"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - period_id
+            value: "{{ stream_partition.period_id }}"
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_cluster"
+
+  coverage_gaps_periods:
+    type: DeclarativeStream
+    name: coverage_gaps_periods
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/coverage-gaps/periods/"
+        request_parameters:
+          interval: "{{ config.get('analytics_interval', 'monthly') }}"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - periods
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_period"
+
+  coverage_gaps_clusters:
+    type: DeclarativeStream
+    name: coverage_gaps_clusters
+    primary_key:
+      - period_id
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/coverage-gaps/periods/{{ stream_partition.period_id }}/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - clusters
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            parent_key: id
+            partition_field: period_id
+            stream:
+              $ref: "#/definitions/coverage_gaps_periods"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - period_id
+            value: "{{ stream_partition.period_id }}"
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_cluster"
+
 streams:
   - $ref: "#/definitions/threads"
+  - $ref: "#/definitions/activity"
+  - $ref: "#/definitions/top_questions_periods"
+  - $ref: "#/definitions/top_questions_clusters"
+  - $ref: "#/definitions/coverage_gaps_periods"
+  - $ref: "#/definitions/coverage_gaps_clusters"
 
 spec:
   type: Spec
@@ -142,8 +328,163 @@ spec:
         examples:
           - "2024-01-01T00:00:00Z"
         order: 2
+      analytics_interval:
+        type: string
+        title: Analytics Interval
+        description: Period size used to retrieve Top Questions and Coverage Gaps analytics.
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+        default: monthly
+        order: 3
 
 schemas:
+  activity:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - aggregate_statistics
+      - statistics_by_integration
+    properties:
+      aggregate_statistics:
+        $ref: "#/schemas/activity_statistics"
+      statistics_by_integration:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            integration:
+              type: object
+              additionalProperties: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                integration_type:
+                  type: string
+                name:
+                  type: string
+            statistics:
+              $ref: "#/schemas/activity_statistics"
+
+  activity_statistics:
+    type: object
+    additionalProperties: true
+    properties:
+      total_query_count:
+        type: integer
+      total_conversation_query_count:
+        type: integer
+      total_retrieval_query_count:
+        type: integer
+      total_upvotes:
+        type: integer
+      total_downvotes:
+        type: integer
+      total_uncertain_query_count:
+        type: integer
+      total_unique_users:
+        type: integer
+      total_support_tickets_deflected:
+        type: integer
+      total_support_tickets_not_deflected:
+        type: integer
+      total_queries_by_language:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            iso:
+              type: string
+            name:
+              type: string
+            count:
+              type: integer
+
+  analytics_period:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - analytics_interval
+    properties:
+      id:
+        type: string
+        format: uuid
+      interval:
+        type: string
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+      start_date:
+        type: string
+        format: date
+      end_date:
+        type: string
+        format: date
+      total_conversations:
+        type: integer
+      analytics_interval:
+        type: string
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+
+  analytics_cluster:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - period_id
+      - analytics_interval
+    properties:
+      id:
+        type: string
+        format: uuid
+      period_id:
+        type: string
+        format: uuid
+      title:
+        type: string
+      summary:
+        type: string
+      suggestion:
+        type: string
+      thread_count:
+        type: integer
+      num_unique_users:
+        type: integer
+      threads:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_at:
+              type: string
+              format: date-time
+            initial_question:
+              type: string
+            initial_answer:
+              type: string
+      analytics_interval:
+        type: string
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+
   threads:
     $schema: http://json-schema.org/draft-07/schema#
     type: object
