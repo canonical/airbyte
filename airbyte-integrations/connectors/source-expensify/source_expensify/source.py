@@ -66,7 +66,7 @@ def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
 def _send_request(payload: Mapping[str, Any]) -> requests.Response:
     """
     Send the actual HTTP request to the Expensify Integration Server, retrying it using the
-    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for a fixed duration, 
+    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for a fixed duration,
     transient 5xx/connection errors are retried with exponential backoff, and all other 4xx
     errors are treated as permanent failures and raised immediately without retrying.
     """
