@@ -182,9 +182,7 @@ class TestCheckConnection:
         logger = Mock()
 
         with patch("source_expensify.source.requests.post", return_value=response):
-            result = source.check_connection(
-                logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"}
-            )
+            result = source.check_connection(logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"})
 
         assert result == (True, None)
 
@@ -204,9 +202,7 @@ class TestCheckConnection:
         logger = Mock()
 
         with patch("source_expensify.source.requests.post", return_value=response):
-            result = source.check_connection(
-                logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"}
-            )
+            result = source.check_connection(logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"})
 
         assert result[0] is expected[0]
         if expected[1] is None:
