@@ -22,15 +22,8 @@ EXPENSIFY_URL = "https://integrations.expensify.com/Integration-Server/Expensify
 RAW_CSV_DEBUG_DIR = Path("/tmp/source_expensify_debug")
 REPORTS_EXPORT_TEMPLATE_PATH = "templates/reports_export_template.ftl"
 
-# Bounded retry configuration for requests to the Expensify Integration Server, using the
-# Airbyte CDK's standard backoff handlers: transient 5xx/connection errors are retried with
-# exponential backoff, 429s back off for a fixed duration (Expensify's API doesn't return a
-# `Retry-After` header), and all other 4xx errors are treated as permanent failures and are
-# not retried.
 MAX_RETRIES = 5
 RETRY_FACTOR = 5
-# Expensify documents rate limits of up to 5 requests/10 seconds and 20 requests/60 seconds,
-# so waiting 10 seconds before retrying a 429 should be enough to fall back within the limit.
 RATE_LIMIT_BACKOFF_SECONDS = 10.0
 
 
@@ -73,10 +66,9 @@ def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
 def _send_request(payload: Mapping[str, Any]) -> requests.Response:
     """
     Send the actual HTTP request to the Expensify Integration Server, retrying it using the
-    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for a fixed duration
-    (Expensify's API doesn't return a `Retry-After` header), transient 5xx/connection errors
-    are retried with exponential backoff, and all other 4xx errors are treated as permanent
-    failures and raised immediately without retrying.
+    Airbyte CDK's standard backoff handlers: HTTP 429 responses back off for a fixed duration, 
+    transient 5xx/connection errors are retried with exponential backoff, and all other 4xx
+    errors are treated as permanent failures and raised immediately without retrying.
     """
     response = requests.post(EXPENSIFY_URL, data=payload, timeout=60)
     if response.status_code == requests.codes.too_many_requests:
@@ -91,13 +83,10 @@ def _post_job_description(job_description: Mapping[str, Any], template: Optional
     """
     Send a requestJobDescription to the Expensify Integration Server.
 
-    Expensify requires the `requestJobDescription` form field to be a JSON-encoded
-    string, not a native Python dict - requests would otherwise form-encode it using
-    Python's repr() (single quotes, True/False), which Expensify rejects as invalid JSON.
+    Expensify requires the `requestJobDescription` form field to be a JSON-encoded string.
 
     `template` (when provided) must be sent as its own top-level form field, sibling to
-    `requestJobDescription`, not nested inside it - Expensify rejects nested templates
-    with "No Template Submitted".
+    `requestJobDescription`.
     """
     payload = {"requestJobDescription": json.dumps(job_description)}
     if template is not None:
@@ -156,7 +145,7 @@ class ExpensifyReports(Stream):
         record_count = 0
         for row in reader:
             # Airbyte takes these yielded dicts, validates them against your schema,
-            # and streams them to Postgres
+            # and streams them to the destination connector
             record_count += 1
             yield row
         self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
@@ -179,12 +168,10 @@ class ExpensifyReports(Stream):
             },
             "outputSettings": {"fileExtension": "csv"},
         }
-        # Tell Expensify exactly what columns to output
         response = _post_job_description(job_description, template=_load_reports_export_template())
         return response.text.strip()
 
     def _download_file(self, file_name: str) -> str:
-        # Re-request the download now that we know it's ready
         job_description = {
             "type": "download",
             "credentials": {"partnerUserID": self.partner_user_id, "partnerUserSecret": self.partner_user_secret},
