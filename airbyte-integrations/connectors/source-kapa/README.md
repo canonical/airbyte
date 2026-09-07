@@ -1,6 +1,6 @@
 # Kapa Source Connector
 
-The Kapa source connector syncs project threads and analytics from the Kapa Query API v1. It is a manifest-only connector using API-key authentication, cursor pagination, and incremental state for threads.
+The Kapa source connector syncs project threads, end users, and analytics from the Kapa Query API v1. It is a manifest-only connector using API-key authentication, cursor and page pagination, and incremental state for threads.
 
 For user-facing setup instructions, see the [Kapa source documentation](https://docs.airbyte.com/integrations/sources/kapa).
 
@@ -14,12 +14,15 @@ For user-facing setup instructions, see the [Kapa source documentation](https://
 | `top_questions_clusters` | `period_id`, `id` | None               | Full refresh              |
 | `coverage_gaps_periods`  | `id`              | None               | Full refresh              |
 | `coverage_gaps_clusters` | `period_id`, `id` | None               | Full refresh              |
+| `end_users`              | `id`              | None               | Full refresh              |
 
 Incremental requests send the saved cursor as the inclusive `updated_since` lower bound and sort by `last_activity_at` ascending. A record at the state boundary can be read again; append-dedup mode uses `id` to remove that boundary duplicate.
 
 `activity` emits one record containing aggregate statistics and statistics grouped by integration for the range from `start_date` through the sync start time. The period streams return completed weekly, monthly, or quarterly analytics periods. Their cluster substreams make one paginated detail traversal per period and attach `period_id` and `analytics_interval` to each record.
 
 Cluster records include inline thread summaries. Kapa returns at most 100 recent threads per cluster, so `thread_count` is authoritative when it exceeds the length of `threads`.
+
+`end_users` uses full refresh and follows Kapa's numbered `next` page links. Records can contain personal and external identity data, including email addresses, company names, client identifiers, and identity-provider subject IDs. Apply destination access controls and retention policies appropriate for that data.
 
 ## Configuration
 
@@ -83,8 +86,9 @@ docker run --rm \
 - Analytics streams use full refresh because Kapa does not expose a correctness-safe incremental cursor for them.
 - Cluster detail reads fan out once per completed period and can make many requests for projects with long analytics histories.
 - Inline cluster threads are limited to 100 recent records; use `thread_count` for the true total.
+- End-user records use full refresh because the API does not expose a correctness-safe incremental filter or cursor.
 - Kapa does not document endpoint-specific rate limits or every error payload. The connector applies bounded fallback handling for 403 rate-limit responses, 429, and transient 502/503/504 responses.
-- Expected integration records are not tracked because threads and analytics are specific to each Kapa project.
+- Expected integration records are not tracked because threads, end users, and analytics are specific to each Kapa project.
 
 ## Publishing
 

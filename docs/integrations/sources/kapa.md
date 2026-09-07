@@ -1,6 +1,6 @@
 # Kapa
 
-This page contains setup and reference information for the Kapa source connector. The connector reads project threads, aggregate activity, Top Questions, and Coverage Gaps from the Kapa Query API v1.
+This page contains setup and reference information for the Kapa source connector. The connector reads project threads, end users, aggregate activity, Top Questions, and Coverage Gaps from the Kapa Query API v1.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This page contains setup and reference information for the Kapa source connector
 
 Obtain an API key and the UUID of the Kapa project you want to sync. The connector sends the key in the `X-API-KEY` header. Keep it in a secret manager and do not place it in source control.
 
-See the [Kapa Analytics API overview](https://docs.kapa.ai/analytics/analytics-api) and [List Threads API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-threads-list) for the endpoint contracts.
+See the [Kapa Analytics API overview](https://docs.kapa.ai/analytics/analytics-api), [List Threads API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-threads-list), and [List End Users API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-end-users-list) for the endpoint contracts.
 
 ### Step 2: Set Up the Kapa Source in Airbyte
 
@@ -36,7 +36,7 @@ The Kapa source supports:
 - Incremental - Append
 - Incremental - Append + Deduped
 
-Incremental append-dedup is recommended for `threads`, which uses `id` as the primary key and `last_activity_at` as the cursor. Analytics streams support full refresh only.
+Incremental append-dedup is recommended for `threads`, which uses `id` as the primary key and `last_activity_at` as the cursor. End-user and analytics streams support full refresh only.
 
 ## Supported Streams
 
@@ -48,6 +48,7 @@ Incremental append-dedup is recommended for `threads`, which uses `id` as the pr
 | `top_questions_clusters` | Frequently asked question clusters for each Top Questions period                      | `period_id`, `id` | None               | One signed-cursor traversal per period, up to 500 clusters per page |
 | `coverage_gaps_periods`  | Completed Coverage Gaps periods for the configured interval                           | `id`              | None               | Signed cursor, up to 500 records per page                           |
 | `coverage_gaps_clusters` | Uncertain-answer clusters and documentation suggestions for each Coverage Gaps period | `period_id`, `id` | None               | One signed-cursor traversal per period, up to 500 clusters per page |
+| `end_users`              | Tracked users, identity fields, activity bounds, and latest thread context            | `id`              | None               | Numbered pages from the API-provided `next` URL                     |
 
 ## Incremental Behavior
 
@@ -60,6 +61,10 @@ The connector sends the saved cursor through Kapa's inclusive `updated_since` fi
 Top Questions and Coverage Gaps are organized as parent periods and child clusters. The connector first lists completed periods for the selected interval, then retrieves every page of clusters for each period. Cluster records include `period_id` and `analytics_interval` so downstream models can retain that context.
 
 Kapa includes at most 100 recent thread summaries in each cluster. `thread_count` reports the true total and can exceed the length of the `threads` array. Coverage Gaps clusters additionally include a documentation `suggestion`.
+
+## End-User Data
+
+The `end_users` stream performs a full refresh because Kapa does not expose an incremental filter or cursor for this endpoint. Depending on how user tracking is configured, records can include email addresses, company names, client identifiers, identity-provider subject IDs, and the latest user-authored question. Restrict destination access and apply retention policies appropriate for personal data.
 
 ## Rate Limits and Retries
 
@@ -74,8 +79,8 @@ If your organization restricts access to specific IPs, add the [Airbyte Cloud IP
 <details>
   <summary>Expand to review</summary>
 
-| Version | Date       | Pull Request | Subject                                            |
-| ------- | ---------- | ------------ | -------------------------------------------------- |
-| 0.1.0   | 2026-09-03 |              | Initial release with threads and analytics streams |
+| Version | Date       | Pull Request | Subject                                                        |
+| ------- | ---------- | ------------ | -------------------------------------------------------------- |
+| 0.1.0   | 2026-09-03 |              | Initial release with threads, end users, and analytics streams |
 
 </details>

@@ -42,3 +42,6 @@ data:
     - title: Kapa Analytics API documentation
       url: https://docs.kapa.ai/analytics/analytics-api
       type: api_reference
+    - title: Kapa End Users API documentation
+      url: https://docs.kapa.ai/api/reference/query-v-1-projects-end-users-list
+      type: api_reference

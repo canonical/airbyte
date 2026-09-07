@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
+import logging
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
@@ -12,12 +13,19 @@ from airbyte_cdk.test.state_builder import StateBuilder
 
 
 THREADS_URL = "https://api.kapa.ai/query/v1/projects/d7b46c01-32a3-4f74-80d3-616a3c18fb6b/threads/"
+END_USERS_URL = "https://api.kapa.ai/query/v1/projects/d7b46c01-32a3-4f74-80d3-616a3c18fb6b/end-users/"
 
 
 def read_threads(config, state=None, expecting_exception=False):
     catalog = CatalogBuilder().with_stream("threads", SyncMode.incremental).build()
     state = StateBuilder().build() if state is None else state
     return read(build_source(config, state), config, catalog, state, expecting_exception)
+
+
+def read_end_users(config):
+    catalog = CatalogBuilder().with_stream("end_users", SyncMode.full_refresh).build()
+    state = StateBuilder().build()
+    return read(build_source(config, state), config, catalog, state)
 
 
 def test_threads_paginates_and_emits_records(config, requests_mock):
@@ -60,3 +68,41 @@ def test_threads_uses_prior_state_as_inclusive_lower_bound(config, requests_mock
     query = parse_qs(urlparse(requests_mock.last_request.url).query)
     actual_lower_bound = datetime.fromisoformat(query["updated_since"][0])
     assert actual_lower_bound == datetime.fromisoformat(prior_cursor)
+
+
+def test_end_users_paginates_and_emits_records(config, requests_mock):
+    requests_mock.get(
+        END_USERS_URL,
+        [
+            {"json": load_response("end_users_page_1.json")},
+            {"json": load_response("end_users_page_2.json")},
+        ],
+    )
+
+    output = read_end_users(config)
+
+    assert [message.record.data["id"] for message in output.records] == [
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    ]
+    assert requests_mock.call_count == 2
+
+    first_request, second_request = requests_mock.request_history
+    first_query = parse_qs(urlparse(first_request.url).query)
+    second_query = parse_qs(urlparse(second_request.url).query)
+
+    assert first_request.headers["X-API-KEY"] == "test-api-key"
+    assert "page" not in first_query
+    assert second_query["page"] == ["2"]
+
+
+def test_end_users_discovery_exposes_key_and_nullable_identifiers(config):
+    catalog = build_source(config).discover(logger=logging.getLogger("source-kapa"), config=config)
+    end_users = next(stream for stream in catalog.streams if stream.name == "end_users")
+    properties = end_users.json_schema["properties"]
+
+    assert end_users.source_defined_primary_key == [["id"]]
+    assert properties["id"] == {"type": "string", "format": "uuid"}
+    assert properties["email"]["type"] == ["null", "string"]
+    assert properties["company_name"]["type"] == ["null", "string"]
+    assert properties["latest_activity_at"]["format"] == "date-time"

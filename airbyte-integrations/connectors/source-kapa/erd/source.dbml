@@ -22,6 +22,25 @@ Table "activity" {
     Note: "One full-refresh record for the configured date range. Statistics remain nested because the API returns aggregate and per-integration metrics together."
 }
 
+Table "end_users" {
+    "id" string [pk, not null]
+    "display_id" string
+    "email" string
+    "unique_client_id" string
+    "question_answer_count" integer
+    "latest_thread_id" string
+    "latest_thread_first_question" string
+    "latest_activity_at" string
+    "first_activity_at" string
+    "company_name" string
+    "created_at" string
+    "google_sub_id" string
+    "github_sub_id" string
+    "kapa_oidc_sub_id" string
+
+    Note: "Tracked project users. Identity and latest-thread context can contain personal data; fields vary with the configured Kapa integration."
+}
+
 Table "top_questions_periods" {
     "id" string [pk, not null]
     "interval" string

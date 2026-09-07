@@ -288,6 +288,38 @@ definitions:
       schema:
         $ref: "#/schemas/analytics_cluster"
 
+  end_users:
+    type: DeclarativeStream
+    name: end_users
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/end-users/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        type: DefaultPaginator
+        page_token_option:
+          type: RequestOption
+          field_name: page
+          inject_into: request_parameter
+        pagination_strategy:
+          type: CursorPagination
+          cursor_value: '{{ response.next | regex_search("page=([0-9]+)") }}'
+          stop_condition: "{{ response.next is none }}"
+          page_size: 100
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/end_users"
+
 streams:
   - $ref: "#/definitions/threads"
   - $ref: "#/definitions/activity"
@@ -295,6 +327,7 @@ streams:
   - $ref: "#/definitions/top_questions_clusters"
   - $ref: "#/definitions/coverage_gaps_periods"
   - $ref: "#/definitions/coverage_gaps_clusters"
+  - $ref: "#/definitions/end_users"
 
 spec:
   type: Spec
@@ -340,6 +373,69 @@ spec:
         order: 3
 
 schemas:
+  end_users:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+    properties:
+      id:
+        type: string
+        format: uuid
+      display_id:
+        type: string
+      email:
+        type:
+          - "null"
+          - string
+      unique_client_id:
+        type:
+          - "null"
+          - string
+      question_answer_count:
+        type: integer
+      latest_thread_id:
+        type:
+          - "null"
+          - string
+        format: uuid
+      latest_thread_first_question:
+        type:
+          - "null"
+          - string
+      latest_activity_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      first_activity_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      company_name:
+        type:
+          - "null"
+          - string
+      created_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      google_sub_id:
+        type:
+          - "null"
+          - string
+      github_sub_id:
+        type:
+          - "null"
+          - string
+      kapa_oidc_sub_id:
+        type:
+          - "null"
+          - string
+
   activity:
     $schema: http://json-schema.org/draft-07/schema#
     type: object
