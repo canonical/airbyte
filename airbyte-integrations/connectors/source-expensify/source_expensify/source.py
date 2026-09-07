@@ -11,11 +11,12 @@ from typing import Any, Iterable, List, Mapping, Optional, Tuple
 
 import requests
 
-from airbyte_cdk.models import SyncMode
+from airbyte_cdk.models import FailureType, SyncMode
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.sources.streams.http.exceptions import DefaultBackoffException, UserDefinedBackoffException
 from airbyte_cdk.sources.streams.http.rate_limiting import default_backoff_handler, user_defined_backoff_handler
+from airbyte_cdk.utils.traced_exception import AirbyteTracedException
 
 
 EXPENSIFY_URL = "https://integrations.expensify.com/Integration-Server/ExpensifyIntegrations"
@@ -48,7 +49,7 @@ def _load_reports_export_template() -> str:
     return template_bytes.decode("utf-8")
 
 
-def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
+def _map_response_code_to_exception(response_code: int) -> None:
     """Map an Expensify response code to an exception."""
     if response_code == 410:
         # Expensify returns 410 if the policy doesn't exist
@@ -59,6 +60,22 @@ def _map_response_code_to_exception(response_code: int) -> Optional[Exception]:
     elif response_code == 429:
         # Expensify returns 429 if the API rate limit is exceeded
         raise RateLimitExceededError(f"Expensify API rate limit exceeded.")
+    elif 400 <= response_code < 500:
+        # Other 4xx codes are typically caused by invalid configuration or input and won't
+        # succeed on retry, so surface them to Airbyte as a config error.
+        raise AirbyteTracedException(
+            internal_message=f"Expensify returned client error response code {response_code}.",
+            message=f"Expensify API request failed with client error (code {response_code}). Please verify your configuration.",
+            failure_type=FailureType.config_error,
+        )
+    elif response_code >= 500:
+        # 5xx codes indicate a problem on Expensify's side that may be transient, so surface
+        # them to Airbyte as a transient error that can be retried.
+        raise AirbyteTracedException(
+            internal_message=f"Expensify returned server error response code {response_code}.",
+            message=f"Expensify API request failed with a server error (code {response_code}). This is likely transient, please try again later.",
+            failure_type=FailureType.transient_error,
+        )
 
 
 @user_defined_backoff_handler(max_tries=MAX_RETRIES)
