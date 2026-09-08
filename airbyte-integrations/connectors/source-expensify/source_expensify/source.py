@@ -51,30 +51,28 @@ def _load_reports_export_template() -> str:
 
 def _map_response_code_to_exception(response_code: int) -> None:
     """Map an Expensify response code to an exception."""
-    if response_code == 410:
+    if response_code == requests.codes.gone:
         # Expensify returns 410 if the policy doesn't exist
         raise PolicyNotFoundError(f"Expensify policy not found.")
-    elif response_code == 401:
+    elif response_code == requests.codes.unauthorized:
         # Expensify returns 401 if the credentials are invalid
         raise CredentialsInvalidError(f"Expensify credentials are invalid.")
-    elif response_code == 429:
+    elif response_code == requests.codes.too_many_requests:
         # Expensify returns 429 if the API rate limit is exceeded
         raise RateLimitExceededError(f"Expensify API rate limit exceeded.")
-    elif 400 <= response_code < 500:
-        # Other 4xx codes are typically caused by invalid configuration or input and won't
-        # succeed on retry, so surface them to Airbyte as a config error.
-        raise AirbyteTracedException(
-            internal_message=f"Expensify returned client error response code {response_code}.",
-            message=f"Expensify API request failed with client error (code {response_code}). Please verify your configuration.",
-            failure_type=FailureType.config_error,
-        )
     elif response_code >= 500:
-        # 5xx codes indicate a problem on Expensify's side that may be transient, so surface
-        # them to Airbyte as a transient error that can be retried.
+        # 5xx codes indicate a problem on Expensify's side that may be transient.
         raise AirbyteTracedException(
             internal_message=f"Expensify returned server error response code {response_code}.",
             message=f"Expensify API request failed with a server error (code {response_code}). This is likely transient, please try again later.",
             failure_type=FailureType.transient_error,
+        )
+    elif response_code >= requests.codes.bad_request:
+        # Other 4xx codes typically won't succeed on retry, so surface them to Airbyte as a config error.
+        raise AirbyteTracedException(
+            internal_message=f"Expensify returned client error response code {response_code}.",
+            message=f"Expensify API request failed with client error (code {response_code}). Please verify your configuration.",
+            failure_type=FailureType.config_error,
         )
 
 
