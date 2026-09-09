@@ -611,6 +611,40 @@ schemas:
         items:
           type: object
           additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            question:
+              type: string
+            answer:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            is_uncertain:
+              type: boolean
+            end_user_id:
+              type:
+                - "null"
+                - string
+              format: uuid
+            end_user:
+              type:
+                - "null"
+                - object
+              additionalProperties: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                identifier:
+                  type: string
+            feedback:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
       has_more_question_answers:
         type: boolean
       feedback:
@@ -628,11 +662,33 @@ schemas:
         items:
           type: object
           additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            description:
+              type:
+                - "null"
+                - string
+            color:
+              type: string
+            is_deleted:
+              type: boolean
       interaction_tags:
         type: array
         items:
           type: object
           additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            display_name:
+              type: string
       end_user:
         type:
           - "null"

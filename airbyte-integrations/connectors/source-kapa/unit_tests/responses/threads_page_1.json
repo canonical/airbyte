@@ -7,17 +7,47 @@
       "integration_id": "44084d82-ab03-4949-b06a-b2f008931da0",
       "question_answers": [
         {
+          "id": "d9c6e138-715d-4f4d-9ca9-46b6f5989c20",
           "question": "How do I configure the connector?",
-          "answer": "Use an API key and project ID."
+          "answer": "Use an API key and project ID.",
+          "created_at": "2024-01-02T10:00:00Z",
+          "is_uncertain": false,
+          "end_user_id": "37999984-cb0d-46b8-9ef3-f307869406a6",
+          "end_user": {
+            "id": "37999984-cb0d-46b8-9ef3-f307869406a6",
+            "identifier": "example-user"
+          },
+          "feedback": []
         }
       ],
       "has_more_question_answers": false,
       "feedback": null,
       "status_tag": null,
-      "custom_tags": [],
-      "interaction_tags": [],
+      "custom_tags": [
+        {
+          "id": "34148abf-e18d-4837-8a24-d1ae05286c60",
+          "name": "example-tag",
+          "description": "Synthetic test tag",
+          "color": "#336699",
+          "is_deleted": false
+        }
+      ],
+      "interaction_tags": [
+        {
+          "id": "94a3fb5d-d0e7-43df-8377-bb3229ff0651",
+          "name": "example-interaction",
+          "display_name": "Example interaction"
+        }
+      ],
       "end_user": null,
-      "integration": null
+      "integration": {
+        "id": "44084d82-ab03-4949-b06a-b2f008931da0",
+        "project": "d7b46c01-32a3-4f74-80d3-616a3c18fb6b",
+        "name": "Example integration",
+        "integration_type": "API",
+        "updated_at": "2024-01-02T09:00:00Z",
+        "created_at": "2024-01-01T09:00:00Z"
+      }
     }
   ],
   "next_cursor": "next-page"

@@ -43,6 +43,11 @@ def test_threads_paginates_and_emits_records(config, requests_mock):
         "6ea2745a-b70d-42f3-b13c-a4227803a4d7",
         "47edf32e-b71c-4748-ab0b-958414daca2d",
     ]
+    first_record = output.records[0].record.data
+    assert first_record["question_answers"][0]["end_user"]["identifier"] == "example-user"
+    assert first_record["custom_tags"][0]["is_deleted"] is False
+    assert first_record["interaction_tags"][0]["display_name"] == "Example interaction"
+    assert first_record["integration"]["integration_type"] == "API"
     assert requests_mock.call_count == 2
 
     first_request, second_request = requests_mock.request_history
@@ -68,6 +73,23 @@ def test_threads_uses_prior_state_as_inclusive_lower_bound(config, requests_mock
     query = parse_qs(urlparse(requests_mock.last_request.url).query)
     actual_lower_bound = datetime.fromisoformat(query["updated_since"][0])
     assert actual_lower_bound == datetime.fromisoformat(prior_cursor)
+
+
+def test_threads_discovery_exposes_nested_fields(config):
+    catalog = build_source(config).discover(logger=logging.getLogger("source-kapa"), config=config)
+    threads = next(stream for stream in catalog.streams if stream.name == "threads")
+    properties = threads.json_schema["properties"]
+    question_answer = properties["question_answers"]["items"]
+    custom_tag = properties["custom_tags"]["items"]
+    interaction_tag = properties["interaction_tags"]["items"]
+
+    assert question_answer["additionalProperties"] is True
+    assert question_answer["properties"]["id"] == {"type": "string", "format": "uuid"}
+    assert question_answer["properties"]["created_at"]["format"] == "date-time"
+    assert question_answer["properties"]["end_user"]["properties"]["identifier"] == {"type": "string"}
+    assert question_answer["properties"]["feedback"]["items"]["additionalProperties"] is True
+    assert custom_tag["properties"]["is_deleted"] == {"type": "boolean"}
+    assert interaction_tag["properties"]["display_name"] == {"type": "string"}
 
 
 def test_end_users_paginates_and_emits_records(config, requests_mock):
