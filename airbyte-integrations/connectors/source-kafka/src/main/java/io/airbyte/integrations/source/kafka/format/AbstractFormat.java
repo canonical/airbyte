@@ -93,7 +93,7 @@ public abstract class AbstractFormat implements KafkaFormat {
         }
         if (protocol == KafkaProtocol.SASL_SSL && protocolConfig.hasNonNull("tls_ca_certificate")
             && !protocolConfig.get("tls_ca_certificate").asText().isBlank()) {
-          // Pass the CA as an in-memory PEM trust store so no file needs to be mounted into the connector image.
+          // Trust the broker CA via an in-memory PEM store; no file mount needed.
           builder.put(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, "PEM");
           builder.put(SslConfigs.SSL_TRUSTSTORE_CERTIFICATES_CONFIG, protocolConfig.get("tls_ca_certificate").asText());
         }
