@@ -3,6 +3,10 @@ name: Canonical CI
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   fail_on_protected_path_changes:
     name: "Check fork does not change protected paths"
