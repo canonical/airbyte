@@ -19,7 +19,7 @@ data:
   connectorType: source
   definitionId: 3d73ff7d-c759-4ea4-8b64-786a4197ddf9
   dockerImageTag: 0.1.0
-  canonicalImageTag: 0.1.0-canonical-0.1.0
+  canonicalImageTag: 0.1.0-canonical-1.0.0
   dockerRepository: airbyte/source-kapa
   githubIssueLabel: source-kapa
   icon: icon.png

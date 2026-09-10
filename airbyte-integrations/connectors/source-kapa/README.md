@@ -89,7 +89,3 @@ docker run --rm \
 - End-user records use full refresh because the API does not expose a correctness-safe incremental filter or cursor.
 - Kapa does not document endpoint-specific rate limits or every error payload. The connector applies bounded fallback handling for 403 rate-limit responses, 429, and transient 502/503/504 responses.
 - Expected integration records are not tracked because threads, end users, and analytics are specific to each Kapa project.
-
-## Publishing
-
-The initial Airbyte image tag is `0.1.0`, and the Canonical image tag is `0.1.0-canonical-0.1.0`. Update `dockerImageTag`, `canonicalImageTag`, and the changelog in the user documentation together for a release.
