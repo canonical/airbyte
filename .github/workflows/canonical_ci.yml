@@ -33,10 +33,11 @@ jobs:
 
   connectors_full_ci:
     name: Run connectors full CI on fork
-    if: github.event.pull_request.head.repo.fork == true && needs.detect-changes.outputs.connectors_list_json != '[]'
+    if: github.event.pull_request.head.repo.fork == true && needs.get_changed_directories_list.outputs.connectors_list_json != '[]'
     needs: [fail_on_protected_path_changes, get_changed_directories_list]
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         dir: ${{ fromJson(needs.get_changed_directories_list.outputs.connectors_list_json) }}
 
@@ -48,14 +49,53 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
+      - name: Resolve connector language
+        id: vars
+        run: |
+          if [ -z "${{ matrix.dir }}" ]; then
+            echo "No directory specified in matrix.dir, skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          METADATA="airbyte-integrations/connectors/${{ matrix.dir }}/metadata.yaml"
+          # Java connectors need a different build/test path than Python/manifest connectors.
+          if grep -qE '^\s*-\s*language:java' "$METADATA"; then
+            LANGUAGE=java
+          else
+            LANGUAGE=python
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "language=$LANGUAGE" >> "$GITHUB_OUTPUT"
+          echo "Detected language '$LANGUAGE' for connector '${{ matrix.dir }}'."
+
+      # -------------------- Java connectors --------------------
+      # Build/test with Gradle on JDK 21. The airbyte-ci Dagger build uses JDK 17, which is
+      # incompatible with the io.airbyte.gradle.docker plugin (>=0.63.0) that requires JDK 21.
+      - name: Set up Java 21 environment
+        if: steps.vars.outputs.run == 'true' && steps.vars.outputs.language == 'java'
+        uses: ./.github/actions/install-java-environment
+        with:
+          java_version: "21"
+
+      - name: Test and build Java connector ${{ matrix.dir }}
+        if: steps.vars.outputs.run == 'true' && steps.vars.outputs.language == 'java'
+        run: |
+          echo "🔄 Running Gradle unit tests and tarball build for connector: ${{ matrix.dir }}"
+          ./gradlew \
+            ":airbyte-integrations:connectors:${{ matrix.dir }}:test" \
+            ":airbyte-integrations:connectors:${{ matrix.dir }}:distTar"
+
+      # -------------------- Python / manifest connectors --------------------
       - name: Install Airbyte CI
         id: install-airbyte-ci
+        if: steps.vars.outputs.run == 'true' && steps.vars.outputs.language != 'java'
         uses: ./.github/actions/install-airbyte-ci
         with:
-          is_fork: ${{ inputs.is_fork }}
+          is_fork: "true"
 
       - name: Test Connector ${{ matrix.dir }}
         id: test-airbyte-ci
+        if: steps.vars.outputs.run == 'true' && steps.vars.outputs.language != 'java'
         env:
           CI_GIT_BRANCH: ${{ github.head_ref }}
           CI_GIT_REPO_URL: ${{ github.event.pull_request.head.repo.clone_url }}
@@ -64,11 +104,6 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.sha }}
           CONNECTOR: ${{ matrix.dir }}
         run: |
-          if [ -z "${{ matrix.dir }}" ]; then
-            echo "No directory specified in matrix.dir, skipping."
-            exit 0
-          fi
-
           # install required packages
           sudo apt update
           sudo apt install python3-setuptools -y
