@@ -27,7 +27,7 @@ definitions:
       max_retries: 20
       response_filters:
         - type: HttpResponseFilter
-          action: IGNORE
+          action: FAIL
           http_codes:
             - 404
             - 409
@@ -52,6 +52,37 @@ definitions:
           backoff_time_in_seconds: 60
     request_headers:
       Accept: application/json
+
+  substream_requester:
+    $ref: "#/definitions/requester"
+    error_handler:
+      type: DefaultErrorHandler
+      max_retries: 20
+      response_filters:
+        - type: HttpResponseFilter
+          action: IGNORE
+          http_codes:
+            - 404
+            - 409
+        - type: HttpResponseFilter
+          action: RETRY
+          predicate: "{{ 'rate limit' in (response.get('message', '') | lower) }}"
+        - type: HttpResponseFilter
+          action: RETRY
+          http_codes:
+            - 429
+        - type: HttpResponseFilter
+          action: RETRY
+          http_codes:
+            - 502
+            - 503
+            - 504
+      backoff_strategies:
+        - type: WaitTimeFromHeader
+          header: retry-after
+          min_wait: 1
+        - type: ConstantBackoffStrategy
+          backoff_time_in_seconds: 60
 
   analytics_paginator:
     type: DefaultPaginator
@@ -237,7 +268,7 @@ definitions:
     retriever:
       type: SimpleRetriever
       requester:
-        $ref: "#/definitions/requester"
+        $ref: "#/definitions/substream_requester"
         path: "/query/v1/top-questions/periods/{{ stream_partition.period_id }}/"
       record_selector:
         type: RecordSelector
@@ -309,7 +340,7 @@ definitions:
     retriever:
       type: SimpleRetriever
       requester:
-        $ref: "#/definitions/requester"
+        $ref: "#/definitions/substream_requester"
         path: "/query/v1/coverage-gaps/periods/{{ stream_partition.period_id }}/"
       record_selector:
         type: RecordSelector

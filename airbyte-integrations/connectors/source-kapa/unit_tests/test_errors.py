@@ -1,19 +1,25 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
+import logging
 from unittest.mock import ANY
 
 import pytest
 from conftest import load_response
 from test_streams import THREADS_URL, read_threads
 
+from airbyte_cdk.models import Status
+
+from conftest import build_source
+
 
 @pytest.mark.parametrize("status_code", [404, 409])
-def test_missing_or_conflicting_resource_is_ignored(config, requests_mock, status_code):
+def test_missing_or_conflicting_resource_fails_check(config, requests_mock, status_code):
     requests_mock.get(THREADS_URL, status_code=status_code, json={"message": "Resource unavailable"})
 
-    output = read_threads(config)
+    connection_status = build_source(config).check(logger=logging.getLogger("source-kapa"), config=config)
 
-    assert output.records == []
+    assert connection_status.status == Status.FAILED
+    assert connection_status.message
     assert requests_mock.call_count == 1
 
 
