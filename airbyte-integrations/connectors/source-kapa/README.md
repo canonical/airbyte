@@ -1,6 +1,6 @@
 # Kapa Source Connector
 
-The Kapa source connector syncs project threads, end users, and analytics from the Kapa Query API v1. It is a manifest-only connector using API-key authentication, cursor and page pagination, and incremental state for threads.
+The Kapa source connector syncs project threads, end users, and analytics from the Kapa Query API v1. It is a manifest-only connector using API-key authentication, cursor and page pagination, and incremental state for threads and daily activity.
 
 For user-facing setup instructions, see the [Kapa source documentation](https://docs.airbyte.com/integrations/sources/kapa).
 
@@ -9,7 +9,7 @@ For user-facing setup instructions, see the [Kapa source documentation](https://
 | Stream                   | Primary key       | Cursor             | Sync modes                |
 | ------------------------ | ----------------- | ------------------ | ------------------------- |
 | `threads`                | `id`              | `last_activity_at` | Full refresh, incremental |
-| `activity`               | None              | None               | Full refresh              |
+| `activity`               | `activity_date`   | `activity_date`    | Full refresh, incremental |
 | `top_questions_periods`  | `id`              | None               | Full refresh              |
 | `top_questions_clusters` | `period_id`, `id` | None               | Full refresh              |
 | `coverage_gaps_periods`  | `id`              | None               | Full refresh              |
@@ -18,7 +18,9 @@ For user-facing setup instructions, see the [Kapa source documentation](https://
 
 Incremental requests send the saved cursor as the inclusive `updated_since` lower bound and sort by `last_activity_at` ascending. A record at the state boundary can be read again; append-dedup mode uses `id` to remove that boundary duplicate.
 
-`activity` emits one record containing aggregate statistics and statistics grouped by integration for the range from `start_date` through the sync start time. The period streams return completed weekly, monthly, or quarterly analytics periods. Their cluster substreams make one paginated detail traversal per period and attach `period_id` and `analytics_interval` to each record.
+`activity` emits one aggregate record per UTC day. Past days cover `00:00:00` through `23:59:59`; the current day covers midnight through the sync time. Each sync reloads yesterday and today so delayed and partial totals are updated through append-dedup on `activity_date`.
+
+The period streams return completed weekly, monthly, or quarterly analytics periods. Their cluster substreams make one paginated detail traversal per period and attach `period_id` and `analytics_interval` to each record.
 
 Cluster records include inline thread summaries. Kapa returns at most 100 recent threads per cluster, so `thread_count` is authoritative when it exceeds the length of `threads`.
 
@@ -83,7 +85,8 @@ docker run --rm \
 
 ## Known Limitations
 
-- Analytics streams use full refresh because Kapa does not expose a correctness-safe incremental cursor for them.
+- Top Questions and Coverage Gaps use full refresh because Kapa does not expose a correctness-safe incremental cursor for them.
+- Daily activity incremental state is synthesized from UTC date windows; Kapa does not expose an aggregate update cursor or document delayed historical updates beyond the one-day lookback.
 - Cluster detail reads fan out once per completed period and can make many requests for projects with long analytics histories.
 - Inline cluster threads are limited to 100 recent records; use `thread_count` for the true total.
 - End-user records use full refresh because the API does not expose a correctness-safe incremental filter or cursor.

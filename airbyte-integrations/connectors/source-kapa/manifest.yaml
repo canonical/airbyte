@@ -126,19 +126,58 @@ definitions:
   activity:
     type: DeclarativeStream
     name: activity
+    primary_key:
+      - activity_date
     retriever:
       type: SimpleRetriever
       requester:
         $ref: "#/definitions/requester"
         path: "/query/v1/projects/{{ config['project_id'] }}/activity/"
-        request_parameters:
-          start_date_time: "{{ config['start_date'] }}"
-          end_date_time: "{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}"
       record_selector:
         type: RecordSelector
         extractor:
           type: DpathExtractor
           field_path: []
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: activity_date
+      cursor_datetime_formats:
+        - "%Y-%m-%d"
+      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_date'] }}"
+        datetime_format: "%Y-%m-%dT%H:%M:%S%z"
+      end_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+        datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      start_time_option:
+        type: RequestOption
+        field_name: start_date_time
+        inject_into: request_parameter
+      end_time_option:
+        type: RequestOption
+        field_name: end_date_time
+        inject_into: request_parameter
+      step: P1D
+      cursor_granularity: PT1S
+      lookback_window: P1D
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - activity_date
+            value: "{{ format_datetime(stream_slice.start_time, '%Y-%m-%d') }}"
+          - path:
+              - window_start
+            value: "{{ stream_slice.start_time }}"
+          - path:
+              - window_end
+            value: "{{ stream_slice.end_time }}"
+          - path:
+              - is_complete
+            value: "{{ format_datetime(stream_slice.start_time, '%Y-%m-%d') != now_utc().strftime('%Y-%m-%d') }}"
     schema_loader:
       type: InlineSchemaLoader
       schema:
@@ -441,9 +480,24 @@ schemas:
     type: object
     additionalProperties: true
     required:
+      - activity_date
+      - window_start
+      - window_end
+      - is_complete
       - aggregate_statistics
       - statistics_by_integration
     properties:
+      activity_date:
+        type: string
+        format: date
+      window_start:
+        type: string
+        format: date-time
+      window_end:
+        type: string
+        format: date-time
+      is_complete:
+        type: boolean
       aggregate_statistics:
         $ref: "#/schemas/activity_statistics"
       statistics_by_integration:

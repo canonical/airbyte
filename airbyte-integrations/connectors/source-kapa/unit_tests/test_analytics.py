@@ -19,24 +19,32 @@ TOP_QUESTIONS_PERIODS_URL = f"{BASE_URL}/projects/{PROJECT_ID}/top-questions/per
 COVERAGE_GAPS_PERIODS_URL = f"{BASE_URL}/projects/{PROJECT_ID}/coverage-gaps/periods/"
 
 
-def read_stream(config, stream_name):
-    catalog = CatalogBuilder().with_stream(stream_name, SyncMode.full_refresh).build()
-    state = StateBuilder().build()
+def read_stream(config, stream_name, state=None):
+    sync_mode = SyncMode.incremental if stream_name == "activity" else SyncMode.full_refresh
+    catalog = CatalogBuilder().with_stream(stream_name, sync_mode).build()
+    state = StateBuilder().build() if state is None else state
     return read(build_source(config, state), config, catalog, state)
 
 
 def test_activity_emits_nested_response_and_date_range(config, requests_mock):
     requests_mock.get(ACTIVITY_URL, json=load_response("activity.json"))
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_config = dict(config, start_date=today.strftime("%Y-%m-%dT%H:%M:%SZ"))
     earliest_end = datetime.now(timezone.utc) - timedelta(seconds=1)
 
-    output = read_stream(config, "activity")
+    output = read_stream(daily_config, "activity")
 
     latest_end = datetime.now(timezone.utc) + timedelta(seconds=1)
-    assert [message.record.data for message in output.records] == [load_response("activity.json")]
+    assert len(output.records) == 1
+    record = output.records[0].record.data
+    assert record["aggregate_statistics"] == load_response("activity.json")["aggregate_statistics"]
+    assert record["activity_date"] == today.strftime("%Y-%m-%d")
+    assert record["window_start"] == today.strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert record["is_complete"] is False
     assert requests_mock.call_count == 1
 
     query = parse_qs(urlparse(requests_mock.last_request.url).query)
-    assert query["start_date_time"] == [config["start_date"]]
+    assert query["start_date_time"] == [daily_config["start_date"]]
     assert earliest_end <= datetime.fromisoformat(query["end_date_time"][0]) <= latest_end
 
 
@@ -48,6 +56,10 @@ def test_activity_schema_models_observed_nested_statistics(config):
     language = aggregate["properties"]["total_queries_by_language"]["items"]
     integration = activity.json_schema["properties"]["statistics_by_integration"]["items"]
 
+    assert activity.source_defined_primary_key == [["activity_date"]]
+    assert activity.default_cursor_field == ["activity_date"]
+    assert activity.supported_sync_modes == [SyncMode.full_refresh, SyncMode.incremental]
+    assert activity.json_schema["properties"]["activity_date"] == {"type": "string", "format": "date"}
     assert aggregate["properties"]["total_query_count"]["type"] == "integer"
     assert language["properties"] == {
         "iso": {"type": "string"},
@@ -56,6 +68,31 @@ def test_activity_schema_models_observed_nested_statistics(config):
     }
     assert integration["properties"]["integration"]["properties"]["id"] == {"type": "string", "format": "uuid"}
     assert integration["properties"]["statistics"] == aggregate
+
+
+def test_activity_rereads_previous_and_current_day_from_state(config, requests_mock):
+    requests_mock.get(ACTIVITY_URL, json=load_response("activity.json"))
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday = today - timedelta(days=1)
+    state = StateBuilder().with_stream_state("activity", {"activity_date": today.strftime("%Y-%m-%d")}).build()
+
+    output = read_stream(config, "activity", state)
+
+    assert requests_mock.call_count == 2
+    completeness_by_date = {message.record.data["activity_date"]: message.record.data["is_complete"] for message in output.records}
+    assert completeness_by_date == {
+        yesterday.strftime("%Y-%m-%d"): True,
+        today.strftime("%Y-%m-%d"): False,
+    }
+
+    queries_by_start = {
+        parse_qs(urlparse(request.url).query)["start_date_time"][0]: parse_qs(urlparse(request.url).query)
+        for request in requests_mock.request_history
+    }
+    yesterday_start = yesterday.strftime("%Y-%m-%dT%H:%M:%SZ")
+    today_start = today.strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert queries_by_start[yesterday_start]["end_date_time"] == [yesterday.strftime("%Y-%m-%dT23:59:59Z")]
+    assert today_start in queries_by_start
 
 
 def test_top_question_periods_use_default_interval_and_paginate(config, requests_mock):

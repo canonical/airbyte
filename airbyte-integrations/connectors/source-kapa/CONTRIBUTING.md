@@ -62,8 +62,8 @@ Expected outcomes:
 
 - `spec` emits an Airbyte specification with `api_key`, `project_id`, and `start_date` required and `analytics_interval` defaulting to `monthly`.
 - `check` makes a minimal threads request and succeeds only with access to the configured project.
-- `discover` exposes seven streams; only `threads` supports incremental sync.
-- `read` emits thread, end-user, and analytics records while only `threads` emits stream state.
+- `discover` exposes seven streams; `threads` and `activity` support incremental sync.
+- `read` emits thread, end-user, and analytics records while `threads` and `activity` emit stream state.
 
 Use `integration_tests/future_state.json` to verify that an abnormal future cursor returns no records and does not trigger an unbounded historical read.
 
@@ -90,5 +90,7 @@ End-user data: never commit real response fixtures. End-user records can contain
 Substreams: both cluster streams first enumerate periods and then retrieve every period's cluster pages. Verify the configured `analytics_interval` reaches the parent request and that emitted clusters retain `period_id`.
 
 State: compare the emitted `last_activity_at` value with the latest record. Kapa's `updated_since` filter is inclusive, so a boundary record can repeat and must retain a stable `id`.
+
+Daily activity: verify past UTC windows end at `23:59:59`, today's window ends at sync time, and a saved `activity_date` reloads both that day and the preceding day. Keep `activity_date` as the append-dedup key and cursor.
 
 Timeouts and transient errors: inspect Airbyte logs for 502, 503, or 504 responses. These statuses use a 60-second fallback backoff with at most 20 retries.

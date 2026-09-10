@@ -16,10 +16,14 @@ Table "threads" {
 }
 
 Table "activity" {
+    "activity_date" string [pk, not null]
+    "window_start" string [not null]
+    "window_end" string [not null]
+    "is_complete" boolean [not null]
     "aggregate_statistics" object [not null]
     "statistics_by_integration" object [not null]
 
-    Note: "One full-refresh record for the configured date range. Statistics remain nested because the API returns aggregate and per-integration metrics together."
+    Note: "One aggregate record per UTC day. The current day ends at sync time and is refreshed on each sync; a one-day lookback updates recent completed totals."
 }
 
 Table "end_users" {
