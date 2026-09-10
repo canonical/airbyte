@@ -69,6 +69,18 @@ definitions:
       stop_condition: "{{ response.next_cursor is none }}"
       page_size: 500
 
+  numbered_page_paginator:
+    type: DefaultPaginator
+    page_token_option:
+      type: RequestOption
+      field_name: page
+      inject_into: request_parameter
+    pagination_strategy:
+      type: CursorPagination
+      cursor_value: '{{ response.next | regex_search("page=([0-9]+)") }}'
+      stop_condition: "{{ response.next is none }}"
+      page_size: 100
+
   threads:
     type: DeclarativeStream
     name: threads
@@ -344,20 +356,77 @@ definitions:
           field_path:
             - results
       paginator:
-        type: DefaultPaginator
-        page_token_option:
-          type: RequestOption
-          field_name: page
-          inject_into: request_parameter
-        pagination_strategy:
-          type: CursorPagination
-          cursor_value: '{{ response.next | regex_search("page=([0-9]+)") }}'
-          stop_condition: "{{ response.next is none }}"
-          page_size: 100
+        $ref: "#/definitions/numbered_page_paginator"
     schema_loader:
       type: InlineSchemaLoader
       schema:
         $ref: "#/schemas/end_users"
+
+  integrations:
+    type: DeclarativeStream
+    name: integrations
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/integrations/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/integrations"
+
+  source_groups:
+    type: DeclarativeStream
+    name: source_groups
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/ingestion/v1/projects/{{ config['project_id'] }}/source-groups/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        $ref: "#/definitions/numbered_page_paginator"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/source_groups"
+
+  sources:
+    type: DeclarativeStream
+    name: sources
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/ingestion/v1/projects/{{ config['project_id'] }}/sources/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        $ref: "#/definitions/numbered_page_paginator"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/sources"
 
 streams:
   - $ref: "#/definitions/threads"
@@ -367,6 +436,9 @@ streams:
   - $ref: "#/definitions/coverage_gaps_periods"
   - $ref: "#/definitions/coverage_gaps_clusters"
   - $ref: "#/definitions/end_users"
+  - $ref: "#/definitions/integrations"
+  - $ref: "#/definitions/source_groups"
+  - $ref: "#/definitions/sources"
 
 spec:
   type: Spec
@@ -412,6 +484,159 @@ spec:
         order: 3
 
 schemas:
+  integrations:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+    properties:
+      id:
+        type: string
+        format: uuid
+      project:
+        type: string
+        format: uuid
+      name:
+        type: string
+      description:
+        type:
+          - "null"
+          - string
+      integration_type:
+        type:
+          - "null"
+          - string
+        enum:
+          - null
+          - SLACK_CHANNEL
+          - SLACK_WORKSPACE
+          - DISCORD_CHANNEL
+          - DISCORD_SERVER
+          - WIDGET
+          - CUSTOM_FRONTEND
+          - SUPPORT_FORM_DEFLECTOR
+          - API
+          - INTERNAL_ASSISTANT
+          - KAPA_MCP
+          - AGENT
+          - ZENDESK_AGENT
+      updated_at:
+        type: string
+        format: date-time
+      created_at:
+        type: string
+        format: date-time
+
+  source_groups:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - name
+      - type
+    properties:
+      id:
+        type: string
+        format: uuid
+      name:
+        type: string
+      type:
+        type: string
+        enum:
+          - product
+          - version
+      description:
+        type:
+          - "null"
+          - string
+      sub_groups:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            type:
+              type: string
+              enum:
+                - product
+                - version
+            description:
+              type:
+                - "null"
+                - string
+            sub_groups:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  sources:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+    properties:
+      id:
+        type: string
+        format: uuid
+      name:
+        type: string
+      type:
+        type: string
+        enum:
+          - s3
+          - scrape
+          - confluence
+          - github_issues
+          - github_pull_requests
+          - github_files
+          - github_discussions
+          - google_drive
+          - zendesk_helpcenter
+          - zendesk_tickets
+          - discourse
+          - notion
+          - openapi
+          - custom_qa
+          - slack
+          - file_upload
+          - discord
+          - youtube
+          - jira
+          - salesforce_knowledge
+          - salesforce_cases
+          - jira_service_m
+      contains_internal_data:
+        type: boolean
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+      source_groups:
+        type: string
+
   end_users:
     $schema: http://json-schema.org/draft-07/schema#
     type: object

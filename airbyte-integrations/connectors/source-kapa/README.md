@@ -1,6 +1,6 @@
 # Kapa Source Connector
 
-The Kapa source connector syncs project threads, end users, and analytics from the Kapa Query API v1. It is a manifest-only connector using API-key authentication, cursor and page pagination, and incremental state for threads and daily activity.
+The Kapa source connector syncs project threads, end users, integrations, knowledge sources, source groups, and analytics from the Kapa Query and Ingestion APIs. It is a manifest-only connector using API-key authentication, cursor and page pagination, and incremental state for threads and daily activity.
 
 For user-facing setup instructions, see the [Kapa source documentation](https://docs.airbyte.com/integrations/sources/kapa).
 
@@ -15,6 +15,9 @@ For user-facing setup instructions, see the [Kapa source documentation](https://
 | `coverage_gaps_periods`  | `id`              | None               | Full refresh              |
 | `coverage_gaps_clusters` | `period_id`, `id` | None               | Full refresh              |
 | `end_users`              | `id`              | None               | Full refresh              |
+| `integrations`           | `id`              | None               | Full refresh              |
+| `source_groups`          | `id`              | None               | Full refresh              |
+| `sources`                | `id`              | None               | Full refresh              |
 
 Incremental requests send the saved cursor as the inclusive `updated_since` lower bound and sort by `last_activity_at` ascending. A record at the state boundary can be read again; append-dedup mode uses `id` to remove that boundary duplicate.
 
@@ -25,6 +28,8 @@ The period streams return completed weekly, monthly, or quarterly analytics peri
 Cluster records include inline thread summaries. Kapa returns at most 100 recent threads per cluster, so `thread_count` is authoritative when it exceeds the length of `threads`.
 
 `end_users` uses full refresh and follows Kapa's numbered `next` page links. Records can contain personal and external identity data, including email addresses, company names, client identifiers, and identity-provider subject IDs. Apply destination access controls and retention policies appropriate for that data.
+
+`integrations` returns the project's configured deployment integrations as a direct array. `source_groups` and `sources` use full refresh against the Ingestion API and follow Kapa's numbered `next` page links. Nested source groups and each source's group membership are retained.
 
 ## Configuration
 
@@ -90,5 +95,6 @@ docker run --rm \
 - Cluster detail reads fan out once per completed period and can make many requests for projects with long analytics histories.
 - Inline cluster threads are limited to 100 recent records; use `thread_count` for the true total.
 - End-user records use full refresh because the API does not expose a correctness-safe incremental filter or cursor.
+- Integrations, source groups, and sources use full refresh because their list endpoints do not expose incremental filters or cursors.
 - Kapa does not document endpoint-specific rate limits or every error payload. The connector applies bounded fallback handling for 403 rate-limit responses, 429, and transient 502/503/504 responses.
-- Expected integration records are not tracked because threads, end users, and analytics are specific to each Kapa project.
+- Expected integration records are not tracked because connector records are specific to each Kapa project.

@@ -1,6 +1,6 @@
 # Kapa
 
-This page contains setup and reference information for the Kapa source connector. The connector reads project threads, end users, aggregate activity, Top Questions, and Coverage Gaps from the Kapa Query API v1.
+This page contains setup and reference information for the Kapa source connector. The connector reads project threads, end users, integrations, knowledge sources, source groups, aggregate activity, Top Questions, and Coverage Gaps from the Kapa Query and Ingestion APIs.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This page contains setup and reference information for the Kapa source connector
 
 Obtain an API key and the UUID of the Kapa project you want to sync. The connector sends the key in the `X-API-KEY` header. Keep it in a secret manager and do not place it in source control.
 
-See the [Kapa Analytics API overview](https://docs.kapa.ai/analytics/analytics-api), [List Threads API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-threads-list), and [List End Users API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-end-users-list) for the endpoint contracts.
+See the [Kapa Analytics API overview](https://docs.kapa.ai/analytics/analytics-api), [List Threads API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-threads-list), [List End Users API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-end-users-list), [List Integrations API reference](https://docs.kapa.ai/api/reference/query-v-1-projects-integrations-list), and [Sources API reference](https://docs.kapa.ai/api/reference/sources) for the endpoint contracts.
 
 ### Step 2: Set Up the Kapa Source in Airbyte
 
@@ -36,7 +36,7 @@ The Kapa source supports:
 - Incremental - Append
 - Incremental - Append + Deduped
 
-Incremental append-dedup is recommended for `threads` and `activity`. Threads use `id` as the primary key and `last_activity_at` as the cursor. Activity uses `activity_date` as both its primary key and cursor. End Users, Top Questions, and Coverage Gaps support full refresh only.
+Incremental append-dedup is recommended for `threads` and `activity`. Threads use `id` as the primary key and `last_activity_at` as the cursor. Activity uses `activity_date` as both its primary key and cursor. All other streams support full refresh only.
 
 ## Supported Streams
 
@@ -49,6 +49,9 @@ Incremental append-dedup is recommended for `threads` and `activity`. Threads us
 | `coverage_gaps_periods`  | Completed Coverage Gaps periods for the configured interval                             | `id`              | None               | Signed cursor, up to 500 records per page                           |
 | `coverage_gaps_clusters` | Uncertain-answer clusters and documentation suggestions for each Coverage Gaps period   | `period_id`, `id` | None               | One signed-cursor traversal per period, up to 500 clusters per page |
 | `end_users`              | Tracked users, identity fields, activity bounds, and latest thread context              | `id`              | None               | Numbered pages from the API-provided `next` URL                     |
+| `integrations`           | Deployment integrations configured for the project                                      | `id`              | None               | None; the endpoint returns a direct array                           |
+| `source_groups`          | Project source groups, including nested product and version groups                      | `id`              | None               | Numbered pages from the API-provided `next` URL                     |
+| `sources`                | Knowledge sources and their source-group membership                                     | `id`              | None               | Numbered pages from the API-provided `next` URL                     |
 
 ## Incremental Behavior
 
@@ -67,6 +70,10 @@ Kapa includes at most 100 recent thread summaries in each cluster. `thread_count
 ## End-User Data
 
 The `end_users` stream performs a full refresh because Kapa does not expose an incremental filter or cursor for this endpoint. Depending on how user tracking is configured, records can include email addresses, company names, client identifiers, identity-provider subject IDs, and the latest user-authored question. Restrict destination access and apply retention policies appropriate for personal data.
+
+## Project Resources
+
+The `integrations`, `source_groups`, and `sources` streams perform full refreshes because their endpoints do not expose incremental filters or cursors. Integrations describe where a Kapa project is deployed. Source groups organize knowledge by product or version, and sources describe the configured knowledge inputs and their group membership.
 
 ## Rate Limits and Retries
 

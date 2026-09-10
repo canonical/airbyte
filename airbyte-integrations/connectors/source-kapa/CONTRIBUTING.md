@@ -2,7 +2,7 @@
 
 ## Overview
 
-Source Kapa is a manifest-only connector for Kapa Query API v1 threads, end users, and analytics. The manifest owns authentication, request construction, pagination, substream routing, incremental thread state, schemas, and retry behavior; no custom Python runtime code is used.
+Source Kapa is a manifest-only connector for Kapa threads, end users, integrations, knowledge sources, source groups, and analytics. The manifest owns authentication, request construction, pagination, substream routing, incremental state, schemas, and retry behavior across the Query and Ingestion APIs; no custom Python runtime code is used.
 
 Key files:
 
@@ -62,8 +62,8 @@ Expected outcomes:
 
 - `spec` emits an Airbyte specification with `api_key`, `project_id`, and `start_date` required and `analytics_interval` defaulting to `monthly`.
 - `check` makes a minimal threads request and succeeds only with access to the configured project.
-- `discover` exposes seven streams; `threads` and `activity` support incremental sync.
-- `read` emits thread, end-user, and analytics records while `threads` and `activity` emit stream state.
+- `discover` exposes ten streams; `threads` and `activity` support incremental sync.
+- `read` emits thread, end-user, integration, source, source-group, and analytics records while `threads` and `activity` emit stream state.
 
 Use `integration_tests/future_state.json` to verify that an abnormal future cursor returns no records and does not trigger an unbounded historical read.
 
@@ -83,7 +83,7 @@ Authentication failures: confirm the API key belongs to a user or service accoun
 
 Rate limits: preserve `Retry-After` headers when capturing diagnostics. The connector retries documented rate-limit responses with a bounded budget; permission-related 403 responses must fail without retrying.
 
-Pagination: verify `next_cursor` is passed unchanged as the next request's `cursor` for threads and analytics. End users extract the page number from Kapa's `next` URL and send it as `page`.
+Pagination: verify `next_cursor` is passed unchanged as the next request's `cursor` for threads and analytics. End users, source groups, and sources extract the page number from Kapa's `next` URL and send it as `page`.
 
 End-user data: never commit real response fixtures. End-user records can contain email addresses, company names, client identifiers, identity-provider subject IDs, and user-authored questions.
 

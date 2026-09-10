@@ -45,6 +45,38 @@ Table "end_users" {
     Note: "Tracked project users. Identity and latest-thread context can contain personal data; fields vary with the configured Kapa integration."
 }
 
+Table "integrations" {
+    "id" string [pk, not null]
+    "project" string
+    "name" string
+    "description" string
+    "integration_type" string
+    "updated_at" string
+    "created_at" string
+}
+
+Table "source_groups" {
+    "id" string [pk, not null]
+    "name" string [not null]
+    "type" string [not null]
+    "description" string
+    "sub_groups" object
+    "created_at" string
+    "updated_at" string
+
+    Note: "Product and version groups. sub_groups retains the nested source-group hierarchy."
+}
+
+Table "sources" {
+    "id" string [pk, not null]
+    "name" string
+    "type" string
+    "contains_internal_data" boolean
+    "created_at" string
+    "updated_at" string
+    "source_groups" string
+}
+
 Table "top_questions_periods" {
     "id" string [pk, not null]
     "interval" string
