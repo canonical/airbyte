@@ -1,0 +1,19 @@
+{
+  "count": 2,
+  "next": null,
+  "previous": "https://api.kapa.ai/query/v1/projects/d7b46c01-32a3-4f74-80d3-616a3c18fb6b/end-users/",
+  "results": [
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "display_id": "anonymous-user",
+      "email": null,
+      "unique_client_id": "",
+      "question_answer_count": 1,
+      "latest_thread_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "latest_thread_first_question": "Where can I find the example documentation?",
+      "latest_activity_at": "2026-09-06T10:00:00Z",
+      "first_activity_at": "2026-09-06T10:00:00Z",
+      "company_name": null
+    }
+  ]
+}

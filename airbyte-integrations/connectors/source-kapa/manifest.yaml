@@ -1,0 +1,1112 @@
+version: 6.13.0
+
+type: DeclarativeSource
+
+check:
+  type: CheckStream
+  stream_names:
+    - threads
+
+definitions:
+  authenticator:
+    type: ApiKeyAuthenticator
+    api_token: "{{ config['api_key'] }}"
+    inject_into:
+      type: RequestOption
+      field_name: X-API-KEY
+      inject_into: header
+
+  requester:
+    type: HttpRequester
+    url_base: https://api.kapa.ai
+    http_method: GET
+    authenticator:
+      $ref: "#/definitions/authenticator"
+    error_handler:
+      type: DefaultErrorHandler
+      max_retries: 20
+      response_filters:
+        - type: HttpResponseFilter
+          action: FAIL
+          http_codes:
+            - 404
+            - 409
+        - type: HttpResponseFilter
+          action: RETRY
+          predicate: "{{ 'rate limit' in (response.get('message', '') | lower) }}"
+        - type: HttpResponseFilter
+          action: RETRY
+          http_codes:
+            - 429
+        - type: HttpResponseFilter
+          action: RETRY
+          http_codes:
+            - 502
+            - 503
+            - 504
+      backoff_strategies:
+        - type: WaitTimeFromHeader
+          header: retry-after
+          min_wait: 1
+        - type: ConstantBackoffStrategy
+          backoff_time_in_seconds: 60
+    request_headers:
+      Accept: application/json
+
+  substream_requester:
+    $ref: "#/definitions/requester"
+    error_handler:
+      type: DefaultErrorHandler
+      max_retries: 20
+      response_filters:
+        - type: HttpResponseFilter
+          action: IGNORE
+          http_codes:
+            - 404
+            - 409
+        - type: HttpResponseFilter
+          action: RETRY
+          predicate: "{{ 'rate limit' in (response.get('message', '') | lower) }}"
+        - type: HttpResponseFilter
+          action: RETRY
+          http_codes:
+            - 429
+        - type: HttpResponseFilter
+          action: RETRY
+          http_codes:
+            - 502
+            - 503
+            - 504
+      backoff_strategies:
+        - type: WaitTimeFromHeader
+          header: retry-after
+          min_wait: 1
+        - type: ConstantBackoffStrategy
+          backoff_time_in_seconds: 60
+
+  analytics_paginator:
+    type: DefaultPaginator
+    page_size_option:
+      type: RequestOption
+      field_name: page_size
+      inject_into: request_parameter
+    page_token_option:
+      type: RequestOption
+      field_name: cursor
+      inject_into: request_parameter
+    pagination_strategy:
+      type: CursorPagination
+      cursor_value: "{{ response.next_cursor }}"
+      stop_condition: "{{ response.next_cursor is none }}"
+      page_size: 500
+
+  numbered_page_paginator:
+    type: DefaultPaginator
+    page_token_option:
+      type: RequestOption
+      field_name: page
+      inject_into: request_parameter
+    pagination_strategy:
+      type: CursorPagination
+      cursor_value: '{{ response.next | regex_search("page=([0-9]+)") }}'
+      stop_condition: "{{ response.next is none }}"
+      page_size: 100
+
+  threads:
+    type: DeclarativeStream
+    name: threads
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/threads/"
+        request_parameters:
+          include: feedback,status_tag,custom_tags,interaction_tags,end_user,integration
+          sort: asc
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        type: DefaultPaginator
+        page_size_option:
+          type: RequestOption
+          field_name: page_size
+          inject_into: request_parameter
+        page_token_option:
+          type: RequestOption
+          field_name: cursor
+          inject_into: request_parameter
+        pagination_strategy:
+          type: CursorPagination
+          cursor_value: "{{ response.next_cursor }}"
+          stop_condition: "{{ response.next_cursor is none }}"
+          page_size: 500
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: last_activity_at
+      cursor_datetime_formats:
+        - "%Y-%m-%dT%H:%M:%S.%fZ"
+        - "%Y-%m-%dT%H:%M:%SZ"
+        - "%Y-%m-%dT%H:%M:%S.%f%z"
+        - "%Y-%m-%dT%H:%M:%S%z"
+      datetime_format: "%Y-%m-%dT%H:%M:%S.%f%z"
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_date'] | replace('Z', '+00:00') }}"
+        datetime_format: "%Y-%m-%dT%H:%M:%S%z"
+      start_time_option:
+        type: RequestOption
+        field_name: updated_since
+        inject_into: request_parameter
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/threads"
+
+  activity:
+    type: DeclarativeStream
+    name: activity
+    primary_key:
+      - activity_date
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/activity/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+    incremental_sync:
+      type: DatetimeBasedCursor
+      cursor_field: activity_date
+      cursor_datetime_formats:
+        - "%Y-%m-%d"
+      datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      start_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ config['start_date'] | replace('Z', '+00:00') }}"
+        datetime_format: "%Y-%m-%dT%H:%M:%S%z"
+      end_datetime:
+        type: MinMaxDatetime
+        datetime: "{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+        datetime_format: "%Y-%m-%dT%H:%M:%SZ"
+      start_time_option:
+        type: RequestOption
+        field_name: start_date_time
+        inject_into: request_parameter
+      end_time_option:
+        type: RequestOption
+        field_name: end_date_time
+        inject_into: request_parameter
+      step: P1D
+      cursor_granularity: PT1S
+      lookback_window: P1D
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - activity_date
+            value: "{{ format_datetime(stream_slice.start_time, '%Y-%m-%d') }}"
+          - path:
+              - window_start
+            value: "{{ stream_slice.start_time }}"
+          - path:
+              - window_end
+            value: "{{ stream_slice.end_time }}"
+          - path:
+              - is_complete
+            value: "{{ format_datetime(stream_slice.start_time, '%Y-%m-%d') != now_utc().strftime('%Y-%m-%d') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/activity"
+
+  top_questions_periods:
+    type: DeclarativeStream
+    name: top_questions_periods
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/top-questions/periods/"
+        request_parameters:
+          interval: "{{ config.get('analytics_interval', 'monthly') }}"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - periods
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_period"
+
+  top_questions_clusters:
+    type: DeclarativeStream
+    name: top_questions_clusters
+    primary_key:
+      - period_id
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/substream_requester"
+        path: "/query/v1/top-questions/periods/{{ stream_partition.period_id }}/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - clusters
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            parent_key: id
+            partition_field: period_id
+            stream:
+              $ref: "#/definitions/top_questions_periods"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - period_id
+            value: "{{ stream_partition.period_id }}"
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_cluster"
+
+  coverage_gaps_periods:
+    type: DeclarativeStream
+    name: coverage_gaps_periods
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/coverage-gaps/periods/"
+        request_parameters:
+          interval: "{{ config.get('analytics_interval', 'monthly') }}"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - periods
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_period"
+
+  coverage_gaps_clusters:
+    type: DeclarativeStream
+    name: coverage_gaps_clusters
+    primary_key:
+      - period_id
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/substream_requester"
+        path: "/query/v1/coverage-gaps/periods/{{ stream_partition.period_id }}/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - clusters
+      paginator:
+        $ref: "#/definitions/analytics_paginator"
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            parent_key: id
+            partition_field: period_id
+            stream:
+              $ref: "#/definitions/coverage_gaps_periods"
+    transformations:
+      - type: AddFields
+        fields:
+          - path:
+              - period_id
+            value: "{{ stream_partition.period_id }}"
+          - path:
+              - analytics_interval
+            value: "{{ config.get('analytics_interval', 'monthly') }}"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/analytics_cluster"
+
+  end_users:
+    type: DeclarativeStream
+    name: end_users
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/end-users/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        $ref: "#/definitions/numbered_page_paginator"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/end_users"
+
+  integrations:
+    type: DeclarativeStream
+    name: integrations
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/query/v1/projects/{{ config['project_id'] }}/integrations/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/integrations"
+
+  source_groups:
+    type: DeclarativeStream
+    name: source_groups
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/ingestion/v1/projects/{{ config['project_id'] }}/source-groups/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        $ref: "#/definitions/numbered_page_paginator"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/source_groups"
+
+  sources:
+    type: DeclarativeStream
+    name: sources
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        $ref: "#/definitions/requester"
+        path: "/ingestion/v1/projects/{{ config['project_id'] }}/sources/"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - results
+      paginator:
+        $ref: "#/definitions/numbered_page_paginator"
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $ref: "#/schemas/sources"
+
+streams:
+  - $ref: "#/definitions/threads"
+  - $ref: "#/definitions/activity"
+  - $ref: "#/definitions/top_questions_periods"
+  - $ref: "#/definitions/top_questions_clusters"
+  - $ref: "#/definitions/coverage_gaps_periods"
+  - $ref: "#/definitions/coverage_gaps_clusters"
+  - $ref: "#/definitions/end_users"
+  - $ref: "#/definitions/integrations"
+  - $ref: "#/definitions/source_groups"
+  - $ref: "#/definitions/sources"
+
+spec:
+  type: Spec
+  connection_specification:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - api_key
+      - project_id
+      - start_date
+    properties:
+      api_key:
+        type: string
+        title: API Key
+        description: Kapa API key sent in the X-API-KEY header.
+        airbyte_secret: true
+        order: 0
+      project_id:
+        type: string
+        title: Project ID
+        description: UUID of the Kapa project whose threads should be synced.
+        pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        order: 1
+      start_date:
+        type: string
+        title: Start Date
+        description: Earliest thread activity timestamp to sync, in ISO 8601 format with whole-second precision.
+        format: date-time
+        pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$"
+        examples:
+          - "2024-01-01T00:00:00Z"
+        order: 2
+      analytics_interval:
+        type: string
+        title: Analytics Interval
+        description: Period size used to retrieve Top Questions and Coverage Gaps analytics.
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+        default: monthly
+        order: 3
+
+schemas:
+  integrations:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+    properties:
+      id:
+        type: string
+        format: uuid
+      project:
+        type: string
+        format: uuid
+      name:
+        type: string
+      description:
+        type:
+          - "null"
+          - string
+      integration_type:
+        type:
+          - "null"
+          - string
+        enum:
+          - null
+          - SLACK_CHANNEL
+          - SLACK_WORKSPACE
+          - DISCORD_CHANNEL
+          - DISCORD_SERVER
+          - WIDGET
+          - CUSTOM_FRONTEND
+          - SUPPORT_FORM_DEFLECTOR
+          - API
+          - INTERNAL_ASSISTANT
+          - KAPA_MCP
+          - AGENT
+          - ZENDESK_AGENT
+      updated_at:
+        type: string
+        format: date-time
+      created_at:
+        type: string
+        format: date-time
+
+  source_groups:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - name
+      - type
+    properties:
+      id:
+        type: string
+        format: uuid
+      name:
+        type: string
+      type:
+        type: string
+        enum:
+          - product
+          - version
+      description:
+        type:
+          - "null"
+          - string
+      sub_groups:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            type:
+              type: string
+              enum:
+                - product
+                - version
+            description:
+              type:
+                - "null"
+                - string
+            sub_groups:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  sources:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+    properties:
+      id:
+        type: string
+        format: uuid
+      name:
+        type: string
+      type:
+        type: string
+        enum:
+          - s3
+          - scrape
+          - confluence
+          - github_issues
+          - github_pull_requests
+          - github_files
+          - github_discussions
+          - google_drive
+          - zendesk_helpcenter
+          - zendesk_tickets
+          - discourse
+          - notion
+          - openapi
+          - custom_qa
+          - slack
+          - file_upload
+          - discord
+          - youtube
+          - jira
+          - salesforce_knowledge
+          - salesforce_cases
+          - jira_service_m
+      contains_internal_data:
+        type: boolean
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+      source_groups:
+        type: string
+
+  end_users:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+    properties:
+      id:
+        type: string
+        format: uuid
+      display_id:
+        type: string
+      email:
+        type:
+          - "null"
+          - string
+      unique_client_id:
+        type:
+          - "null"
+          - string
+      question_answer_count:
+        type: integer
+      latest_thread_id:
+        type:
+          - "null"
+          - string
+        format: uuid
+      latest_thread_first_question:
+        type:
+          - "null"
+          - string
+      latest_activity_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      first_activity_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      company_name:
+        type:
+          - "null"
+          - string
+      created_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      google_sub_id:
+        type:
+          - "null"
+          - string
+      github_sub_id:
+        type:
+          - "null"
+          - string
+      kapa_oidc_sub_id:
+        type:
+          - "null"
+          - string
+
+  activity:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - activity_date
+      - window_start
+      - window_end
+      - is_complete
+      - aggregate_statistics
+      - statistics_by_integration
+    properties:
+      activity_date:
+        type: string
+        format: date
+      window_start:
+        type: string
+        format: date-time
+      window_end:
+        type: string
+        format: date-time
+      is_complete:
+        type: boolean
+      aggregate_statistics:
+        $ref: "#/schemas/activity_statistics"
+      statistics_by_integration:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          required:
+            - integration
+            - statistics
+          properties:
+            integration:
+              type: object
+              additionalProperties: true
+              required:
+                - id
+                - integration_type
+                - name
+              properties:
+                id:
+                  type: string
+                integration_type:
+                  type:
+                    - "null"
+                    - string
+                name:
+                  type:
+                    - "null"
+                    - string
+            statistics:
+              $ref: "#/schemas/activity_statistics"
+
+  activity_statistics:
+    type: object
+    additionalProperties: true
+    required:
+      - total_query_count
+      - total_conversation_query_count
+      - total_retrieval_query_count
+      - total_upvotes
+      - total_downvotes
+      - total_uncertain_query_count
+      - total_unique_users
+      - total_support_tickets_deflected
+      - total_support_tickets_not_deflected
+      - total_queries_by_language
+    properties:
+      total_query_count:
+        type: integer
+      total_conversation_query_count:
+        type: integer
+      total_retrieval_query_count:
+        type: integer
+      total_upvotes:
+        type: integer
+      total_downvotes:
+        type: integer
+      total_uncertain_query_count:
+        type: integer
+      total_unique_users:
+        type: integer
+      total_support_tickets_deflected:
+        type: integer
+      total_support_tickets_not_deflected:
+        type: integer
+      total_queries_by_language:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          required:
+            - iso
+            - name
+            - count
+          properties:
+            iso:
+              type: string
+            name:
+              type: string
+            count:
+              type: integer
+
+  analytics_period:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - analytics_interval
+    properties:
+      id:
+        type: string
+        format: uuid
+      interval:
+        type: string
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+      start_date:
+        type: string
+        format: date
+      end_date:
+        type: string
+        format: date
+      total_conversations:
+        type: integer
+      analytics_interval:
+        type: string
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+
+  analytics_cluster:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - period_id
+      - analytics_interval
+    properties:
+      id:
+        type: string
+        format: uuid
+      period_id:
+        type: string
+        format: uuid
+      title:
+        type: string
+      summary:
+        type:
+          - "null"
+          - string
+      suggestion:
+        type:
+          - "null"
+          - string
+      thread_count:
+        type: integer
+      num_unique_users:
+        type: integer
+      threads:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_at:
+              type: string
+              format: date-time
+            initial_question:
+              type: string
+            initial_answer:
+              type: string
+      analytics_interval:
+        type: string
+        enum:
+          - weekly
+          - monthly
+          - quarterly
+
+  threads:
+    $schema: http://json-schema.org/draft-07/schema#
+    type: object
+    additionalProperties: true
+    required:
+      - id
+      - created_at
+      - question_answers
+    properties:
+      id:
+        type: string
+        format: uuid
+      created_at:
+        type: string
+        format: date-time
+      last_activity_at:
+        type:
+          - "null"
+          - string
+        format: date-time
+      integration_id:
+        type:
+          - "null"
+          - string
+        format: uuid
+      question_answers:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            thread_id:
+              type: string
+            question:
+              type: string
+            answer:
+              type: string
+            query_type:
+              type: string
+              enum:
+                - retrieval
+                - conversation
+                - agent_conversation
+                - zendesk_agent_conv
+            created_at:
+              type: string
+              format: date-time
+            is_uncertain:
+              type:
+                - "null"
+                - boolean
+            is_redacted:
+              type: boolean
+            end_user_id:
+              type:
+                - "null"
+                - string
+            end_user:
+              type:
+                - "null"
+                - object
+              additionalProperties: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                identifier:
+                  type: string
+            feedback:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+                properties:
+                  reaction:
+                    type: string
+                    enum:
+                      - upvote
+                      - downvote
+                  comment:
+                    type:
+                      - "null"
+                      - string
+                  incorrect:
+                    type: boolean
+                  irrelevant:
+                    type: boolean
+                  unaddressed:
+                    type: boolean
+                  created_at:
+                    type: string
+                    format: date-time
+            relevant_sources:
+              type: string
+      has_more_question_answers:
+        type: boolean
+      feedback:
+        type:
+          - "null"
+          - object
+        additionalProperties: true
+      status_tag:
+        type:
+          - "null"
+          - object
+        additionalProperties: true
+      custom_tags:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            description:
+              type:
+                - "null"
+                - string
+            color:
+              type: string
+            is_deleted:
+              type: boolean
+      interaction_tags:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            display_name:
+              type: string
+      end_user:
+        type:
+          - "null"
+          - object
+        additionalProperties: true
+      integration:
+        type:
+          - "null"
+          - object
+        additionalProperties: true
+        properties:
+          id:
+            type: string
+            format: uuid
+          project:
+            type: string
+            format: uuid
+          name:
+            type: string
+          description:
+            type:
+              - "null"
+              - string
+          integration_type:
+            type:
+              - "null"
+              - string
+            enum:
+              - null
+              - SLACK_CHANNEL
+              - SLACK_WORKSPACE
+              - DISCORD_CHANNEL
+              - DISCORD_SERVER
+              - WIDGET
+              - CUSTOM_FRONTEND
+              - SUPPORT_FORM_DEFLECTOR
+              - API
+              - INTERNAL_ASSISTANT
+              - KAPA_MCP
+              - AGENT
+              - ZENDESK_AGENT
+          updated_at:
+            type: string
+            format: date-time
+          created_at:
+            type: string
+            format: date-time

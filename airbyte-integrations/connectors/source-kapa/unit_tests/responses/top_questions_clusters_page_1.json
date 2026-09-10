@@ -1,0 +1,25 @@
+{
+  "next_cursor": "top-clusters-page-2",
+  "previous_cursor": null,
+  "period": {
+    "id": "11111111-1111-4111-8111-111111111111"
+  },
+  "total_clusters": 2,
+  "clusters": [
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "title": "Example workflow questions",
+      "summary": "Questions about an example workflow.",
+      "thread_count": 12,
+      "num_unique_users": 9,
+      "threads": [
+        {
+          "id": "77777777-7777-4777-8777-777777777777",
+          "created_at": "2026-08-20T10:30:00Z",
+          "initial_question": "<redacted question>",
+          "initial_answer": "<redacted answer>"
+        }
+      ]
+    }
+  ]
+}
