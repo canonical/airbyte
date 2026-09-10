@@ -160,7 +160,7 @@ definitions:
       datetime_format: "%Y-%m-%dT%H:%M:%SZ"
       start_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config['start_date'] }}"
+        datetime: "{{ config['start_date'] | replace('Z', '+00:00') }}"
         datetime_format: "%Y-%m-%dT%H:%M:%S%z"
       end_datetime:
         type: MinMaxDatetime
