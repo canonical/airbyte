@@ -45,7 +45,8 @@ def test_activity_emits_nested_response_and_date_range(config, requests_mock):
 
     query = parse_qs(urlparse(requests_mock.last_request.url).query)
     assert query["start_date_time"] == [daily_config["start_date"]]
-    assert earliest_end <= datetime.fromisoformat(query["end_date_time"][0]) <= latest_end
+    end_date_time = datetime.fromisoformat(query["end_date_time"][0].replace("Z", "+00:00"))
+    assert earliest_end <= end_date_time <= latest_end
 
 
 def test_activity_schema_models_observed_nested_statistics(config):

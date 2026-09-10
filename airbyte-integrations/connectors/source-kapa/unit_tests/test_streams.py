@@ -71,8 +71,24 @@ def test_threads_uses_prior_state_as_inclusive_lower_bound(config, requests_mock
     read_threads(config, state)
 
     query = parse_qs(urlparse(requests_mock.last_request.url).query)
-    actual_lower_bound = datetime.fromisoformat(query["updated_since"][0])
-    assert actual_lower_bound == datetime.fromisoformat(prior_cursor)
+    cursor_format = "%Y-%m-%dT%H:%M:%S.%f%z"
+    actual_lower_bound = datetime.strptime(query["updated_since"][0].replace(" ", "+"), cursor_format)
+    assert actual_lower_bound == datetime.strptime(prior_cursor, cursor_format)
+
+
+def test_threads_parse_z_timestamp_and_advance_state(config, requests_mock):
+    response = load_response("threads_page_1.json")
+    response["next_cursor"] = None
+    requests_mock.get(THREADS_URL, json=response)
+
+    output = read_threads(config)
+
+    assert output.state_messages
+    final_state = output.state_messages[-1].state.stream.stream_state.__dict__
+    cursor_format = "%Y-%m-%dT%H:%M:%S.%f%z"
+    assert datetime.strptime(final_state["last_activity_at"], cursor_format) == datetime.strptime(
+        "2024-01-02T10:05:00.000000+0000", cursor_format
+    )
 
 
 def test_threads_discovery_exposes_nested_fields(config):

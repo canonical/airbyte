@@ -119,12 +119,14 @@ definitions:
       type: DatetimeBasedCursor
       cursor_field: last_activity_at
       cursor_datetime_formats:
+        - "%Y-%m-%dT%H:%M:%S.%fZ"
+        - "%Y-%m-%dT%H:%M:%SZ"
         - "%Y-%m-%dT%H:%M:%S.%f%z"
         - "%Y-%m-%dT%H:%M:%S%z"
       datetime_format: "%Y-%m-%dT%H:%M:%S.%f%z"
       start_datetime:
         type: MinMaxDatetime
-        datetime: "{{ config['start_date'] }}"
+        datetime: "{{ config['start_date'] | replace('Z', '+00:00') }}"
         datetime_format: "%Y-%m-%dT%H:%M:%S%z"
       start_time_option:
         type: RequestOption
