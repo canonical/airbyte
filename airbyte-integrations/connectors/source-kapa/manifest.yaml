@@ -732,24 +732,45 @@ schemas:
         items:
           type: object
           additionalProperties: true
+          required:
+            - integration
+            - statistics
           properties:
             integration:
               type: object
               additionalProperties: true
+              required:
+                - id
+                - integration_type
+                - name
               properties:
                 id:
                   type: string
-                  format: uuid
                 integration_type:
-                  type: string
+                  type:
+                    - "null"
+                    - string
                 name:
-                  type: string
+                  type:
+                    - "null"
+                    - string
             statistics:
               $ref: "#/schemas/activity_statistics"
 
   activity_statistics:
     type: object
     additionalProperties: true
+    required:
+      - total_query_count
+      - total_conversation_query_count
+      - total_retrieval_query_count
+      - total_upvotes
+      - total_downvotes
+      - total_uncertain_query_count
+      - total_unique_users
+      - total_support_tickets_deflected
+      - total_support_tickets_not_deflected
+      - total_queries_by_language
     properties:
       total_query_count:
         type: integer
@@ -774,6 +795,10 @@ schemas:
         items:
           type: object
           additionalProperties: true
+          required:
+            - iso
+            - name
+            - count
           properties:
             iso:
               type: string
@@ -832,9 +857,13 @@ schemas:
       title:
         type: string
       summary:
-        type: string
+        type:
+          - "null"
+          - string
       suggestion:
-        type: string
+        type:
+          - "null"
+          - string
       thread_count:
         type: integer
       num_unique_users:
@@ -896,20 +925,32 @@ schemas:
             id:
               type: string
               format: uuid
+            thread_id:
+              type: string
             question:
               type: string
             answer:
               type: string
+            query_type:
+              type: string
+              enum:
+                - retrieval
+                - conversation
+                - agent_conversation
+                - zendesk_agent_conv
             created_at:
               type: string
               format: date-time
             is_uncertain:
+              type:
+                - "null"
+                - boolean
+            is_redacted:
               type: boolean
             end_user_id:
               type:
                 - "null"
                 - string
-              format: uuid
             end_user:
               type:
                 - "null"
@@ -926,6 +967,27 @@ schemas:
               items:
                 type: object
                 additionalProperties: true
+                properties:
+                  reaction:
+                    type: string
+                    enum:
+                      - upvote
+                      - downvote
+                  comment:
+                    type:
+                      - "null"
+                      - string
+                  incorrect:
+                    type: boolean
+                  irrelevant:
+                    type: boolean
+                  unaddressed:
+                    type: boolean
+                  created_at:
+                    type: string
+                    format: date-time
+            relevant_sources:
+              type: string
       has_more_question_answers:
         type: boolean
       feedback:
@@ -990,9 +1052,27 @@ schemas:
           name:
             type: string
           description:
-            type: string
+            type:
+              - "null"
+              - string
           integration_type:
-            type: string
+            type:
+              - "null"
+              - string
+            enum:
+              - null
+              - SLACK_CHANNEL
+              - SLACK_WORKSPACE
+              - DISCORD_CHANNEL
+              - DISCORD_SERVER
+              - WIDGET
+              - CUSTOM_FRONTEND
+              - SUPPORT_FORM_DEFLECTOR
+              - API
+              - INTERNAL_ASSISTANT
+              - KAPA_MCP
+              - AGENT
+              - ZENDESK_AGENT
           updated_at:
             type: string
             format: date-time

@@ -102,10 +102,26 @@ def test_threads_discovery_exposes_nested_fields(config):
     assert question_answer["additionalProperties"] is True
     assert question_answer["properties"]["id"] == {"type": "string", "format": "uuid"}
     assert question_answer["properties"]["created_at"]["format"] == "date-time"
+    assert question_answer["properties"]["query_type"]["enum"] == [
+        "retrieval",
+        "conversation",
+        "agent_conversation",
+        "zendesk_agent_conv",
+    ]
+    assert question_answer["properties"]["is_uncertain"]["type"] == ["null", "boolean"]
+    assert question_answer["properties"]["is_redacted"] == {"type": "boolean"}
+    assert question_answer["properties"]["end_user_id"] == {"type": ["null", "string"]}
     assert question_answer["properties"]["end_user"]["properties"]["identifier"] == {"type": "string"}
-    assert question_answer["properties"]["feedback"]["items"]["additionalProperties"] is True
+    feedback = question_answer["properties"]["feedback"]["items"]
+    assert feedback["additionalProperties"] is True
+    assert feedback["properties"]["reaction"]["enum"] == ["upvote", "downvote"]
+    assert feedback["properties"]["comment"]["type"] == ["null", "string"]
+    assert question_answer["properties"]["relevant_sources"] == {"type": "string"}
     assert custom_tag["properties"]["is_deleted"] == {"type": "boolean"}
     assert interaction_tag["properties"]["display_name"] == {"type": "string"}
+    integration = properties["integration"]["properties"]
+    assert integration["description"]["type"] == ["null", "string"]
+    assert None in integration["integration_type"]["enum"]
 
 
 def test_end_users_paginates_and_emits_records(config, requests_mock):

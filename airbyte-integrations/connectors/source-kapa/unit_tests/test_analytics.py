@@ -67,7 +67,13 @@ def test_activity_schema_models_observed_nested_statistics(config):
         "name": {"type": "string"},
         "count": {"type": "integer"},
     }
-    assert integration["properties"]["integration"]["properties"]["id"] == {"type": "string", "format": "uuid"}
+    integration_metadata = integration["properties"]["integration"]
+    assert integration_metadata["properties"]["id"] == {"type": "string"}
+    assert integration_metadata["properties"]["integration_type"]["type"] == ["null", "string"]
+    assert integration_metadata["properties"]["name"]["type"] == ["null", "string"]
+    assert set(aggregate["required"]) == set(aggregate["properties"])
+    assert set(language["required"]) == set(language["properties"])
+    assert set(integration["required"]) == {"integration", "statistics"}
     assert integration["properties"]["statistics"] == aggregate
 
 
@@ -196,7 +202,7 @@ def test_top_question_cluster_schema_models_observed_fields(config):
     assert clusters.source_defined_primary_key == [["period_id"], ["id"]]
     assert properties["id"] == {"type": "string", "format": "uuid"}
     assert properties["title"] == {"type": "string"}
-    assert properties["summary"] == {"type": "string"}
+    assert properties["summary"] == {"type": ["null", "string"]}
     assert properties["thread_count"] == {"type": "integer"}
     assert properties["num_unique_users"] == {"type": "integer"}
     assert thread["properties"] == {
@@ -266,5 +272,5 @@ def test_coverage_gap_cluster_schema_models_suggestion_and_key(config):
     properties = clusters.json_schema["properties"]
 
     assert clusters.source_defined_primary_key == [["period_id"], ["id"]]
-    assert properties["suggestion"] == {"type": "string"}
+    assert properties["suggestion"] == {"type": ["null", "string"]}
     assert "initial_answer" not in properties["threads"]["items"].get("required", [])
