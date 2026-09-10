@@ -4,12 +4,10 @@ import logging
 from unittest.mock import ANY
 
 import pytest
-from conftest import load_response
+from conftest import build_source, load_response
 from test_streams import THREADS_URL, read_threads
 
 from airbyte_cdk.models import Status
-
-from conftest import build_source
 
 
 @pytest.mark.parametrize("status_code", [404, 409])
