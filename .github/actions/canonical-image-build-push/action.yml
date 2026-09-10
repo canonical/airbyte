@@ -79,6 +79,24 @@ runs:
         echo "connector-language=$CONNECTOR_LANGUAGE" >> "$GITHUB_OUTPUT"
         echo "connector-base-image=$CONNECTOR_BASE_IMAGE" >> "$GITHUB_OUTPUT"
 
+    # Java connectors need a Gradle-built distribution tar (build/distributions/<connector>.tar)
+    # before the docker build, and Gradle requires JDK 21.
+    - name: Set up Java 21 environment
+      if: steps.vars.outputs.connector-language == 'java'
+      uses: ./.github/actions/install-java-environment
+      with:
+        java_version: "21"
+
+    - name: Build Java connector distribution tar
+      if: steps.vars.outputs.connector-language == 'java'
+      shell: bash
+      env:
+        CONNECTOR: ${{ inputs.connector }}
+      run: |
+        set -euo pipefail
+        echo "🔨 Building Gradle distribution tar for $CONNECTOR (required by Dockerfile.java-connector)..."
+        ./gradlew ":airbyte-integrations:connectors:$CONNECTOR:distTar"
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
