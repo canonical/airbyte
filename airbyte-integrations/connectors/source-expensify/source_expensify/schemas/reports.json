@@ -92,6 +92,11 @@
     },
     "total": {
       "type": ["string", "null"]
+    },
+    "updatedAt": {
+      "description": "Derived cursor field: the most recent of the created, submitted, approved, and reimbursed timestamps for this report.",
+      "type": ["string", "null"],
+      "format": "date-time"
     }
   }
 }

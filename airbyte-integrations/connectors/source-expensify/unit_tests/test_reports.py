@@ -40,12 +40,12 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
-        mock_trigger.assert_called_once_with()
+        mock_trigger.assert_called_once_with(start_date="2026-08-30")
         mock_download.assert_called_once_with("report.csv")
 
         assert records == [
-            {"reportID": "1", "amount": "100"},
-            {"reportID": "2", "amount": "200"},
+            {"reportID": "1", "amount": "100", "updatedAt": None},
+            {"reportID": "2", "amount": "200", "updatedAt": None},
         ]
 
     def test_read_records_no_rows(self, stream):
@@ -62,7 +62,7 @@ class TestReadRecords:
     def test_read_records_calls_steps_in_order(self, stream):
         call_order = []
 
-        def trigger_export():
+        def trigger_export(start_date=None):
             call_order.append("trigger")
             return "file.csv"
 
@@ -78,7 +78,7 @@ class TestReadRecords:
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
         assert call_order == ["trigger", "download"]
-        assert records == [{"reportID": "1", "amount": "50"}]
+        assert records == [{"reportID": "1", "amount": "50", "updatedAt": None}]
 
     def test_read_records_propagates_trigger_export_error(self, stream):
         with (
@@ -97,6 +97,89 @@ class TestReadRecords:
         ):
             with pytest.raises(requests.exceptions.HTTPError):
                 list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+    def test_read_records_computes_updated_at_cursor_from_date_columns(self, stream):
+        csv_data = (
+            "reportID,created,submitted,approved,reimbursed\n"
+            "1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n"
+            "2,2026-08-10,,,\n"
+        )
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv"),
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert records[0]["updatedAt"] == "2026-08-04T00:00:00+00:00"
+        assert records[1]["updatedAt"] == "2026-08-10T00:00:00+00:00"
+
+    def test_read_records_incremental_filters_out_already_synced_records(self, stream):
+        csv_data = (
+            "reportID,created,submitted,approved,reimbursed\n"
+            "1,2026-08-01,2026-08-01,2026-08-01,2026-08-01\n"
+            "2,2026-08-10,2026-08-10,2026-08-10,2026-08-10\n"
+        )
+        stream_state = {"updatedAt": "2026-08-05T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # Export window resumes from the later of the two dates (config start_date already newer here).
+        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        assert [r["reportID"] for r in records] == ["2"]
+
+    def test_read_records_incremental_resumes_export_from_state_cursor_when_newer(self, stream):
+        csv_data = "reportID,created\n1,2026-09-01\n2,2026-09-10\n"
+        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # State cursor (2026-09-05) is newer than the configured start_date (2026-08-30), so it wins.
+        mock_trigger.assert_called_once_with(start_date="2026-09-05")
+        assert [r["reportID"] for r in records] == ["2"]
+
+    def test_read_records_full_refresh_ignores_stream_state(self, stream):
+        csv_data = "reportID,created\n1,2026-08-01\n2,2026-08-10\n"
+        stream_state = {"updatedAt": "2026-08-05T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.full_refresh, stream_state=stream_state))
+
+        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        assert [r["reportID"] for r in records] == ["1", "2"]
+
+
+class TestGetUpdatedState:
+    def test_returns_max_of_current_and_latest_cursor_values(self, stream):
+        current_state = {"updatedAt": "2026-08-01T00:00:00+00:00"}
+        latest_record = {"reportID": "1", "updatedAt": "2026-08-05T00:00:00+00:00"}
+
+        assert stream.get_updated_state(current_state, latest_record) == {"updatedAt": "2026-08-05T00:00:00+00:00"}
+
+    def test_keeps_current_state_when_latest_record_cursor_is_older(self, stream):
+        current_state = {"updatedAt": "2026-08-10T00:00:00+00:00"}
+        latest_record = {"reportID": "1", "updatedAt": "2026-08-05T00:00:00+00:00"}
+
+        assert stream.get_updated_state(current_state, latest_record) == {"updatedAt": "2026-08-10T00:00:00+00:00"}
+
+    def test_handles_missing_current_state(self, stream):
+        latest_record = {"reportID": "1", "updatedAt": "2026-08-05T00:00:00+00:00"}
+
+        assert stream.get_updated_state({}, latest_record) == {"updatedAt": "2026-08-05T00:00:00+00:00"}
+
+    def test_handles_missing_cursor_values(self, stream):
+        assert stream.get_updated_state({}, {"reportID": "1", "updatedAt": None}) == {}
 
 
 class TestTriggerExport:

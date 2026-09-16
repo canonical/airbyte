@@ -27,6 +27,38 @@ MAX_RETRIES = 5
 RETRY_FACTOR = 5
 RATE_LIMIT_BACKOFF_SECONDS = 10.0
 
+# Expensify has no single "last updated" column, so the cursor is derived from these date
+# columns (the most recent non-null value across them represents when the report last changed).
+UPDATED_AT_SOURCE_FIELDS = ("created", "submitted", "approved", "reimbursed")
+UPDATED_AT_CURSOR_FIELD = "updatedAt"
+# Formats observed in Expensify report exports for the date columns above.
+_EXPENSIFY_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d")
+
+
+def _parse_expensify_datetime(value: Optional[str]) -> Optional[datetime]:
+    """Parse an Expensify date column into an aware UTC datetime, or None if empty/unparseable."""
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    for fmt in _EXPENSIFY_DATETIME_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _compute_updated_at(row: Mapping[str, Any]) -> Optional[str]:
+    """Derive an ISO-8601 UTC 'updatedAt' cursor value as the max of the report's date columns."""
+    parsed_dates = [
+        parsed for parsed in (_parse_expensify_datetime(row.get(field)) for field in UPDATED_AT_SOURCE_FIELDS) if parsed is not None
+    ]
+    if not parsed_dates:
+        return None
+    return max(parsed_dates).isoformat()
+
 
 class PolicyNotFoundError(Exception):
     """Raised when the Expensify policy doesn't exist (HTTP 410)."""
@@ -126,6 +158,10 @@ def _post_job_description(job_description: Mapping[str, Any], template: Optional
 class ExpensifyReports(Stream):
     # Airbyte uses this to know what column uniquely identifies a row
     primary_key = "reportID"
+    # Expensify has no native "updated at" column, so we derive one (see _compute_updated_at)
+    # from the created/submitted/approved/reimbursed date columns. Declaring it here is what
+    # enables the Incremental Append and Incremental Append + Deduped sync modes.
+    cursor_field = UPDATED_AT_CURSOR_FIELD
 
     def __init__(self, name: str, partner_user_id: str, partner_user_secret: str, start_date: str, end_date: str, **kwargs):
         super().__init__(**kwargs)
@@ -139,6 +175,14 @@ class ExpensifyReports(Stream):
     def name(self) -> str:
         return self._name
 
+    def get_updated_state(
+        self, current_stream_state: Mapping[str, Any], latest_record: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        current_cursor_value = (current_stream_state or {}).get(self.cursor_field)
+        latest_cursor_value = latest_record.get(self.cursor_field)
+        candidates = [value for value in (current_cursor_value, latest_cursor_value) if value]
+        return {self.cursor_field: max(candidates)} if candidates else {}
+
     def read_records(
         self,
         sync_mode: SyncMode,
@@ -147,8 +191,17 @@ class ExpensifyReports(Stream):
         stream_state: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         self.logger.info(f"Reading records from Expensify for {self.name}")
+        stream_state = stream_state or {}
+        # For incremental syncs, resume the export window from the last synced cursor value
+        # instead of re-exporting (and re-scanning) the full configured date range every time.
+        state_cursor_value = stream_state.get(self.cursor_field) if sync_mode == SyncMode.incremental else None
+        export_start_date = self.start_date
+        if state_cursor_value:
+            state_cursor_date = state_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
+            export_start_date = max(self.start_date, state_cursor_date)
+
         # Step 1: Trigger the Export Job
-        file_name = self._trigger_export()
+        file_name = self._trigger_export(start_date=export_start_date)
         self.logger.info(f"Triggered Expensify export for file {file_name}.")
 
         # Step 2: Download the CSV
@@ -158,14 +211,21 @@ class ExpensifyReports(Stream):
         # Step 3: Parse CSV in memory and yield rows to Airbyte
         reader = csv.DictReader(StringIO(csv_data))
         record_count = 0
+        skipped_count = 0
         for row in reader:
             # Airbyte takes these yielded dicts, validates them against your schema,
             # and streams them to the destination connector
+            row[self.cursor_field] = _compute_updated_at(row)
+            if state_cursor_value and (row[self.cursor_field] or "") <= state_cursor_value:
+                # Already synced in a previous run (the export window can only be narrowed to
+                # day granularity, so we still need to filter out already-seen records here).
+                skipped_count += 1
+                continue
             record_count += 1
             yield row
-        self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
+        self.logger.info(f"Parsed {record_count} record(s) from Expensify export (skipped {skipped_count} already-synced record(s)).")
 
-    def _trigger_export(self) -> str:
+    def _trigger_export(self, start_date: Optional[str] = None) -> str:
         job_description = {
             "type": "file",
             "credentials": {
@@ -176,7 +236,7 @@ class ExpensifyReports(Stream):
             "inputSettings": {
                 "type": "combinedReportData",
                 "filters": {
-                    "startDate": self.start_date,
+                    "startDate": start_date if start_date is not None else self.start_date,
                     "endDate": self.end_date,
                 },
                 "reportState": "REIMBURSED",
