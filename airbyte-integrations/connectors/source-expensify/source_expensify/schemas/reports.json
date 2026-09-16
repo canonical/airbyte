@@ -4,93 +4,123 @@
   "additionalProperties": true,
   "properties": {
     "accountEmail": {
+      "description": "The email address of the user who created the report.",
       "type": ["string", "null"]
     },
     "accountID": {
+      "description": "The account ID of the user who created the report.",
       "type": ["string", "null"]
     },
     "actionList": {
+      "description": "List of objects that correspond to the \"Report History & Comments\" on the website. Each object has an action for the type of the action, accountEmail for the account that performed the action, created for the date-time the action occurred, and a details object with additional information like message.",
       "type": ["string", "null"]
     },
     "approved": {
+      "description": "The date the report was approved.",
       "type": ["string", "null"]
     },
     "approvers": {
+      "description": "Array that contains the list of all approvers of the report. Each is represented by an object containing an email, date, firstName, lastName, fullName, and employeeUserID and employeePayrollID if they are defined in the report's policy.",
       "type": ["string", "null"]
     },
     "created": {
+      "description": "The date the report was created.",
       "type": ["string", "null"]
     },
     "currency": {
+      "description": "The currency of the report, based on its policy.",
       "type": ["string", "null"]
     },
     "entryID": {
+      "description": "The latest Reimbursement ID of the report.",
       "type": ["string", "null"]
     },
     "isACHReimbursed": {
+      "description": "Boolean, true if the report has been reimbursed via ACH.",
       "type": ["string", "null"]
     },
     "managerEmail": {
+      "description": "The email address of the last approver of the report.",
       "type": ["string", "null"]
     },
     "managerUserID": {
+      "description": "The ID of the last approver of the report.",
       "type": ["string", "null"]
     },
     "managerPayrollID": {
+      "description": "The payroll ID of the last approver of the report.",
       "type": ["string", "null"]
     },
     "managerFirstName": {
+      "description": "The first name of the last approver of the report, if defined.",
       "type": ["string", "null"]
     },
     "managerLastName": {
+      "description": "The last name of the last approver of the report, if defined.",
       "type": ["string", "null"]
     },
     "managerFullName": {
+      "description": "The full name (first and last) of the last approver of the report, if defined.",
       "type": ["string", "null"]
     },
     "policyName": {
+      "description": "The name of the policy the report is under.",
       "type": ["string", "null"]
     },
     "policyID": {
+      "description": "The ID of the policy the report is under.",
       "type": ["string", "null"]
     },
     "reimbursed": {
+      "description": "The date the report was reimbursed.",
       "type": ["string", "null"]
     },
     "reportID": {
+      "description": "The ID of the report.",
       "type": ["string", "null"]
     },
     "oldReportID": {
+      "description": "The ID of the report in base10 (legacy report ID format).",
       "type": ["string", "null"]
     },
     "reportName": {
+      "description": "The name of the report.",
       "type": ["string", "null"]
     },
     "status": {
+      "description": "The current status of the report (Open, Processing, Approved, Reimbursed, Closed).",
       "type": ["string", "null"]
     },
     "displayStatus": {
+      "description": "The current status of the report (Draft, Outstanding, Approved, Reimbursed, Done).",
       "type": ["string", "null"]
     },
     "submitted": {
+      "description": "The date the report was submitted.",
       "type": ["string", "null"]
     },
     "employeeCustomField1": {
+      "description": "The custom field 1 of the user who submitted the report.",
       "type": ["string", "null"]
     },
     "employeeCustomField2": {
+      "description": "The custom field 2 of the user who submitted the report.",
       "type": ["string", "null"]
     },
     "submitterFirstName": {
+      "description": "The first name of the submitter of the report, if defined.",
       "type": ["string", "null"]
     },
     "submitterLastName": {
+      "description": "The last name of the submitter of the report, if defined.",
       "type": ["string", "null"]
     },
     "submitterFullName": {
+      "description": "The full name (first and last) of the submitter of the report, if defined.",
       "type": ["string", "null"]
     },
     "total": {
+      "description": "The total amount of the report, in cents.",
       "type": ["string", "null"]
     },
     "updatedAt": {
