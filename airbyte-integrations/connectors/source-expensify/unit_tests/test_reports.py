@@ -5,16 +5,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 import requests
-from source_expensify.source import (
+from source_expensify.base_stream import (
     EXPENSIFY_URL,
     CredentialsInvalidError,
-    ExpensifyReports,
     PolicyNotFoundError,
     RateLimitExceededError,
-    SourceExpensify,
     _post_job_description,
     _send_request,
 )
+from source_expensify.reports import ExpensifyReports
+from source_expensify.source import SourceExpensify
 
 from airbyte_cdk.models import SyncMode
 
@@ -180,7 +180,7 @@ class TestGetUpdatedState:
 
 class TestTriggerExport:
     def test_trigger_export_uses_configured_date_range(self, stream):
-        with patch("source_expensify.source._post_job_description") as mock_post:
+        with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
             stream._trigger_export()
@@ -198,7 +198,7 @@ class TestPostJobDescription:
         response.status_code = 200
         response._content = b"file.csv"
 
-        with patch("source_expensify.source.requests.post", return_value=response) as mock_post:
+        with patch("source_expensify.base_stream.requests.post", return_value=response) as mock_post:
             result = _post_job_description({"type": "download"})
 
         assert result is response
@@ -221,7 +221,7 @@ class TestPostJobDescription:
         response.status_code = 200
         response._content = f'{{"responseCode": {response_code}}}'.encode()
 
-        with patch("source_expensify.source.requests.post", return_value=response):
+        with patch("source_expensify.base_stream.requests.post", return_value=response):
             with pytest.raises(exception):
                 _post_job_description({"type": "get"})
 
@@ -239,7 +239,7 @@ class TestDownloadFile:
         response.status_code = 200
         response._content = b"reportID,amount\n1,100\n"
 
-        with patch("source_expensify.source.requests.post", return_value=response) as mock_post:
+        with patch("source_expensify.base_stream.requests.post", return_value=response) as mock_post:
             result = stream._download_file("report.csv")
 
         assert result == "reportID,amount\n1,100\n"
@@ -260,7 +260,7 @@ class TestCheckConnection:
         source = SourceExpensify()
         logger = Mock()
 
-        with patch("source_expensify.source.requests.post", return_value=response):
+        with patch("source_expensify.base_stream.requests.post", return_value=response):
             result = source.check_connection(logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"})
 
         assert result == (True, None)
@@ -280,7 +280,7 @@ class TestCheckConnection:
         source = SourceExpensify()
         logger = Mock()
 
-        with patch("source_expensify.source.requests.post", return_value=response):
+        with patch("source_expensify.base_stream.requests.post", return_value=response):
             result = source.check_connection(logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"})
 
         assert result[0] is expected[0]
