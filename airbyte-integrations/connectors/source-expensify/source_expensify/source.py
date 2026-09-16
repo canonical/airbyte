@@ -52,9 +52,12 @@ def _parse_expensify_datetime(value: Optional[str]) -> Optional[datetime]:
 
 def _compute_updated_at(row: Mapping[str, Any]) -> Optional[str]:
     """Derive an ISO-8601 UTC 'updatedAt' cursor value as the max of the report's date columns."""
-    parsed_dates = [
-        parsed for parsed in (_parse_expensify_datetime(row.get(field)) for field in UPDATED_AT_SOURCE_FIELDS) if parsed is not None
-    ]
+    parsed_dates = []
+    for field in UPDATED_AT_SOURCE_FIELDS:
+        parsed_date = _parse_expensify_datetime(row.get(field))
+        if parsed_date is not None:
+            parsed_dates.append(parsed_date)
+
     if not parsed_dates:
         return None
     return max(parsed_dates).isoformat()
@@ -175,9 +178,7 @@ class ExpensifyReports(Stream):
     def name(self) -> str:
         return self._name
 
-    def get_updated_state(
-        self, current_stream_state: Mapping[str, Any], latest_record: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
+    def get_updated_state(self, current_stream_state: Mapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
         current_cursor_value = (current_stream_state or {}).get(self.cursor_field)
         latest_cursor_value = latest_record.get(self.cursor_field)
         candidates = [value for value in (current_cursor_value, latest_cursor_value) if value]
@@ -213,12 +214,11 @@ class ExpensifyReports(Stream):
         record_count = 0
         skipped_count = 0
         for row in reader:
-            # Airbyte takes these yielded dicts, validates them against your schema,
+            # Airbyte takes these yielded dicts, validates them against the schema,
             # and streams them to the destination connector
             row[self.cursor_field] = _compute_updated_at(row)
             if state_cursor_value and (row[self.cursor_field] or "") <= state_cursor_value:
-                # Already synced in a previous run (the export window can only be narrowed to
-                # day granularity, so we still need to filter out already-seen records here).
+                # Already synced in a previous run
                 skipped_count += 1
                 continue
             record_count += 1

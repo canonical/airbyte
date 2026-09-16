@@ -99,11 +99,7 @@ class TestReadRecords:
                 list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
     def test_read_records_computes_updated_at_cursor_from_date_columns(self, stream):
-        csv_data = (
-            "reportID,created,submitted,approved,reimbursed\n"
-            "1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n"
-            "2,2026-08-10,,,\n"
-        )
+        csv_data = "reportID,created,submitted,approved,reimbursed\n1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n2,2026-08-10,,,\n"
 
         with (
             patch.object(stream, "_trigger_export", return_value="report.csv"),
@@ -229,14 +225,12 @@ class TestPostJobDescription:
             with pytest.raises(exception):
                 _post_job_description({"type": "get"})
 
-    def test_raises_for_http_server_errors(self):
-        response = requests.Response()
-        response.status_code = 503
-        response.url = "https://integrations.expensify.com/Integration-Server/ExpensifyIntegrations"
+    @patch("time.sleep", return_value=None)
+    def test_raises_for_http_server_errors(self, mock_sleep, requests_mock):
+        requests_mock.post(EXPENSIFY_URL, status_code=503, text="unavailable")
 
-        with patch("source_expensify.source.requests.post", return_value=response):
-            with pytest.raises(requests.exceptions.HTTPError):
-                _post_job_description({"type": "get"})
+        with pytest.raises(requests.exceptions.HTTPError):
+            _post_job_description({"type": "get"})
 
 
 class TestDownloadFile:
