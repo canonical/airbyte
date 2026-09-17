@@ -217,11 +217,7 @@ class ExpensifyReports(Stream):
             # Airbyte takes these yielded dicts, validates them against the schema,
             # and streams them to the destination connector
             row[self.cursor_field] = _compute_updated_at(row)
-            if (
-                state_cursor_value and
-                row[self.cursor_field] and
-                row[self.cursor_field] < state_cursor_value
-            ):
+            if state_cursor_value and row[self.cursor_field] and row[self.cursor_field] < state_cursor_value:
                 # Already synced in a previous run
                 skipped_count += 1
                 continue
