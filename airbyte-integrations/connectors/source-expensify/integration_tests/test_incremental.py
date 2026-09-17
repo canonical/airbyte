@@ -115,9 +115,9 @@ class TestIncrementalStateProgression:
         assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
 
         trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
-        assert _triggered_start_date(trigger_request) == "2026-08-16", (
-            "Export window should resume from the state cursor, not the configured start_date"
-        )
+        assert (
+            _triggered_start_date(trigger_request) == "2026-08-16"
+        ), "Export window should resume from the state cursor, not the configured start_date"
 
     def test_resumed_sync_with_abnormal_future_state_yields_no_records(self, requests_mock):
         _mock_expensify_export(requests_mock, CSV_DATA)
