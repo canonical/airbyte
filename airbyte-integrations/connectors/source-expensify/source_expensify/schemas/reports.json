@@ -36,7 +36,7 @@
       "type": ["string", "null"]
     },
     "isACHReimbursed": {
-      "description": "Boolean, true if the report has been reimbursed via ACH.",
+      "description": "String value indicating whether the report was reimbursed via ACH (\"true\" or \"false\").",
       "type": ["string", "null"]
     },
     "managerEmail": {
