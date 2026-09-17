@@ -12,7 +12,7 @@
       "type": ["string", "null"]
     },
     "actionList": {
-      "description": "List of objects that correspond to the \"Report History & Comments\" on the website. Each object has an action for the type of the action, accountEmail for the account that performed the action, created for the date-time the action occurred, and a details object with additional information like message.",
+      "description": "Comma-separated list of action types from the report's history and comments.",
       "type": ["string", "null"]
     },
     "approved": {
@@ -36,7 +36,7 @@
       "type": ["string", "null"]
     },
     "isACHReimbursed": {
-      "description": "Boolean, true if the report has been reimbursed via ACH.",
+      "description": "String value indicating whether the report was reimbursed via ACH (\"true\" or \"false\").",
       "type": ["string", "null"]
     },
     "managerEmail": {
