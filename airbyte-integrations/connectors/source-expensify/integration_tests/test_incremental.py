@@ -3,10 +3,7 @@
 """
 Integration-style tests that drive the connector through its actual Airbyte CLI entrypoint
 (discover/read), using the `configured_catalog_incremental.json`, `sample_state.json`, and
-`abnormal_state.json` fixtures in this directory. The Expensify Integration Server HTTP calls
-are mocked so these tests are deterministic and don't require live credentials, while still
-exercising real discovery output and end-to-end incremental state progression (unlike the
-mocked unit tests, which call `read_records` directly).
+`abnormal_state.json` fixtures in this directory.
 """
 
 import json
