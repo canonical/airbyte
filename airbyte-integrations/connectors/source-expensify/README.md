@@ -74,13 +74,10 @@ poetry run pytest unit_tests
 
 ### Building the docker image
 
-You can build the connector image with `airbyte-ci`:
-
-1. Install [`airbyte-ci`](https://github.com/airbytehq/airbyte/blob/master/airbyte-ci/connectors/pipelines/README.md)
-2. Run the following command to build the docker image:
+This connector has no checked-in `Dockerfile`; its image is built from the `baseImage` declared in `metadata.yaml` using the `airbyte-cdk` CLI:
 
 ```bash
-airbyte-ci connectors --name=source-expensify build
+poetry run airbyte-cdk image build --tag dev
 ```
 
 An image will be available on your host with the tag `airbyte/source-expensify:dev`.
@@ -94,12 +91,4 @@ docker run --rm airbyte/source-expensify:dev spec
 docker run --rm -v $(pwd)/secrets:/secrets airbyte/source-expensify:dev check --config /secrets/config.json
 docker run --rm -v $(pwd)/secrets:/secrets airbyte/source-expensify:dev discover --config /secrets/config.json
 docker run --rm -v $(pwd)/secrets:/secrets -v $(pwd)/integration_tests:/integration_tests airbyte/source-expensify:dev read --config /secrets/config.json --catalog /integration_tests/configured_catalog.json
-```
-
-### Running the CI test suite
-
-You can run our full test suite locally using [`airbyte-ci`](https://github.com/airbytehq/airbyte/blob/master/airbyte-ci/connectors/pipelines/README.md):
-
-```bash
-airbyte-ci connectors --name=source-expensify test
 ```
