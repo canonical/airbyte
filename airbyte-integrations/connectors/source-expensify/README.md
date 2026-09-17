@@ -24,18 +24,6 @@ The connector requires the following configuration fields:
 | `start_date`          | The start date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`.   | Yes      |
 | `end_date`            | The end date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`.     | Yes      |
 
-## Sync modes
-
-This connector declares a `cursor_field` and `primary_key` for the `reports` stream, so it supports the following sync modes:
-
-- **Incremental Append**: Sync new records from stream and append data in destination.
-- **Incremental Append + Deduped**: Sync new records from stream and append data in destination, also provides a de-duplicated view mirroring the state of the stream in the source.
-- **Full Refresh Append**: Sync the whole stream and append data in destination.
-- **Full Refresh Overwrite**: Sync the whole stream and replace data in destination by overwriting it.
-- **Full Refresh Overwrite + Deduped**: Sync the whole stream and replace data in destination by overwriting it, also de-duplicate the data.
-
-For Incremental syncs, the connector resumes the report export window from the last synced `updatedAt` cursor value (bounded by the configured `start_date`) instead of re-exporting and re-scanning the full configured date range on every run. Records with an `updatedAt` value older than the saved cursor are skipped, since they were already synced in a previous run.
-
 ## Local development
 
 ### Prerequisites
@@ -115,18 +103,3 @@ You can run our full test suite locally using [`airbyte-ci`](https://github.com/
 ```bash
 airbyte-ci connectors --name=source-expensify test
 ```
-
-## Publishing a new version of the connector
-
-If you want to contribute changes to `source-expensify`, here's how you can do that:
-
-1. Make your changes locally, or load the connector's manifest into Connector Builder and make changes there.
-2. Make sure your changes are passing our test suite with `airbyte-ci connectors --name=source-expensify test`
-3. Bump the connector version (please follow [semantic versioning for connectors](https://docs.airbyte.com/contributing-to-airbyte/resources/pull-requests-handbook/#semantic-versioning-for-connectors)):
-   - bump the `dockerImageTag` value in `metadata.yaml`
-   - bump the `version` value in `pyproject.toml`
-4. Make sure the connector documentation and its changelog is up to date (`docs/integrations/sources/expensify.md`).
-5. Create a Pull Request: use [our PR naming conventions](https://docs.airbyte.com/contributing-to-airbyte/resources/pull-requests-handbook/#pull-request-title-convention).
-6. Pat yourself on the back for being an awesome contributor.
-7. Someone from Airbyte will take a look at your PR and iterate with you to merge it into master.
-8. Once your PR is merged, the new version of the connector will be automatically published to Docker Hub and our connector registry.
