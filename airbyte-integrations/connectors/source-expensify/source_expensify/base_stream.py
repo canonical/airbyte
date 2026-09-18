@@ -21,8 +21,9 @@ RETRY_FACTOR = 5
 RATE_LIMIT_BACKOFF_SECONDS = 10.0
 
 
-class PolicyNotFoundError(Exception):
-    """Raised when the Expensify policy doesn't exist (HTTP 410)."""
+class ResourceNotFoundError(Exception):
+    """Raised when the requested Expensify resource doesn't exist (HTTP 410). Expensify returns
+    this generic "Gone" status for a variety of missing resources (e.g. policy, export file)."""
 
 
 class CredentialsInvalidError(Exception):
@@ -36,8 +37,8 @@ class RateLimitExceededError(Exception):
 def _map_response_code_to_exception(response_code: int) -> None:
     """Map an Expensify response code to an exception."""
     if response_code == requests.codes.gone:
-        # Expensify returns 410 if the policy doesn't exist
-        raise PolicyNotFoundError(f"Expensify policy not found.")
+        # Expensify returns 410 for a variety of missing resources.
+        raise ResourceNotFoundError(f"Expensify resource not found.")
     elif response_code == requests.codes.unauthorized:
         # Expensify returns 401 if the credentials are invalid
         raise CredentialsInvalidError(f"Expensify credentials are invalid.")
@@ -74,7 +75,10 @@ def _send_request(payload: Mapping[str, Any]) -> requests.Response:
         raise UserDefinedBackoffException(backoff=RATE_LIMIT_BACKOFF_SECONDS, request=response.request, response=response)
     if response.status_code >= 500:
         raise DefaultBackoffException(request=response.request, response=response)
-    response.raise_for_status()
+    if response.status_code >= requests.codes.bad_request:
+        # Route real HTTP-level 4xx errors (e.g. an actual HTTP 410/401 response) through the
+        # same classification as Expensify's "200 OK with JSON error body" quirk.
+        _map_response_code_to_exception(response.status_code)
     return response
 
 
@@ -153,12 +157,52 @@ class ExpensifyExportStream(Stream):
             state_cursor_date = state_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
             export_start_date = max(self.start_date, state_cursor_date)
 
-        # Step 1: Trigger the Export Job
-        file_name = self._trigger_export(start_date=export_start_date)
+        if export_start_date > self.end_date:
+            self.logger.info(
+                f"Skipping export: resumed cursor date {export_start_date} is past the configured "
+                f"end_date {self.end_date}. All data in the configured date range has already been synced."
+            )
+            return
+
+        try:
+            # Step 1: Trigger the Export Job
+            file_name = self._trigger_export(start_date=export_start_date)
+        except ResourceNotFoundError as e:
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=(f"Expensify returned 'resource not found' (HTTP 410) while triggering the {self.name} export. "),
+                failure_type=FailureType.config_error,
+            ) from e
+        except CredentialsInvalidError as e:
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=(
+                    f"Expensify credentials are invalid (HTTP 401) while triggering the {self.name} export. "
+                    "Please verify your Partner User ID and Partner User Secret."
+                ),
+                failure_type=FailureType.config_error,
+            ) from e
         self.logger.info(f"Triggered Expensify export for file {file_name}.")
 
-        # Step 2: Download the CSV
-        csv_data = self._download_file(file_name)
+        try:
+            # Step 2: Download the CSV
+            csv_data = self._download_file(file_name)
+        except ResourceNotFoundError as e:
+            # A 410 here means the exported file itself is not yet or no longer available.
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=(f"Expensify returned 'resource not found' (HTTP 410) while downloading the exported file '{file_name}'. "),
+                failure_type=FailureType.config_error,
+            ) from e
+        except CredentialsInvalidError as e:
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=(
+                    f"Expensify credentials are invalid (HTTP 401) while downloading the exported file '{file_name}'. "
+                    "Please verify your Partner User ID and Partner User Secret."
+                ),
+                failure_type=FailureType.config_error,
+            ) from e
         self.logger.info(f"Downloaded Expensify export ({len(csv_data)} bytes) for file {file_name}.")
 
         # Step 3: Parse CSV in memory and yield rows to Airbyte

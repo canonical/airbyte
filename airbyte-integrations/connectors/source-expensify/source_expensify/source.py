@@ -4,7 +4,7 @@ from typing import Any, List, Mapping, Tuple
 
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
-from source_expensify.base_stream import CredentialsInvalidError, PolicyNotFoundError, _post_job_description
+from source_expensify.base_stream import CredentialsInvalidError, ResourceNotFoundError, _post_job_description
 from source_expensify.reports import ExpensifyReports
 
 
@@ -25,8 +25,8 @@ class SourceExpensify(AbstractSource):
             # Ensure the response is valid JSON
             response.json()
             return True, None
-        except PolicyNotFoundError:
-            # Expensify returns 410 if the policy doesn't exist
+        except ResourceNotFoundError:
+            # Expensify returns 410 if the (deliberately non-existent) policy doesn't exist
             logger.info("Credentials are valid.")
             return True, None
         except CredentialsInvalidError:
