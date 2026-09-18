@@ -4,9 +4,8 @@ POETRY := poetry
 SCRIPT := $(POETRY) run source-expensify
 CONFIG := --config secrets/config.json
 LICENSE_TEMPLATE := ../../../LICENSE_SHORT
-LICENSE_SETTINGS := .license-header-settings.json
 
-.PHONY: help install fmt lint test unit-test
+.PHONY: help install fmt lint test unit-test integration-test
 
 help:  ## Show this help.
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) \
@@ -18,13 +17,6 @@ install:  ## Install project dependencies via Poetry.
 fmt:  ## Format source code with ruff and add missing Apache license headers.
 	poetry run ruff format .
 	poetry run ruff check . --fix
-	@missing="$$(grep -rL "Copyright (c)" --include="*.py" .)"; \
-	if [ -n "$$missing" ]; then \
-		tmpl=$$(mktemp); \
-		printf '%s\n' "$$(cat $(LICENSE_TEMPLATE))" > "$$tmpl"; \
-		poetry run licenseheaders -f $$missing -t "$$tmpl" -s $(LICENSE_SETTINGS) -o "Airbyte, Inc."; \
-		rm -f "$$tmpl"; \
-	fi
 
 lint:  ## Lint source code with ruff.
 	poetry run ruff check .
@@ -32,7 +24,10 @@ lint:  ## Lint source code with ruff.
 unit-test:  ## Run unit tests with pytest.
 	poetry run pytest unit_tests
 
-test: lint unit-test  ## Run lint checks and unit tests.
+integration-test:  ## Run integration tests (mocked HTTP, real discover/read entrypoint) with pytest.
+	poetry run pytest integration_tests
+
+test: lint unit-test integration-test  ## Run lint checks, unit tests, and integration tests.
 
 check:
 	$(SCRIPT) check $(CONFIG)
