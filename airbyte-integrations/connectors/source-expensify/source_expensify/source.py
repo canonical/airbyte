@@ -314,11 +314,6 @@ class ExpensifyReports(Stream):
         for row in raw_rows:
             # Airbyte takes these yielded dicts, validates them against the schema,
             # and streams them to the destination connector.
-            # Note: we intentionally do not filter out rows whose `updatedAt` is older than the
-            # previous state value here. Doing so is unsafe once `start_date` is widened to
-            # backfill older data, since the state's `updatedAt` reflects the last sync time (e.g.
-            # "today"), not the export window, and would cause legitimately new (but old) rows to
-            # be skipped. Incremental Append + Dedup handles unchanged/duplicate rows downstream.
             row[self.cursor_field] = _compute_updated_at(row)
             row[self.export_cursor_field] = _compute_export_cursor(row)
             record_count += 1
