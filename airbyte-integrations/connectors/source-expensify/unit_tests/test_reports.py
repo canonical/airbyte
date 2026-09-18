@@ -179,7 +179,11 @@ class TestReadRecords:
         assert records[0]["createdOrSubmittedAt"] == "2026-08-02T00:00:00+00:00"
         assert records[1]["createdOrSubmittedAt"] == "2026-08-10T00:00:00+00:00"
 
-    def test_read_records_incremental_filters_out_already_synced_records(self, stream):
+    def test_read_records_incremental_does_not_filter_records_by_updated_at(self, stream):
+        # Regression test: rows must NOT be filtered out based on `updatedAt` vs. the state's
+        # `updatedAt`. That state value reflects the last sync time, not the export window, so
+        # filtering on it is unsafe once `start_date` is widened to backfill older data - it would
+        # incorrectly skip legitimately new (but old) rows returned by the export.
         csv_data = (
             "reportID,created,submitted,approved,reimbursed\n"
             "1,2026-08-01,2026-08-01,2026-08-01,2026-08-01\n"
@@ -195,7 +199,7 @@ class TestReadRecords:
 
         # Export window resumes from the later of the two dates (config start_date already newer here).
         mock_trigger.assert_called_once_with(start_date="2026-08-30")
-        assert [r["reportID"] for r in records] == ["2"]
+        assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_resumes_export_from_state_cursor_when_newer(self, stream):
         csv_data = "reportID,created\n1,2026-08-30\n2,2026-08-31\n"
@@ -209,7 +213,33 @@ class TestReadRecords:
 
         # State cursor (2026-08-31) is newer than the configured start_date (2026-08-30), so it wins.
         mock_trigger.assert_called_once_with(start_date="2026-08-31")
-        assert [r["reportID"] for r in records] == ["2"]
+        # All records returned by the export are yielded; the connector does not re-filter rows
+        # locally based on the `updatedAt` cursor.
+        assert [r["reportID"] for r in records] == ["1", "2"]
+
+    def test_read_records_incremental_with_widened_start_date_does_not_skip_past_records(self, stream):
+        # Regression test: widening `start_date` backward (to backfill older data) on a stream
+        # that already has state from a previous, narrower-range sync must not cause older rows
+        # to be skipped just because their `updatedAt` predates the state's `updatedAt` (which
+        # reflects the previous sync's run time, not actual data freshness).
+        stream.start_date = "2020-01-01"  # Widened far into the past.
+        csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
+        # State came from a previous run whose export window started later (2026-08-01) and whose
+        # `updatedAt`/`createdOrSubmittedAt` reflect that narrower window, not the newly-widened one.
+        stream_state = {"updatedAt": "2026-08-01T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # The state's export cursor (2026-08-01) is newer than the widened start_date (2020-01-01),
+        # so it still wins for resuming the export window...
+        mock_trigger.assert_called_once_with(start_date="2026-08-01")
+        # ...but both records returned by the export are still yielded: report 1's `created` date
+        # (2020-01-15) is older than the state's `updatedAt`, yet it must not be skipped.
+        assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_does_not_resume_export_from_full_updated_at_cursor(self, stream):
         # Regression test: `updatedAt` (which also reflects approved/reimbursed) must NOT be used

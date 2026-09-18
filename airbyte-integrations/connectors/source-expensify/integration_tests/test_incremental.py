@@ -104,14 +104,16 @@ class TestIncrementalStateProgression:
         assert record_ids == ["101", "102", "103"]
         assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
 
-    def test_resumed_sync_with_sample_state_skips_already_synced_records(self, requests_mock):
+    def test_resumed_sync_with_sample_state_does_not_skip_records_by_updated_at(self, requests_mock):
         _mock_expensify_export(requests_mock, CSV_DATA)
         state = _load_legacy_state("sample_state.json")
 
         output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(), state=state)
 
+        # All records returned by the export are emitted; the connector no longer filters rows
+        # locally by comparing `updatedAt` against the resumed state (see regression test below).
         record_ids = [r.record.data["reportID"] for r in output.records]
-        assert record_ids == ["103"], "Only records newer than the resumed state's cursor should be re-emitted"
+        assert record_ids == ["101", "102", "103"]
         assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
 
         trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
@@ -140,9 +142,33 @@ class TestIncrementalStateProgression:
         output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(), state=state)
 
         record_ids = [r.record.data["reportID"] for r in output.records]
-        assert record_ids == ["103"]
+        assert record_ids == ["101", "102", "103"]
 
         trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
         assert (
             _triggered_start_date(trigger_request) == "2026-08-16"
         ), "Export window should resume from createdOrSubmittedAt, not the stale (reimbursed-inflated) updatedAt"
+
+    def test_widened_start_date_backfills_past_records_without_skipping(self, requests_mock):
+        # Regression test: if the user widens `start_date` to backfill data further in the past
+        # than a previous sync's state reflects, previously-unseen records with an `updatedAt`
+        # older than the state's `updatedAt` must still be emitted. The state's `updatedAt` only
+        # reflects the last sync's cursor (effectively "today" at the time it ran), not the
+        # export window, so it must never be used to filter out rows once the configured
+        # start_date is widened backward.
+        widened_config = {**CONFIG, "start_date": "2020-01-01"}
+        # Report 201 falls well before the state's cursor (2026-08-16) - it's newly in-scope only
+        # because start_date was widened, and must not be skipped. Report 103 is unaffected.
+        csv_data = "reportID,created\n201,2020-06-15\n103,2026-08-31\n"
+        _mock_expensify_export(requests_mock, csv_data)
+        state = _load_legacy_state("sample_state.json")
+
+        output = read(SourceExpensify(), widened_config, _load_incremental_catalog(), state=state)
+
+        record_ids = [r.record.data["reportID"] for r in output.records]
+        assert record_ids == ["201", "103"], "Widening start_date into the past must not skip older, newly in-scope records"
+
+        trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
+        assert (
+            _triggered_start_date(trigger_request) == "2026-08-16"
+        ), "Export window still resumes from the (newer) state cursor, not the widened start_date"

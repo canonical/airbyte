@@ -7,7 +7,6 @@ connectionSpecification:
     - partner_user_id
     - partner_user_secret
     - start_date
-    - end_date
   additionalProperties: true
   properties:
     partner_user_id:
@@ -32,8 +31,26 @@ connectionSpecification:
     end_date:
       type: string
       title: End Date
-      description: The end date (inclusive) used to filter Expensify reports for export, in the format YYYY-MM-DD.
+      description: >-
+        The end date (inclusive) used to filter Expensify reports for export, in the format
+        YYYY-MM-DD. If left unset, there is no upper bound and reports are exported up to the
+        current date.
       pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
       examples:
         - "2026-08-31"
       order: 3
+    report_state:
+      type: array
+      title: Report State
+      description: >-
+        One or more Expensify report states to include in the export: "OPEN", "SUBMITTED",
+        "APPROVED", "REIMBURSED", "ARCHIVED". If left unset, reports in all states are included.
+      items:
+        type: string
+        enum:
+          - OPEN
+          - SUBMITTED
+          - APPROVED
+          - REIMBURSED
+          - ARCHIVED
+      order: 4

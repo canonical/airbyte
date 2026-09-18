@@ -10,19 +10,20 @@ For information about how to configure and use this connector within Airbyte, se
 | ------- | ----------- | ------------ |
 | Reports | `reportID`  | `updatedAt`  |
 
-The `reports` stream exports Expensify report data (via the Integration Server's `combinedReportData` export) for reports in the `REIMBURSED` state.
+The `reports` stream exports Expensify report data (via the Integration Server's `combinedReportData` export) for reports in the configured `report_state`(s) (if unset, reports in all states are included).
 Expensify has no native "last updated" column, so the connector derives the `updatedAt` cursor from the most recent non-null value across the `created`, `submitted`, `approved`, and `reimbursed` date columns on each row.
 
 ## Configuration
 
 The connector requires the following configuration fields:
 
-| Field                 | Description                                                                                          | Required |
-| --------------------- | ----------------------------------------------------------------------------------------------------- | -------- |
-| `partner_user_id`     | The Partner User ID, generated from the Expensify Integration Server credentials page.                | Yes      |
-| `partner_user_secret` | The Partner User Secret, generated from the Expensify Integration Server credentials page.             | Yes      |
-| `start_date`          | The start date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`.   | Yes      |
-| `end_date`            | The end date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`.     | Yes      |
+| Field                 | Description                                                                                                                                       | Required |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `partner_user_id`     | The Partner User ID, generated from the Expensify Integration Server credentials page.                                                            | Yes      |
+| `partner_user_secret` | The Partner User Secret, generated from the Expensify Integration Server credentials page.                                                        | Yes      |
+| `start_date`          | The start date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`.                                               | Yes      |
+| `end_date`            | The end date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`. If unset, there is no upper bound (up to today). | No       |
+| `report_state`        | One or more of `OPEN`, `SUBMITTED`, `APPROVED`, `REIMBURSED`, `ARCHIVED`. If unset, reports in all states are included.                            | No       |
 
 ## Local development
 

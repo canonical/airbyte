@@ -191,13 +191,25 @@ class ExpensifyReports(Stream):
     # window per Expensify's own startDate/endDate filter semantics (see EXPORT_CURSOR_FIELD).
     export_cursor_field = EXPORT_CURSOR_FIELD
 
-    def __init__(self, name: str, partner_user_id: str, partner_user_secret: str, start_date: str, end_date: str, **kwargs):
+    def __init__(
+        self,
+        name: str,
+        partner_user_id: str,
+        partner_user_secret: str,
+        start_date: str,
+        end_date: Optional[str] = None,
+        report_state: Optional[List[str]] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._name = name
         self.partner_user_id = partner_user_id
         self.partner_user_secret = partner_user_secret
         self.start_date = start_date
-        self.end_date = end_date
+        # No end_date means no upper bound: export up to the current date.
+        self.end_date = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # No report_state means no filter: Expensify includes reports in all states.
+        self.report_state = ",".join(report_state) if report_state else None
 
     @property
     def name(self) -> str:
@@ -235,8 +247,6 @@ class ExpensifyReports(Stream):
         # For incremental syncs, resume the export window from the last synced cursor value
         # instead of re-exporting (and re-scanning) the full configured date range every time.
         state_export_cursor_value = stream_state.get(self.export_cursor_field) if sync_mode == SyncMode.incremental else None
-        # Still used below to skip re-yielding rows that haven't changed since the last sync.
-        state_updated_at_value = stream_state.get(self.cursor_field) if sync_mode == SyncMode.incremental else None
         export_start_date = self.start_date
         if state_export_cursor_value:
             state_cursor_date = state_export_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
@@ -248,6 +258,12 @@ class ExpensifyReports(Stream):
                 f"end_date {self.end_date}. All data in the configured date range has already been synced."
             )
             return
+
+        self.logger.info(
+            f"Requesting Expensify export for {self.name} with filters: "
+            f"startDate={export_start_date}, endDate={self.end_date}, "
+            f"reportState={self.report_state or 'all'}."
+        )
 
         try:
             # Step 1: Trigger the Export Job
@@ -292,23 +308,34 @@ class ExpensifyReports(Stream):
 
         # Step 3: Parse CSV in memory and yield rows to Airbyte
         reader = csv.DictReader(StringIO(csv_data))
+        raw_rows = list(reader)
+        self.logger.info(f"Raw Expensify CSV export contains {len(raw_rows)} row(s).")
         record_count = 0
-        skipped_count = 0
-        for row in reader:
+        for row in raw_rows:
             # Airbyte takes these yielded dicts, validates them against the schema,
-            # and streams them to the destination connector
+            # and streams them to the destination connector.
+            # Note: we intentionally do not filter out rows whose `updatedAt` is older than the
+            # previous state value here. Doing so is unsafe once `start_date` is widened to
+            # backfill older data, since the state's `updatedAt` reflects the last sync time (e.g.
+            # "today"), not the export window, and would cause legitimately new (but old) rows to
+            # be skipped. Incremental Append + Dedup handles unchanged/duplicate rows downstream.
             row[self.cursor_field] = _compute_updated_at(row)
             row[self.export_cursor_field] = _compute_export_cursor(row)
-            if state_updated_at_value and row[self.cursor_field] and row[self.cursor_field] < state_updated_at_value:
-                # Already synced in a previous run: neither created/submitted/approved/reimbursed
-                # changed since then, so nothing new to emit for this report.
-                skipped_count += 1
-                continue
             record_count += 1
             yield row
-        self.logger.info(f"Parsed {record_count} record(s) from Expensify export (skipped {skipped_count} already-synced record(s)).")
+        self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
 
     def _trigger_export(self, start_date: Optional[str] = None) -> str:
+        input_settings = {
+            "type": "combinedReportData",
+            "filters": {
+                "startDate": start_date if start_date is not None else self.start_date,
+                "endDate": self.end_date,
+            },
+        }
+        # Omitting "reportState" entirely means Expensify includes reports in all states.
+        if self.report_state:
+            input_settings["reportState"] = self.report_state
         job_description = {
             "type": "file",
             "credentials": {
@@ -316,14 +343,7 @@ class ExpensifyReports(Stream):
                 "partnerUserSecret": self.partner_user_secret,
             },
             "onReceive": {"immediateResponse": ["returnRandomFileName"]},
-            "inputSettings": {
-                "type": "combinedReportData",
-                "filters": {
-                    "startDate": start_date if start_date is not None else self.start_date,
-                    "endDate": self.end_date,
-                },
-                "reportState": "REIMBURSED",
-            },
+            "inputSettings": input_settings,
             "outputSettings": {"fileExtension": "csv"},
         }
         response = _post_job_description(job_description, template=_load_reports_export_template())
@@ -377,6 +397,7 @@ class SourceExpensify(AbstractSource):
                 partner_user_id=config["partner_user_id"],
                 partner_user_secret=config["partner_user_secret"],
                 start_date=config["start_date"],
-                end_date=config["end_date"],
+                end_date=config.get("end_date"),
+                report_state=config.get("report_state"),
             )
         ]
