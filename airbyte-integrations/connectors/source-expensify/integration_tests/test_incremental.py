@@ -32,6 +32,10 @@ CONFIG: Mapping[str, Any] = {
     "partner_user_secret": "test-partner-secret",
     "start_date": "2026-07-01",
     "end_date": "2026-09-01",
+    # Disabled here so existing assertions about the resumed export window's exact start_date are
+    # unaffected by the lookback window; the lookback window itself is covered by
+    # `TestIncrementalLookbackWindow` below.
+    "lookback_window_days": 0,
 }
 
 # Report 101 and 102 were "already synced" as of sample_state.json's cursor (2026-08-16);
@@ -172,3 +176,54 @@ class TestIncrementalStateProgression:
         assert (
             _triggered_start_date(trigger_request) == "2026-08-16"
         ), "Export window still resumes from the (newer) state cursor, not the widened start_date"
+
+
+class TestIncrementalLookbackWindow:
+    def test_lookback_window_replays_report_approved_after_previous_sync(self, requests_mock):
+        # End-to-end regression test for `lookback_window_days`: report 201 was created before
+        # the state's export cursor (2026-08-16), so a strict resume (lookback disabled) would
+        # never re-export it, even though it was approved after the previous sync ran. With a
+        # 30-day lookback, the resumed export window trails back far enough to include it again.
+        lookback_config = {**CONFIG, "lookback_window_days": 30}
+        csv_data = "reportID,created,approved\n201,2026-08-10,2026-08-20\n103,2026-08-31,\n"
+        _mock_expensify_export(requests_mock, csv_data)
+        state = _load_legacy_state("sample_state.json")
+
+        output = read(SourceExpensify(), lookback_config, _load_incremental_catalog(), state=state)
+
+        record_ids = [r.record.data["reportID"] for r in output.records]
+        assert record_ids == ["201", "103"]
+
+        trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
+        # State cursor (2026-08-16) trailed back by the 30-day lookback window -> 2026-07-17.
+        assert _triggered_start_date(trigger_request) == "2026-07-17"
+
+    def test_lookback_window_never_precedes_configured_start_date(self, requests_mock):
+        # The lookback window must not push the resumed export start earlier than the configured
+        # start_date, which remains a hard lower bound.
+        lookback_config = {**CONFIG, "start_date": "2026-08-01", "lookback_window_days": 30}
+        csv_data = "reportID,created\n103,2026-08-31\n"
+        _mock_expensify_export(requests_mock, csv_data)
+        state = _load_legacy_state("sample_state.json")
+
+        read(SourceExpensify(), lookback_config, _load_incremental_catalog(), state=state)
+
+        trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
+        # 2026-08-16 minus 30 days = 2026-07-17, which is before the configured start_date
+        # (2026-08-01), so the configured start_date wins.
+        assert _triggered_start_date(trigger_request) == "2026-08-01"
+
+    def test_widened_start_date_beyond_lookback_window_still_requires_state_reset(self, requests_mock):
+        # Widening start_date further into the past than the lookback window reaches does not, by
+        # itself, backfill that older data - a state reset (or full refresh) is still required.
+        widened_config = {**CONFIG, "start_date": "2020-01-01", "lookback_window_days": 30}
+        csv_data = "reportID,created\n103,2026-08-31\n"
+        _mock_expensify_export(requests_mock, csv_data)
+        state = _load_legacy_state("sample_state.json")
+
+        read(SourceExpensify(), widened_config, _load_incremental_catalog(), state=state)
+
+        trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
+        # The resumed export still only trails back 30 days from the state cursor (2026-07-17),
+        # not all the way back to the widened start_date (2020-01-01).
+        assert _triggered_start_date(trigger_request) == "2026-07-17"

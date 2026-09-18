@@ -4,7 +4,7 @@ import csv
 import json
 import pkgutil
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Iterable, List, Mapping, Optional, Tuple
@@ -35,6 +35,9 @@ UPDATED_AT_CURSOR_FIELD = "updatedAt"
 # The export filters only consider whichever of "created" or "submitted" occurred last.
 EXPORT_FILTER_SOURCE_FIELDS = ("created", "submitted")
 EXPORT_CURSOR_FIELD = "createdOrSubmittedAt"
+
+# Lookback window for incremental syncs, reducing risk of missing report state transitions.
+DEFAULT_LOOKBACK_WINDOW_DAYS = 30
 
 # Formats observed in Expensify report exports for the date columns above.
 _EXPENSIFY_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d")
@@ -199,6 +202,7 @@ class ExpensifyReports(Stream):
         start_date: str,
         end_date: Optional[str] = None,
         report_state: Optional[List[str]] = None,
+        lookback_window_days: int = DEFAULT_LOOKBACK_WINDOW_DAYS,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -210,6 +214,7 @@ class ExpensifyReports(Stream):
         self.end_date = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
         # No report_state means no filter: Expensify includes reports in all states.
         self.report_state = ",".join(report_state) if report_state else None
+        self.lookback_window_days = lookback_window_days
 
     @property
     def name(self) -> str:
@@ -250,7 +255,11 @@ class ExpensifyReports(Stream):
         export_start_date = self.start_date
         if state_export_cursor_value:
             state_cursor_date = state_export_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
-            export_start_date = max(self.start_date, state_cursor_date)
+            # Trail the resumed cursor back by `lookback_window_days`.
+            lookback_date = (datetime.strptime(state_cursor_date, "%Y-%m-%d") - timedelta(days=self.lookback_window_days)).strftime(
+                "%Y-%m-%d"
+            )
+            export_start_date = max(self.start_date, lookback_date)
 
         if export_start_date > self.end_date:
             self.logger.info(
@@ -392,5 +401,6 @@ class SourceExpensify(AbstractSource):
                 start_date=config["start_date"],
                 end_date=config.get("end_date"),
                 report_state=config.get("report_state"),
+                lookback_window_days=config.get("lookback_window_days", DEFAULT_LOOKBACK_WINDOW_DAYS),
             )
         ]

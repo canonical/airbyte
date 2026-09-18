@@ -1,11 +1,14 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
 import json
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
+import yaml
 from source_expensify.source import (
+    DEFAULT_LOOKBACK_WINDOW_DAYS,
     EXPENSIFY_URL,
     CredentialsInvalidError,
     ExpensifyReports,
@@ -202,6 +205,9 @@ class TestReadRecords:
         assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_resumes_export_from_state_cursor_when_newer(self, stream):
+        # Isolate the "state cursor wins over configured start_date" behavior from the lookback
+        # window (covered separately below) by disabling the lookback for this test.
+        stream.lookback_window_days = 0
         csv_data = "reportID,created\n1,2026-08-30\n2,2026-08-31\n"
         stream_state = {"updatedAt": "2026-08-31T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-31T00:00:00+00:00"}
 
@@ -222,6 +228,7 @@ class TestReadRecords:
         # that already has state from a previous, narrower-range sync must not cause older rows
         # to be skipped just because their `updatedAt` predates the state's `updatedAt` (which
         # reflects the previous sync's run time, not actual data freshness).
+        stream.lookback_window_days = 0  # Isolate from the lookback window, covered separately below.
         stream.start_date = "2020-01-01"  # Widened far into the past.
         csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
         # State came from a previous run whose export window started later (2026-08-01) and whose
@@ -241,6 +248,100 @@ class TestReadRecords:
         # (2020-01-15) is older than the state's `updatedAt`, yet it must not be skipped.
         assert [r["reportID"] for r in records] == ["1", "2"]
 
+    def test_read_records_incremental_widened_start_date_still_needs_reset_beyond_lookback(self, stream):
+        # Regression test: widening `start_date` further into the past than the lookback window
+        # reaches does NOT retroactively backfill that older data - the connector documents that
+        # a state reset (or full refresh) is still required in that case, it only guarantees that
+        # recent (within-lookback) late changes aren't missed without a reset.
+        stream.start_date = "2020-01-01"  # Widened far into the past, well beyond the lookback window.
+        stream_state = {"updatedAt": "2026-08-31T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-31T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value="reportID,created\n"),
+        ):
+            list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # The resumed export window only trails back by the (default 30-day) lookback window from
+        # the state cursor (2026-08-31 -> 2026-08-01), NOT all the way back to the widened
+        # start_date (2020-01-01). Fully backfilling from 2020-01-01 still requires a state reset.
+        mock_trigger.assert_called_once_with(start_date="2026-08-01")
+
+    def test_read_records_incremental_resumes_export_from_lookback_window_before_state_cursor(self, stream):
+        # Core regression test for the lookback window: the export resumes from
+        # `lookback_window_days` before the state's export cursor, not from the cursor itself, so
+        # reports approved/reimbursed after their created/submitted date keep being re-exported.
+        stream.lookback_window_days = 10
+        stream_state = {"createdOrSubmittedAt": "2026-09-10T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value="reportID,created\n"),
+        ):
+            list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+
+    def test_read_records_incremental_lookback_window_never_precedes_configured_start_date(self, stream):
+        # The lookback window must never push the export start earlier than the configured
+        # `start_date`, which remains a hard lower bound.
+        stream.lookback_window_days = 365
+        stream_state = {"createdOrSubmittedAt": "2026-09-10T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value="reportID,created\n"),
+        ):
+            list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # 2026-09-10 minus 365 days is well before the configured start_date (2026-08-30), so the
+        # configured start_date wins.
+        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+
+    def test_read_records_incremental_replays_report_created_before_cursor_but_approved_later(self, stream):
+        # End-to-end regression test: a report created before the (trailed-back) resumed export
+        # window's raw cursor date, but approved later within the lookback window, must be
+        # re-exported and re-synced rather than permanently dropped.
+        stream.start_date = "2026-01-01"
+        stream.lookback_window_days = 10
+        # Previous sync's export cursor reflects a report created/submitted on 2026-09-10.
+        stream_state = {"updatedAt": "2026-09-10T00:00:00+00:00", "createdOrSubmittedAt": "2026-09-10T00:00:00+00:00"}
+        # This report was created on 2026-09-05 (before the raw cursor) but only approved on
+        # 2026-09-12 (after the previous sync), so it must be re-exported by trailing back.
+        csv_data = "reportID,created,approved\n1,2026-09-05,2026-09-12\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # Lookback window (10 days) pulls the export start back to 2026-08-31, before the report's
+        # created date (2026-09-05), so the report is included in the re-export.
+        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        assert [r["reportID"] for r in records] == ["1"]
+        assert records[0]["updatedAt"] == "2026-09-12T00:00:00+00:00"
+
+    def test_read_records_incremental_replays_report_with_later_reimbursement_after_approval(self, stream):
+        # A report approved before the resumed window, but reimbursed even later, must also keep
+        # being replayed within the lookback window.
+        stream.start_date = "2026-01-01"
+        stream.lookback_window_days = 15
+        stream_state = {"updatedAt": "2026-09-10T00:00:00+00:00", "createdOrSubmittedAt": "2026-09-10T00:00:00+00:00"}
+        csv_data = "reportID,created,approved,reimbursed\n1,2026-09-01,2026-09-11,2026-09-20\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # Lookback window (15 days) pulls the export start back to 2026-08-26, before the report's
+        # created date (2026-09-01).
+        mock_trigger.assert_called_once_with(start_date="2026-08-26")
+        assert [r["reportID"] for r in records] == ["1"]
+        assert records[0]["updatedAt"] == "2026-09-20T00:00:00+00:00"
+
     def test_read_records_incremental_does_not_resume_export_from_full_updated_at_cursor(self, stream):
         # Regression test: `updatedAt` (which also reflects approved/reimbursed) must NOT be used
         # to resume the export window - only `createdOrSubmittedAt` should. Otherwise a report
@@ -259,6 +360,9 @@ class TestReadRecords:
         mock_trigger.assert_called_once_with(start_date="2026-08-30")
 
     def test_read_records_incremental_skips_export_when_resumed_export_cursor_is_past_end_date(self, stream):
+        # Isolate from the lookback window (which would otherwise pull the resumed cursor back
+        # before end_date) to test the "past end_date" skip guard on its own.
+        stream.lookback_window_days = 0
         stream_state = {"createdOrSubmittedAt": "2026-09-05T00:00:00+00:00"}
 
         with (
@@ -523,3 +627,47 @@ class TestSendRequestRetries:
             _send_request({"requestJobDescription": "{}"})
 
         assert requests_mock.call_count > 1
+
+
+class TestStreamsLookbackWindowWiring:
+    def test_streams_defaults_lookback_window_days_when_absent_from_config(self):
+        source = SourceExpensify()
+        config = {
+            "partner_user_id": "user-id",
+            "partner_user_secret": "user-secret",
+            "start_date": "2026-08-30",
+        }
+
+        (reports_stream,) = source.streams(config)
+
+        assert reports_stream.lookback_window_days == DEFAULT_LOOKBACK_WINDOW_DAYS == 30
+
+    def test_streams_passes_through_configured_lookback_window_days(self):
+        source = SourceExpensify()
+        config = {
+            "partner_user_id": "user-id",
+            "partner_user_secret": "user-secret",
+            "start_date": "2026-08-30",
+            "lookback_window_days": 7,
+        }
+
+        (reports_stream,) = source.streams(config)
+
+        assert reports_stream.lookback_window_days == 7
+
+
+class TestSpecSchema:
+    @pytest.fixture
+    def spec_properties(self):
+        spec_path = Path(__file__).parent.parent / "source_expensify" / "spec.yaml"
+        spec = yaml.safe_load(spec_path.read_text())
+        return spec["connectionSpecification"]["properties"]
+
+    def test_lookback_window_days_is_optional_integer_with_default_30(self, spec_properties):
+        assert "lookback_window_days" in spec_properties
+        field = spec_properties["lookback_window_days"]
+        assert field["type"] == "integer"
+        assert field["default"] == 30
+        assert "lookback_window_days" not in yaml.safe_load((Path(__file__).parent.parent / "source_expensify" / "spec.yaml").read_text())[
+            "connectionSpecification"
+        ].get("required", [])
