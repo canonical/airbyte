@@ -23,6 +23,11 @@
       "description": "Array that contains the list of all approvers of the report. Each is represented by an object containing an email, date, firstName, lastName, fullName, and employeeUserID and employeePayrollID if they are defined in the report's policy.",
       "type": ["string", "null"]
     },
+    "createdOrSubmittedAt": {
+      "description": "Derived cursor field: the most recent of the created and submitted timestamps for this report. This mirrors Expensify's own startDate/endDate export filter semantics (which do not consider approved/reimbursed) and is used to track/resume the export window.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
     "created": {
       "description": "The date the report was created.",
       "type": ["string", "null"]

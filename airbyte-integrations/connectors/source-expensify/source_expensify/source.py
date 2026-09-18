@@ -31,6 +31,11 @@ RATE_LIMIT_BACKOFF_SECONDS = 10.0
 # columns (the most recent non-null value across them represents when the report last changed).
 UPDATED_AT_SOURCE_FIELDS = ("created", "submitted", "approved", "reimbursed")
 UPDATED_AT_CURSOR_FIELD = "updatedAt"
+
+# The export filters only consider whichever of "created" or "submitted" occurred last.
+EXPORT_FILTER_SOURCE_FIELDS = ("created", "submitted")
+EXPORT_CURSOR_FIELD = "createdOrSubmittedAt"
+
 # Formats observed in Expensify report exports for the date columns above.
 _EXPENSIFY_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d")
 
@@ -50,10 +55,10 @@ def _parse_expensify_datetime(value: Optional[str]) -> Optional[datetime]:
     return None
 
 
-def _compute_updated_at(row: Mapping[str, Any]) -> Optional[str]:
-    """Derive an ISO-8601 UTC 'updatedAt' cursor value as the max of the report's date columns."""
+def _compute_max_date(row: Mapping[str, Any], fields: Tuple[str, ...]) -> Optional[str]:
+    """Derive an ISO-8601 UTC value as the max of the given date columns on the row."""
     parsed_dates = []
-    for field in UPDATED_AT_SOURCE_FIELDS:
+    for field in fields:
         parsed_date = _parse_expensify_datetime(row.get(field))
         if parsed_date is not None:
             parsed_dates.append(parsed_date)
@@ -61,6 +66,19 @@ def _compute_updated_at(row: Mapping[str, Any]) -> Optional[str]:
     if not parsed_dates:
         return None
     return max(parsed_dates).isoformat()
+
+
+def _compute_updated_at(row: Mapping[str, Any]) -> Optional[str]:
+    """Derive an ISO-8601 UTC 'updatedAt' cursor value as the max of the report's date columns."""
+    return _compute_max_date(row, UPDATED_AT_SOURCE_FIELDS)
+
+
+def _compute_export_cursor(row: Mapping[str, Any]) -> Optional[str]:
+    """
+    Derive the value used to track export window progress, matching Expensify's own
+    startDate/endDate filter semantics (max of "created"/"submitted" only).
+    """
+    return _compute_max_date(row, EXPORT_FILTER_SOURCE_FIELDS)
 
 
 class ResourceNotFoundError(Exception):
@@ -169,6 +187,9 @@ class ExpensifyReports(Stream):
     # from the created/submitted/approved/reimbursed date columns. Declaring it here is what
     # enables the Incremental Append and Incremental Append + Deduped sync modes.
     cursor_field = UPDATED_AT_CURSOR_FIELD
+    # Secondary, internal-only cursor (created/submitted only) used to resume/bound the export
+    # window per Expensify's own startDate/endDate filter semantics (see EXPORT_CURSOR_FIELD).
+    export_cursor_field = EXPORT_CURSOR_FIELD
 
     def __init__(self, name: str, partner_user_id: str, partner_user_secret: str, start_date: str, end_date: str, **kwargs):
         super().__init__(**kwargs)
@@ -183,10 +204,24 @@ class ExpensifyReports(Stream):
         return self._name
 
     def get_updated_state(self, current_stream_state: Mapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
-        current_cursor_value = (current_stream_state or {}).get(self.cursor_field)
-        latest_cursor_value = latest_record.get(self.cursor_field)
-        candidates = [value for value in (current_cursor_value, latest_cursor_value) if value]
-        return {self.cursor_field: max(candidates)} if candidates else {}
+        current_stream_state = current_stream_state or {}
+        new_state = dict(current_stream_state)
+
+        # `updatedAt` (created/submitted/approved/reimbursed) drives dedup.
+        updated_at_candidates = [
+            value for value in (current_stream_state.get(self.cursor_field), latest_record.get(self.cursor_field)) if value
+        ]
+        if updated_at_candidates:
+            new_state[self.cursor_field] = max(updated_at_candidates)
+
+        # `createdOrSubmittedAt` (created/submitted only) drives the export window.
+        export_cursor_candidates = [
+            value for value in (current_stream_state.get(self.export_cursor_field), latest_record.get(self.export_cursor_field)) if value
+        ]
+        if export_cursor_candidates:
+            new_state[self.export_cursor_field] = max(export_cursor_candidates)
+
+        return new_state
 
     def read_records(
         self,
@@ -199,10 +234,12 @@ class ExpensifyReports(Stream):
         stream_state = stream_state or {}
         # For incremental syncs, resume the export window from the last synced cursor value
         # instead of re-exporting (and re-scanning) the full configured date range every time.
-        state_cursor_value = stream_state.get(self.cursor_field) if sync_mode == SyncMode.incremental else None
+        state_export_cursor_value = stream_state.get(self.export_cursor_field) if sync_mode == SyncMode.incremental else None
+        # Still used below to skip re-yielding rows that haven't changed since the last sync.
+        state_updated_at_value = stream_state.get(self.cursor_field) if sync_mode == SyncMode.incremental else None
         export_start_date = self.start_date
-        if state_cursor_value:
-            state_cursor_date = state_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
+        if state_export_cursor_value:
+            state_cursor_date = state_export_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
             export_start_date = max(self.start_date, state_cursor_date)
 
         if export_start_date > self.end_date:
@@ -261,8 +298,10 @@ class ExpensifyReports(Stream):
             # Airbyte takes these yielded dicts, validates them against the schema,
             # and streams them to the destination connector
             row[self.cursor_field] = _compute_updated_at(row)
-            if state_cursor_value and row[self.cursor_field] and row[self.cursor_field] < state_cursor_value:
-                # Already synced in a previous run
+            row[self.export_cursor_field] = _compute_export_cursor(row)
+            if state_updated_at_value and row[self.cursor_field] and row[self.cursor_field] < state_updated_at_value:
+                # Already synced in a previous run: neither created/submitted/approved/reimbursed
+                # changed since then, so nothing new to emit for this report.
                 skipped_count += 1
                 continue
             record_count += 1

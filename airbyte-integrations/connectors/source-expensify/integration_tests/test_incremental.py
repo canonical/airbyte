@@ -126,3 +126,23 @@ class TestIncrementalStateProgression:
         output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(), state=state)
 
         assert output.records == []
+
+    def test_resumed_sync_not_skipped_when_only_reimbursed_date_is_past_end_date(self, requests_mock):
+        # Regression test: report 103 was created 2026-08-31 (within the configured start/end_date
+        # window) but reimbursed 2026-09-05, after the configured end_date (2026-09-01). The prior
+        # sync's state therefore has a stale `updatedAt` past end_date, even though
+        # `createdOrSubmittedAt` is still within range. The resumed sync must still run (using
+        # `createdOrSubmittedAt` to resume the export window) instead of skipping entirely.
+        csv_data = "reportID,created,reimbursed\n101,2026-08-01,\n102,2026-08-15,\n103,2026-08-31,2026-09-05\n"
+        _mock_expensify_export(requests_mock, csv_data)
+        state = _load_legacy_state("sample_state.json")
+
+        output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(), state=state)
+
+        record_ids = [r.record.data["reportID"] for r in output.records]
+        assert record_ids == ["103"]
+
+        trigger_request = next(r for r in requests_mock.request_history if _job_type(r) == "file")
+        assert (
+            _triggered_start_date(trigger_request) == "2026-08-16"
+        ), "Export window should resume from createdOrSubmittedAt, not the stale (reimbursed-inflated) updatedAt"

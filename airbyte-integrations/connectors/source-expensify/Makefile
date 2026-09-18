@@ -4,7 +4,6 @@ POETRY := poetry
 SCRIPT := $(POETRY) run source-expensify
 CONFIG := --config secrets/config.json
 LICENSE_TEMPLATE := ../../../LICENSE_SHORT
-LICENSE_SETTINGS := .license-header-settings.json
 
 .PHONY: help install fmt lint test unit-test integration-test
 
@@ -18,13 +17,9 @@ install:  ## Install project dependencies via Poetry.
 fmt:  ## Format source code with ruff and add missing Apache license headers.
 	poetry run ruff format .
 	poetry run ruff check . --fix
-	@missing="$$(grep -rL "Copyright (c)" --include="*.py" .)"; \
-	if [ -n "$$missing" ]; then \
-		tmpl=$$(mktemp); \
-		printf '%s\n' "$$(cat $(LICENSE_TEMPLATE))" > "$$tmpl"; \
-		poetry run licenseheaders -f $$missing -t "$$tmpl" -s $(LICENSE_SETTINGS) -o "Airbyte, Inc."; \
-		rm -f "$$tmpl"; \
-	fi
+	@# Use the same `addlicense` tool/flags as the repo's pre-commit hook so
+	@# headers it adds are byte-for-byte identical to what pre-commit produces.
+	addlicense -c "Airbyte, Inc." -l apache -v -f $(LICENSE_TEMPLATE) $$(find . -name "*.py" -not -name "__init__.py" -not -path "*/__pycache__/*")
 
 lint:  ## Lint source code with ruff.
 	poetry run ruff check .

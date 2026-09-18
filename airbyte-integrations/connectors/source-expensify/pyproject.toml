@@ -3,7 +3,7 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-version = "0.1.4"
+version = "0.1.5"
 name = "source-expensify"
 description = "Source implementation for Expensify."
 authors = ["Renan Greca <renan.greca@canonical.com>"]
@@ -26,7 +26,6 @@ pytest-mock = "^3.6.1"
 freezegun = "^1.5.5"
 requests-mock = "^1.12.1"
 ruff = "0.8.3"
-licenseheaders = "^0.8.8"
 
 
 [tool.poe]

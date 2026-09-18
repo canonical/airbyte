@@ -45,8 +45,8 @@ class TestReadRecords:
         mock_download.assert_called_once_with("report.csv")
 
         assert records == [
-            {"reportID": "1", "amount": "100", "updatedAt": None},
-            {"reportID": "2", "amount": "200", "updatedAt": None},
+            {"reportID": "1", "amount": "100", "updatedAt": None, "createdOrSubmittedAt": None},
+            {"reportID": "2", "amount": "200", "updatedAt": None, "createdOrSubmittedAt": None},
         ]
 
     def test_read_records_no_rows(self, stream):
@@ -79,7 +79,7 @@ class TestReadRecords:
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
         assert call_order == ["trigger", "download"]
-        assert records == [{"reportID": "1", "amount": "50", "updatedAt": None}]
+        assert records == [{"reportID": "1", "amount": "50", "updatedAt": None, "createdOrSubmittedAt": None}]
 
     def test_read_records_propagates_trigger_export_error(self, stream):
         with (
@@ -166,6 +166,19 @@ class TestReadRecords:
         assert records[0]["updatedAt"] == "2026-08-04T00:00:00+00:00"
         assert records[1]["updatedAt"] == "2026-08-10T00:00:00+00:00"
 
+    def test_read_records_computes_export_cursor_from_created_and_submitted_only(self, stream):
+        # Unlike `updatedAt`, `createdOrSubmittedAt` must NOT be affected by approved/reimbursed.
+        csv_data = "reportID,created,submitted,approved,reimbursed\n1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n2,2026-08-10,,,\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv"),
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert records[0]["createdOrSubmittedAt"] == "2026-08-02T00:00:00+00:00"
+        assert records[1]["createdOrSubmittedAt"] == "2026-08-10T00:00:00+00:00"
+
     def test_read_records_incremental_filters_out_already_synced_records(self, stream):
         csv_data = (
             "reportID,created,submitted,approved,reimbursed\n"
@@ -186,7 +199,7 @@ class TestReadRecords:
 
     def test_read_records_incremental_resumes_export_from_state_cursor_when_newer(self, stream):
         csv_data = "reportID,created\n1,2026-08-30\n2,2026-08-31\n"
-        stream_state = {"updatedAt": "2026-08-31T00:00:00+00:00"}
+        stream_state = {"updatedAt": "2026-08-31T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-31T00:00:00+00:00"}
 
         with (
             patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
@@ -198,12 +211,25 @@ class TestReadRecords:
         mock_trigger.assert_called_once_with(start_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["2"]
 
-    def test_read_records_incremental_skips_export_when_resumed_cursor_is_past_end_date(self, stream):
-        # Regression test: the "reimbursed" date (one of the cursor source fields) can land after
-        # the configured (static) end_date, since reports are often reimbursed well after they're
-        # created/submitted. Resuming from such a cursor must not send Expensify an inverted date
-        # range (startDate > endDate), which the real API rejects with an HTTP 410.
-        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00"}
+    def test_read_records_incremental_does_not_resume_export_from_full_updated_at_cursor(self, stream):
+        # Regression test: `updatedAt` (which also reflects approved/reimbursed) must NOT be used
+        # to resume the export window - only `createdOrSubmittedAt` should. Otherwise a report
+        # reimbursed after the configured start/end_date window would incorrectly push the
+        # resumed export window forward past reports that still need to be (re-)exported.
+        csv_data = "reportID,created\n1,2026-08-30\n2,2026-08-31\n"
+        stream_state = {"updatedAt": "2026-08-31T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        # No `createdOrSubmittedAt` in state, so the export window starts from the configured start_date.
+        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+
+    def test_read_records_incremental_skips_export_when_resumed_export_cursor_is_past_end_date(self, stream):
+        stream_state = {"createdOrSubmittedAt": "2026-09-05T00:00:00+00:00"}
 
         with (
             patch.object(stream, "_trigger_export") as mock_trigger,
@@ -214,6 +240,26 @@ class TestReadRecords:
         assert records == []
         mock_trigger.assert_not_called()
         mock_download.assert_not_called()
+
+    def test_read_records_incremental_does_not_skip_export_when_only_full_updated_at_is_past_end_date(self, stream):
+        # Regression test: a report can be approved/reimbursed well after it was created/submitted,
+        # pushing `updatedAt` (one of whose source fields is "reimbursed") past the configured
+        # (static) end_date, even though `createdOrSubmittedAt` (created/submitted only, matching
+        # Expensify's own startDate/endDate filter semantics) is still within range. Resuming
+        # from `updatedAt` in that case would incorrectly skip the entire sync.
+        # Report was created 2026-08-30 and previously reimbursed 2026-09-05 (hence the stale
+        # `updatedAt` state below); it's now been re-reimbursed even later, on 2026-09-06.
+        csv_data = "reportID,created,reimbursed\n1,2026-08-30,2026-09-06\n"
+        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        assert [r["reportID"] for r in records] == ["1"]
 
     def test_read_records_full_refresh_ignores_stream_state(self, stream):
         csv_data = "reportID,created\n1,2026-08-01\n2,2026-08-10\n"
@@ -249,6 +295,28 @@ class TestGetUpdatedState:
 
     def test_handles_missing_cursor_values(self, stream):
         assert stream.get_updated_state({}, {"reportID": "1", "updatedAt": None}) == {}
+
+    def test_tracks_export_cursor_alongside_updated_at(self, stream):
+        current_state = {"updatedAt": "2026-08-10T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+        latest_record = {
+            "reportID": "1",
+            "updatedAt": "2026-08-15T00:00:00+00:00",  # e.g. reimbursed later
+            "createdOrSubmittedAt": "2026-08-05T00:00:00+00:00",
+        }
+
+        assert stream.get_updated_state(current_state, latest_record) == {
+            "updatedAt": "2026-08-15T00:00:00+00:00",
+            "createdOrSubmittedAt": "2026-08-05T00:00:00+00:00",
+        }
+
+    def test_export_cursor_does_not_regress_when_latest_record_export_cursor_is_older(self, stream):
+        current_state = {"updatedAt": "2026-08-10T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-09T00:00:00+00:00"}
+        latest_record = {"reportID": "1", "updatedAt": "2026-08-15T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+
+        assert stream.get_updated_state(current_state, latest_record) == {
+            "updatedAt": "2026-08-15T00:00:00+00:00",
+            "createdOrSubmittedAt": "2026-08-09T00:00:00+00:00",
+        }
 
 
 class TestTriggerExport:
