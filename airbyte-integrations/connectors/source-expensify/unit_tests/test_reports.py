@@ -9,14 +9,15 @@ from source_expensify.source import (
     EXPENSIFY_URL,
     CredentialsInvalidError,
     ExpensifyReports,
-    PolicyNotFoundError,
     RateLimitExceededError,
+    ResourceNotFoundError,
     SourceExpensify,
     _post_job_description,
     _send_request,
 )
 
-from airbyte_cdk.models import SyncMode
+from airbyte_cdk.models import FailureType, SyncMode
+from airbyte_cdk.utils.traced_exception import AirbyteTracedException
 
 
 @pytest.fixture
@@ -98,6 +99,61 @@ class TestReadRecords:
             with pytest.raises(requests.exceptions.HTTPError):
                 list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
+    def test_read_records_raises_traced_config_error_when_export_resource_not_found(self, stream):
+        # A 410 mid-sync (unlike during check_connection) means the export genuinely failed, so it
+        # must surface as a clearly-classified, readable AirbyteTracedException in the sync logs,
+        # explicitly attributed to the export-triggering step.
+        with (
+            patch.object(stream, "_trigger_export", side_effect=ResourceNotFoundError("Expensify resource not found.")),
+            patch.object(stream, "_download_file") as mock_download,
+        ):
+            with pytest.raises(AirbyteTracedException) as exc_info:
+                list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert exc_info.value.failure_type == FailureType.config_error
+        assert "410" in exc_info.value.message
+        assert "triggering the reports export" in exc_info.value.message
+        mock_download.assert_not_called()
+
+    def test_read_records_raises_traced_config_error_when_export_credentials_invalid(self, stream):
+        with (
+            patch.object(stream, "_trigger_export", side_effect=CredentialsInvalidError("Expensify credentials are invalid.")),
+            patch.object(stream, "_download_file") as mock_download,
+        ):
+            with pytest.raises(AirbyteTracedException) as exc_info:
+                list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert exc_info.value.failure_type == FailureType.config_error
+        assert "401" in exc_info.value.message
+        assert "triggering the reports export" in exc_info.value.message
+        mock_download.assert_not_called()
+
+    def test_read_records_raises_traced_config_error_when_download_resource_not_found(self, stream):
+        # Distinguishes a 410 during download (e.g. an expired export file) from a 410 during
+        # export triggering, so operators can tell which step actually failed from the message.
+        with (
+            patch.object(stream, "_trigger_export", return_value="file.csv"),
+            patch.object(stream, "_download_file", side_effect=ResourceNotFoundError("Expensify resource not found.")),
+        ):
+            with pytest.raises(AirbyteTracedException) as exc_info:
+                list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert exc_info.value.failure_type == FailureType.config_error
+        assert "410" in exc_info.value.message
+        assert "downloading the exported file 'file.csv'" in exc_info.value.message
+
+    def test_read_records_raises_traced_config_error_when_download_credentials_invalid(self, stream):
+        with (
+            patch.object(stream, "_trigger_export", return_value="file.csv"),
+            patch.object(stream, "_download_file", side_effect=CredentialsInvalidError("Expensify credentials are invalid.")),
+        ):
+            with pytest.raises(AirbyteTracedException) as exc_info:
+                list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert exc_info.value.failure_type == FailureType.config_error
+        assert "401" in exc_info.value.message
+        assert "downloading the exported file 'file.csv'" in exc_info.value.message
+
     def test_read_records_computes_updated_at_cursor_from_date_columns(self, stream):
         csv_data = "reportID,created,submitted,approved,reimbursed\n1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n2,2026-08-10,,,\n"
 
@@ -129,8 +185,8 @@ class TestReadRecords:
         assert [r["reportID"] for r in records] == ["2"]
 
     def test_read_records_incremental_resumes_export_from_state_cursor_when_newer(self, stream):
-        csv_data = "reportID,created\n1,2026-09-01\n2,2026-09-10\n"
-        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00"}
+        csv_data = "reportID,created\n1,2026-08-30\n2,2026-08-31\n"
+        stream_state = {"updatedAt": "2026-08-31T00:00:00+00:00"}
 
         with (
             patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
@@ -138,9 +194,26 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        # State cursor (2026-09-05) is newer than the configured start_date (2026-08-30), so it wins.
-        mock_trigger.assert_called_once_with(start_date="2026-09-05")
+        # State cursor (2026-08-31) is newer than the configured start_date (2026-08-30), so it wins.
+        mock_trigger.assert_called_once_with(start_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["2"]
+
+    def test_read_records_incremental_skips_export_when_resumed_cursor_is_past_end_date(self, stream):
+        # Regression test: the "reimbursed" date (one of the cursor source fields) can land after
+        # the configured (static) end_date, since reports are often reimbursed well after they're
+        # created/submitted. Resuming from such a cursor must not send Expensify an inverted date
+        # range (startDate > endDate), which the real API rejects with an HTTP 410.
+        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00"}
+
+        with (
+            patch.object(stream, "_trigger_export") as mock_trigger,
+            patch.object(stream, "_download_file") as mock_download,
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
+        assert records == []
+        mock_trigger.assert_not_called()
+        mock_download.assert_not_called()
 
     def test_read_records_full_refresh_ignores_stream_state(self, stream):
         csv_data = "reportID,created\n1,2026-08-01\n2,2026-08-10\n"
@@ -212,7 +285,7 @@ class TestPostJobDescription:
         ("response_code", "exception"),
         [
             (401, CredentialsInvalidError),
-            (410, PolicyNotFoundError),
+            (410, ResourceNotFoundError),
             (429, RateLimitExceededError),
         ],
     )
@@ -326,7 +399,20 @@ class TestSendRequestRetries:
     def test_gives_up_immediately_on_permanent_client_error(self, mock_sleep, requests_mock):
         requests_mock.post(EXPENSIFY_URL, status_code=401, text="unauthorized")
 
-        with pytest.raises(requests.exceptions.HTTPError):
+        # A real HTTP-level 401 is classified the same way as Expensify's 200-with-JSON-body
+        # error format, instead of surfacing as an opaque requests.HTTPError.
+        with pytest.raises(CredentialsInvalidError):
+            _send_request({"requestJobDescription": "{}"})
+
+        assert requests_mock.call_count == 1
+
+    @patch("time.sleep", return_value=None)
+    def test_gives_up_immediately_on_http_level_policy_not_found(self, mock_sleep, requests_mock):
+        # Regression test: an actual HTTP 410 status code (as opposed to a 200 response with a
+        # JSON error body) must also be classified rather than propagating as a raw HTTPError.
+        requests_mock.post(EXPENSIFY_URL, status_code=410, text="gone")
+
+        with pytest.raises(ResourceNotFoundError):
             _send_request({"requestJobDescription": "{}"})
 
         assert requests_mock.call_count == 1
