@@ -308,10 +308,8 @@ class ExpensifyReports(Stream):
 
         # Step 3: Parse CSV in memory and yield rows to Airbyte
         reader = csv.DictReader(StringIO(csv_data))
-        raw_rows = list(reader)
-        self.logger.info(f"Raw Expensify CSV export contains {len(raw_rows)} row(s).")
         record_count = 0
-        for row in raw_rows:
+        for row in reader:
             # Airbyte takes these yielded dicts, validates them against the schema,
             # and streams them to the destination connector.
             row[self.cursor_field] = _compute_updated_at(row)
