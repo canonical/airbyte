@@ -4,7 +4,7 @@ import csv
 import json
 import pkgutil
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Iterable, List, Mapping, Optional, Tuple
@@ -27,9 +27,66 @@ MAX_RETRIES = 5
 RETRY_FACTOR = 5
 RATE_LIMIT_BACKOFF_SECONDS = 10.0
 
+# Expensify has no single "last updated" column, so the cursor is derived from these date
+# columns (the most recent non-null value across them represents when the report last changed).
+UPDATED_AT_SOURCE_FIELDS = ("created", "submitted", "approved", "reimbursed")
+UPDATED_AT_CURSOR_FIELD = "updatedAt"
 
-class PolicyNotFoundError(Exception):
-    """Raised when the Expensify policy doesn't exist (HTTP 410)."""
+# The export filters only consider whichever of "created" or "submitted" occurred last.
+EXPORT_FILTER_SOURCE_FIELDS = ("created", "submitted")
+EXPORT_CURSOR_FIELD = "createdOrSubmittedAt"
+
+# Lookback window for incremental syncs, reducing risk of missing report state transitions.
+DEFAULT_LOOKBACK_WINDOW_DAYS = 30
+
+# Formats observed in Expensify report exports for the date columns above.
+_EXPENSIFY_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d")
+
+
+def _parse_expensify_datetime(value: Optional[str]) -> Optional[datetime]:
+    """Parse an Expensify date column into an aware UTC datetime, or None if empty/unparseable."""
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    for fmt in _EXPENSIFY_DATETIME_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _compute_max_date(row: Mapping[str, Any], fields: Tuple[str, ...]) -> Optional[str]:
+    """Derive an ISO-8601 UTC value as the max of the given date columns on the row."""
+    parsed_dates = []
+    for field in fields:
+        parsed_date = _parse_expensify_datetime(row.get(field))
+        if parsed_date is not None:
+            parsed_dates.append(parsed_date)
+
+    if not parsed_dates:
+        return None
+    return max(parsed_dates).isoformat()
+
+
+def _compute_updated_at(row: Mapping[str, Any]) -> Optional[str]:
+    """Derive an ISO-8601 UTC 'updatedAt' cursor value as the max of the report's date columns."""
+    return _compute_max_date(row, UPDATED_AT_SOURCE_FIELDS)
+
+
+def _compute_export_cursor(row: Mapping[str, Any]) -> Optional[str]:
+    """
+    Derive the value used to track export window progress, matching Expensify's own
+    startDate/endDate filter semantics (max of "created"/"submitted" only).
+    """
+    return _compute_max_date(row, EXPORT_FILTER_SOURCE_FIELDS)
+
+
+class ResourceNotFoundError(Exception):
+    """Raised when the requested Expensify resource doesn't exist (HTTP 410). Expensify returns
+    this generic "Gone" status for a variety of missing resources (e.g. policy, export file)."""
 
 
 class CredentialsInvalidError(Exception):
@@ -52,8 +109,8 @@ def _load_reports_export_template() -> str:
 def _map_response_code_to_exception(response_code: int) -> None:
     """Map an Expensify response code to an exception."""
     if response_code == requests.codes.gone:
-        # Expensify returns 410 if the policy doesn't exist
-        raise PolicyNotFoundError(f"Expensify policy not found.")
+        # Expensify returns 410 for a variety of missing resources.
+        raise ResourceNotFoundError(f"Expensify resource not found.")
     elif response_code == requests.codes.unauthorized:
         # Expensify returns 401 if the credentials are invalid
         raise CredentialsInvalidError(f"Expensify credentials are invalid.")
@@ -90,7 +147,10 @@ def _send_request(payload: Mapping[str, Any]) -> requests.Response:
         raise UserDefinedBackoffException(backoff=RATE_LIMIT_BACKOFF_SECONDS, request=response.request, response=response)
     if response.status_code >= 500:
         raise DefaultBackoffException(request=response.request, response=response)
-    response.raise_for_status()
+    if response.status_code >= requests.codes.bad_request:
+        # Route real HTTP-level 4xx errors (e.g. an actual HTTP 410/401 response) through the
+        # same classification as Expensify's "200 OK with JSON error body" quirk.
+        _map_response_code_to_exception(response.status_code)
     return response
 
 
@@ -126,18 +186,59 @@ def _post_job_description(job_description: Mapping[str, Any], template: Optional
 class ExpensifyReports(Stream):
     # Airbyte uses this to know what column uniquely identifies a row
     primary_key = "reportID"
+    # Expensify has no native "updated at" column, so we derive one (see _compute_updated_at)
+    # from the created/submitted/approved/reimbursed date columns. Declaring it here is what
+    # enables the Incremental Append and Incremental Append + Deduped sync modes.
+    cursor_field = UPDATED_AT_CURSOR_FIELD
+    # Secondary, internal-only cursor (created/submitted only) used to resume/bound the export
+    # window per Expensify's own startDate/endDate filter semantics (see EXPORT_CURSOR_FIELD).
+    export_cursor_field = EXPORT_CURSOR_FIELD
 
-    def __init__(self, name: str, partner_user_id: str, partner_user_secret: str, start_date: str, end_date: str, **kwargs):
+    def __init__(
+        self,
+        name: str,
+        partner_user_id: str,
+        partner_user_secret: str,
+        start_date: str,
+        end_date: Optional[str] = None,
+        report_state: Optional[List[str]] = None,
+        lookback_window_days: int = DEFAULT_LOOKBACK_WINDOW_DAYS,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._name = name
         self.partner_user_id = partner_user_id
         self.partner_user_secret = partner_user_secret
         self.start_date = start_date
-        self.end_date = end_date
+        # No end_date means no upper bound: export up to the current date.
+        self.end_date = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # No report_state means no filter: Expensify includes reports in all states.
+        self.report_state = ",".join(report_state) if report_state else None
+        self.lookback_window_days = lookback_window_days
 
     @property
     def name(self) -> str:
         return self._name
+
+    def get_updated_state(self, current_stream_state: Mapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
+        current_stream_state = current_stream_state or {}
+        new_state = dict(current_stream_state)
+
+        # `updatedAt` (created/submitted/approved/reimbursed) drives dedup.
+        updated_at_candidates = [
+            value for value in (current_stream_state.get(self.cursor_field), latest_record.get(self.cursor_field)) if value
+        ]
+        if updated_at_candidates:
+            new_state[self.cursor_field] = max(updated_at_candidates)
+
+        # `createdOrSubmittedAt` (created/submitted only) drives the export window.
+        export_cursor_candidates = [
+            value for value in (current_stream_state.get(self.export_cursor_field), latest_record.get(self.export_cursor_field)) if value
+        ]
+        if export_cursor_candidates:
+            new_state[self.export_cursor_field] = max(export_cursor_candidates)
+
+        return new_state
 
     def read_records(
         self,
@@ -147,25 +248,116 @@ class ExpensifyReports(Stream):
         stream_state: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         self.logger.info(f"Reading records from Expensify for {self.name}")
-        # Step 1: Trigger the Export Job
-        file_name = self._trigger_export()
-        self.logger.info(f"Triggered Expensify export for file {file_name}.")
 
-        # Step 2: Download the CSV
-        csv_data = self._download_file(file_name)
-        self.logger.info(f"Downloaded Expensify export ({len(csv_data)} bytes) for file {file_name}.")
+        export_start_date = self._parse_state(stream_state, sync_mode)
 
-        # Step 3: Parse CSV in memory and yield rows to Airbyte
+        if export_start_date > self.end_date:
+            self.logger.info(
+                f"Skipping export: resumed cursor date {export_start_date} is past the configured "
+                f"end_date {self.end_date}. All data in the configured date range has already been synced."
+            )
+            return
+
+        self.logger.info(
+            f"Requesting Expensify export for {self.name} with filters: "
+            f"startDate={export_start_date}, endDate={self.end_date}, "
+            f"reportState={self.report_state or 'all'}."
+        )
+
+        csv_data = self._retrieve_csv(export_start_date)
+
+        # Parse CSV in memory and yield rows to Airbyte
         reader = csv.DictReader(StringIO(csv_data))
         record_count = 0
         for row in reader:
-            # Airbyte takes these yielded dicts, validates them against your schema,
-            # and streams them to the destination connector
+            # Airbyte takes these yielded dicts, validates them against the schema,
+            # and streams them to the destination connector.
+            row[self.cursor_field] = _compute_updated_at(row)
+            row[self.export_cursor_field] = _compute_export_cursor(row)
             record_count += 1
             yield row
         self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
 
-    def _trigger_export(self) -> str:
+    def _parse_state(self, stream_state: Mapping[str, Any], sync_mode: SyncMode = SyncMode.full_refresh) -> str:
+        """
+        Parse the stream state to determine the start date for the export window.
+
+        For incremental syncs, resume the export window from the last synced cursor value
+        instead of re-exporting (and re-scanning) the full configured date range every time.
+        """
+        stream_state = stream_state or {}
+        state_export_cursor_value = stream_state.get(self.export_cursor_field) if sync_mode == SyncMode.incremental else None
+        export_start_date = self.start_date
+        if state_export_cursor_value:
+            # Expensify's export filter is date-only (YYYY-MM-DD)
+            state_cursor_date = state_export_cursor_value[:10]
+            # Trail the resumed cursor back by `lookback_window_days`.
+            lookback_date = (datetime.strptime(state_cursor_date, "%Y-%m-%d") - timedelta(days=self.lookback_window_days)).strftime(
+                "%Y-%m-%d"
+            )
+            export_start_date = max(self.start_date, lookback_date)
+
+        return export_start_date
+
+    def _retrieve_csv(self, export_start_date: str) -> str:
+        """
+        Triggers an Expensify export and downloads the resulting CSV.
+
+        Params:
+            export_start_date: The start date for the export window.
+
+        Returns:
+            The CSV data as a string.
+
+        Raises:
+            ResourceNotFoundError: if the exported file itself is not yet or no longer available.
+            CredentialsInvalidError: if the Expensify credentials are invalid.
+        """
+        try:
+            # Trigger the Export Job
+            file_name = self._trigger_export(start_date=export_start_date)
+        except ResourceNotFoundError as e:
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=("Expensify returned 'resource not found' (HTTP 410) while triggering the reports export. "),
+                failure_type=FailureType.config_error,
+            ) from e
+        except CredentialsInvalidError as e:
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=(
+                    "Expensify credentials are invalid (HTTP 401) while triggering the reports export. "
+                    "Please verify your Partner User ID and Partner User Secret."
+                ),
+                failure_type=FailureType.config_error,
+            ) from e
+        self.logger.info(f"Triggered Expensify export for file {file_name}.")
+
+        try:
+            # Download the CSV
+            csv_data = self._download_file(file_name)
+        except ResourceNotFoundError as e:
+            # A 410 here means the exported file itself is not yet or no longer available.
+            raise AirbyteTracedException(
+                internal_message=str(e),
+                message=(f"Expensify returned 'resource not found' (HTTP 410) while downloading the exported file '{file_name}'. "),
+                failure_type=FailureType.config_error,
+            ) from e
+        self.logger.info(f"Downloaded Expensify export ({len(csv_data)} bytes) for file {file_name}.")
+
+        return csv_data
+
+    def _trigger_export(self, start_date: Optional[str] = None) -> str:
+        input_settings = {
+            "type": "combinedReportData",
+            "filters": {
+                "startDate": start_date if start_date is not None else self.start_date,
+                "endDate": self.end_date,
+            },
+        }
+        # Omitting "reportState" entirely means Expensify includes reports in all states.
+        if self.report_state:
+            input_settings["reportState"] = self.report_state
         job_description = {
             "type": "file",
             "credentials": {
@@ -173,14 +365,7 @@ class ExpensifyReports(Stream):
                 "partnerUserSecret": self.partner_user_secret,
             },
             "onReceive": {"immediateResponse": ["returnRandomFileName"]},
-            "inputSettings": {
-                "type": "combinedReportData",
-                "filters": {
-                    "startDate": self.start_date,
-                    "endDate": self.end_date,
-                },
-                "reportState": "REIMBURSED",
-            },
+            "inputSettings": input_settings,
             "outputSettings": {"fileExtension": "csv"},
         }
         response = _post_job_description(job_description, template=_load_reports_export_template())
@@ -214,8 +399,8 @@ class SourceExpensify(AbstractSource):
             # Ensure the response is valid JSON
             response.json()
             return True, None
-        except PolicyNotFoundError:
-            # Expensify returns 410 if the policy doesn't exist
+        except ResourceNotFoundError:
+            # Expensify returns 410 if the (deliberately non-existent) policy doesn't exist
             logger.info("Credentials are valid.")
             return True, None
         except CredentialsInvalidError:
@@ -234,6 +419,8 @@ class SourceExpensify(AbstractSource):
                 partner_user_id=config["partner_user_id"],
                 partner_user_secret=config["partner_user_secret"],
                 start_date=config["start_date"],
-                end_date=config["end_date"],
+                end_date=config.get("end_date"),
+                report_state=config.get("report_state"),
+                lookback_window_days=config.get("lookback_window_days", DEFAULT_LOOKBACK_WINDOW_DAYS),
             )
         ]

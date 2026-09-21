@@ -1,12 +1,14 @@
 # Local dev commands for source-expensify.
 
+CONNECTOR_NAME := source-expensify
 POETRY := poetry
 SCRIPT := $(POETRY) run source-expensify
 CONFIG := --config secrets/config.json
+CATALOG := --catalog integration_tests/configured_catalog.json
 LICENSE_TEMPLATE := ../../../LICENSE_SHORT
-LICENSE_SETTINGS := .license-header-settings.json
+CDK := $(POETRY) run airbyte-cdk
 
-.PHONY: help install fmt lint test unit-test
+.PHONY: help install fmt lint build spec check discover read unit-test integration-test acceptance-test test
 
 help:  ## Show this help.
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) \
@@ -18,27 +20,32 @@ install:  ## Install project dependencies via Poetry.
 fmt:  ## Format source code with ruff and add missing Apache license headers.
 	poetry run ruff format .
 	poetry run ruff check . --fix
-	@missing="$$(grep -rL "Copyright (c)" --include="*.py" .)"; \
-	if [ -n "$$missing" ]; then \
-		tmpl=$$(mktemp); \
-		printf '%s\n' "$$(cat $(LICENSE_TEMPLATE))" > "$$tmpl"; \
-		poetry run licenseheaders -f $$missing -t "$$tmpl" -s $(LICENSE_SETTINGS) -o "Airbyte, Inc."; \
-		rm -f "$$tmpl"; \
-	fi
 
 lint:  ## Lint source code with ruff.
 	poetry run ruff check .
 
+build:  ## Build the connector docker image (tagged airbyte/source-expensify:dev).
+	$(CDK) image build
+
+spec:  ## Print the connector's connection specification.
+	$(SCRIPT) spec
+
+check:  ## Validate the configured credentials in secrets/config.json.
+	$(SCRIPT) check $(CONFIG)
+
+discover:  ## Discover the available streams for the configured credentials.
+	$(SCRIPT) discover $(CONFIG)
+
+read:  ## Read records for the configured catalog (override CATALOG to use another file).
+	$(SCRIPT) read $(CONFIG) $(CATALOG)
+
 unit-test:  ## Run unit tests with pytest.
 	poetry run pytest unit_tests
 
-test: lint unit-test  ## Run lint checks and unit tests.
+integration-test:  ## Run integration tests (mocked HTTP, real discover/read entrypoint) with pytest.
+	poetry run pytest integration_tests
 
-check:
-	$(SCRIPT) check $(CONFIG)
+acceptance-test:  ## Run connector acceptance tests (see acceptance-test-config.yml) via airbyte-cdk.
+	$(CDK) connector test
 
-discover:
-	$(SCRIPT) discover $(CONFIG)
-
-read:
-	$(SCRIPT) read $(CONFIG) --catalog integration_tests/configured_catalog.json
+test: lint unit-test integration-test acceptance-test  ## Run lint checks, unit tests, integration tests, and connector acceptance tests.
