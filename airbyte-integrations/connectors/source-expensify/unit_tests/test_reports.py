@@ -212,17 +212,14 @@ class TestReadRecords:
         # locally based on the `updatedAt` cursor.
         assert [r["reportID"] for r in records] == ["1", "2"]
 
-    def test_read_records_incremental_with_widened_start_date_does_not_skip_past_records(self, stream):
-        # Regression test: widening `start_date` backward (to backfill older data) on a stream
-        # that already has state from a previous, narrower-range sync must not cause older rows
-        # to be skipped just because their `updatedAt` predates the state's `updatedAt` (which
-        # reflects the previous sync's run time, not actual data freshness).
-        stream.lookback_window_days = 0  # Isolate from the lookback window, covered separately below.
-        stream.start_date = "2020-01-01"  # Widened far into the past.
-        csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
-        # State came from a previous run whose export window started later (2026-08-01) and whose
-        # `updatedAt`/`createdOrSubmittedAt` reflect that narrower window, not the newly-widened one.
-        stream_state = {"updatedAt": "2026-08-01T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+    def test_read_records_incremental_does_not_filter_rows_by_stale_updated_at(self, stream):
+        # Regression test: rows must not be filtered locally by comparing `updatedAt` to the
+        # state's `updatedAt`, which can be stale (e.g. inflated by a later reimbursement date).
+        stream.lookback_window_days = 0
+        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-31T00:00:00+00:00"}
+        # Report 1's computed updatedAt (2026-08-31) predates the state's stale updatedAt
+        # (2026-09-05), but Expensify returns it for the requested startDate=2026-08-31 anyway.
+        csv_data = "reportID,created\n1,2026-08-31\n"
 
         with (
             patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
@@ -230,11 +227,40 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        # The state's export cursor (2026-08-01) is newer than the widened start_date (2020-01-01),
-        # so it still wins for resuming the export window...
+        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        assert [r["reportID"] for r in records] == ["1"]
+
+    def test_read_records_incremental_widened_start_date_without_reset_does_not_backfill(self, stream):
+        # Regression test: widening start_date backward alone, without resetting state, does not
+        # backfill older data - the export window is still bound by the (newer) state cursor.
+        stream.lookback_window_days = 0
+        stream.start_date = "2020-01-01"
+        stream_state = {"updatedAt": "2026-08-01T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+        # Expensify, queried with startDate=2026-08-01 (the state cursor), never returns rows older than that.
+        csv_data = "reportID,created\n2,2026-08-10\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
         mock_trigger.assert_called_once_with(start_date="2026-08-01")
-        # ...but both records returned by the export are still yielded: report 1's `created` date
-        # (2020-01-15) is older than the state's `updatedAt`, yet it must not be skipped.
+        assert [r["reportID"] for r in records] == ["2"]
+
+    def test_read_records_full_refresh_with_widened_start_date_backfills_past_records(self, stream):
+        # Complement to the test above: a full refresh ignores prior state, so the widened
+        # start_date takes effect and Expensify legitimately returns older records.
+        stream.start_date = "2020-01-01"
+        csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        mock_trigger.assert_called_once_with(start_date="2020-01-01")
         assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_widened_start_date_still_needs_reset_beyond_lookback(self, stream):
