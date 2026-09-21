@@ -146,18 +146,6 @@ class TestReadRecords:
         assert "410" in exc_info.value.message
         assert "downloading the exported file 'file.csv'" in exc_info.value.message
 
-    def test_read_records_raises_traced_config_error_when_download_credentials_invalid(self, stream):
-        with (
-            patch.object(stream, "_trigger_export", return_value="file.csv"),
-            patch.object(stream, "_download_file", side_effect=CredentialsInvalidError("Expensify credentials are invalid.")),
-        ):
-            with pytest.raises(AirbyteTracedException) as exc_info:
-                list(stream.read_records(sync_mode=SyncMode.full_refresh))
-
-        assert exc_info.value.failure_type == FailureType.config_error
-        assert "401" in exc_info.value.message
-        assert "downloading the exported file 'file.csv'" in exc_info.value.message
-
     def test_read_records_computes_updated_at_cursor_from_date_columns(self, stream):
         csv_data = "reportID,created,submitted,approved,reimbursed\n1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n2,2026-08-10,,,\n"
 

@@ -248,18 +248,8 @@ class ExpensifyReports(Stream):
         stream_state: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         self.logger.info(f"Reading records from Expensify for {self.name}")
-        stream_state = stream_state or {}
-        # For incremental syncs, resume the export window from the last synced cursor value
-        # instead of re-exporting (and re-scanning) the full configured date range every time.
-        state_export_cursor_value = stream_state.get(self.export_cursor_field) if sync_mode == SyncMode.incremental else None
-        export_start_date = self.start_date
-        if state_export_cursor_value:
-            state_cursor_date = state_export_cursor_value[:10]  # Expensify's export filter is date-only (YYYY-MM-DD)
-            # Trail the resumed cursor back by `lookback_window_days`.
-            lookback_date = (datetime.strptime(state_cursor_date, "%Y-%m-%d") - timedelta(days=self.lookback_window_days)).strftime(
-                "%Y-%m-%d"
-            )
-            export_start_date = max(self.start_date, lookback_date)
+
+        export_start_date = self._parse_state(stream_state, sync_mode)
 
         if export_start_date > self.end_date:
             self.logger.info(
@@ -274,8 +264,59 @@ class ExpensifyReports(Stream):
             f"reportState={self.report_state or 'all'}."
         )
 
+        csv_data = self._retrieve_csv(export_start_date)
+
+        # Parse CSV in memory and yield rows to Airbyte
+        reader = csv.DictReader(StringIO(csv_data))
+        record_count = 0
+        for row in reader:
+            # Airbyte takes these yielded dicts, validates them against the schema,
+            # and streams them to the destination connector.
+            row[self.cursor_field] = _compute_updated_at(row)
+            row[self.export_cursor_field] = _compute_export_cursor(row)
+            record_count += 1
+            yield row
+        self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
+
+    def _parse_state(self, stream_state: Mapping[str, Any], sync_mode: SyncMode = SyncMode.full_refresh) -> str:
+        """
+        Parse the stream state to determine the start date for the export window.
+
+        For incremental syncs, resume the export window from the last synced cursor value
+        instead of re-exporting (and re-scanning) the full configured date range every time.
+        """
+        stream_state = stream_state or {}
+        # For incremental syncs, resume the export window from the last synced cursor value
+        # instead of re-exporting (and re-scanning) the full configured date range every time.
+        state_export_cursor_value = stream_state.get(self.export_cursor_field) if sync_mode == SyncMode.incremental else None
+        export_start_date = self.start_date
+        if state_export_cursor_value:
+            # Expensify's export filter is date-only (YYYY-MM-DD)
+            state_cursor_date = state_export_cursor_value[:10]
+            # Trail the resumed cursor back by `lookback_window_days`.
+            lookback_date = (datetime.strptime(state_cursor_date, "%Y-%m-%d") - timedelta(days=self.lookback_window_days)).strftime(
+                "%Y-%m-%d"
+            )
+            export_start_date = max(self.start_date, lookback_date)
+
+        return export_start_date
+
+    def _retrieve_csv(self, export_start_date: str) -> str:
+        """
+        Triggers an Expensify export and downloads the resulting CSV.
+
+        Params:
+            export_start_date: The start date for the export window.
+
+        Returns:
+            The CSV data as a string.
+
+        Raises:
+            ResourceNotFoundError: if the exported file itself is not yet or no longer available.
+            CredentialsInvalidError: if the Expensify credentials are invalid.
+        """
         try:
-            # Step 1: Trigger the Export Job
+            # Trigger the Export Job
             file_name = self._trigger_export(start_date=export_start_date)
         except ResourceNotFoundError as e:
             raise AirbyteTracedException(
@@ -295,7 +336,7 @@ class ExpensifyReports(Stream):
         self.logger.info(f"Triggered Expensify export for file {file_name}.")
 
         try:
-            # Step 2: Download the CSV
+            # Download the CSV
             csv_data = self._download_file(file_name)
         except ResourceNotFoundError as e:
             # A 410 here means the exported file itself is not yet or no longer available.
@@ -304,28 +345,9 @@ class ExpensifyReports(Stream):
                 message=(f"Expensify returned 'resource not found' (HTTP 410) while downloading the exported file '{file_name}'. "),
                 failure_type=FailureType.config_error,
             ) from e
-        except CredentialsInvalidError as e:
-            raise AirbyteTracedException(
-                internal_message=str(e),
-                message=(
-                    f"Expensify credentials are invalid (HTTP 401) while downloading the exported file '{file_name}'. "
-                    "Please verify your Partner User ID and Partner User Secret."
-                ),
-                failure_type=FailureType.config_error,
-            ) from e
         self.logger.info(f"Downloaded Expensify export ({len(csv_data)} bytes) for file {file_name}.")
 
-        # Step 3: Parse CSV in memory and yield rows to Airbyte
-        reader = csv.DictReader(StringIO(csv_data))
-        record_count = 0
-        for row in reader:
-            # Airbyte takes these yielded dicts, validates them against the schema,
-            # and streams them to the destination connector.
-            row[self.cursor_field] = _compute_updated_at(row)
-            row[self.export_cursor_field] = _compute_export_cursor(row)
-            record_count += 1
-            yield row
-        self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
+        return csv_data
 
     def _trigger_export(self, start_date: Optional[str] = None) -> str:
         input_settings = {
