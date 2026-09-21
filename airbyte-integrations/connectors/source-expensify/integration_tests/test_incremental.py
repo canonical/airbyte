@@ -160,6 +160,7 @@ class TestIncrementalStateProgression:
         record_ids = sorted(r.record.data["reportID"] for r in output.records)
         assert record_ids == ["101", "102", "103"]
         assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
+        assert output.most_recent_state.stream_state.createdOrSubmittedAt == "2026-08-31T00:00:00+00:00"
 
     def test_resumed_sync_with_sample_state_does_not_skip_records_by_updated_at(self, requests_mock):
         _mock_expensify_export(requests_mock, CSV_DATA)
