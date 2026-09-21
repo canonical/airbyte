@@ -8,17 +8,17 @@ import pytest
 import requests
 import yaml
 from freezegun import freeze_time
-from source_expensify.source import (
+from source_expensify.base_stream import (
     DEFAULT_LOOKBACK_WINDOW_DAYS,
     EXPENSIFY_URL,
     CredentialsInvalidError,
-    ExpensifyReports,
     RateLimitExceededError,
     ResourceNotFoundError,
-    SourceExpensify,
     _post_job_description,
     _send_request,
 )
+from source_expensify.reports import ExpensifyReports
+from source_expensify.source import SourceExpensify
 
 from airbyte_cdk.models import FailureType, SyncMode
 from airbyte_cdk.utils.traced_exception import AirbyteTracedException
@@ -212,17 +212,14 @@ class TestReadRecords:
         # locally based on the `updatedAt` cursor.
         assert [r["reportID"] for r in records] == ["1", "2"]
 
-    def test_read_records_incremental_with_widened_start_date_does_not_skip_past_records(self, stream):
-        # Regression test: widening `start_date` backward (to backfill older data) on a stream
-        # that already has state from a previous, narrower-range sync must not cause older rows
-        # to be skipped just because their `updatedAt` predates the state's `updatedAt` (which
-        # reflects the previous sync's run time, not actual data freshness).
-        stream.lookback_window_days = 0  # Isolate from the lookback window, covered separately below.
-        stream.start_date = "2020-01-01"  # Widened far into the past.
-        csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
-        # State came from a previous run whose export window started later (2026-08-01) and whose
-        # `updatedAt`/`createdOrSubmittedAt` reflect that narrower window, not the newly-widened one.
-        stream_state = {"updatedAt": "2026-08-01T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+    def test_read_records_incremental_does_not_filter_rows_by_stale_updated_at(self, stream):
+        # Regression test: rows must not be filtered locally by comparing `updatedAt` to the
+        # state's `updatedAt`, which can be stale (e.g. inflated by a later reimbursement date).
+        stream.lookback_window_days = 0
+        stream_state = {"updatedAt": "2026-09-05T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-31T00:00:00+00:00"}
+        # Report 1's computed updatedAt (2026-08-31) predates the state's stale updatedAt
+        # (2026-09-05), but Expensify returns it for the requested startDate=2026-08-31 anyway.
+        csv_data = "reportID,created\n1,2026-08-31\n"
 
         with (
             patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
@@ -230,11 +227,40 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        # The state's export cursor (2026-08-01) is newer than the widened start_date (2020-01-01),
-        # so it still wins for resuming the export window...
+        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        assert [r["reportID"] for r in records] == ["1"]
+
+    def test_read_records_incremental_widened_start_date_without_reset_does_not_backfill(self, stream):
+        # Regression test: widening start_date backward alone, without resetting state, does not
+        # backfill older data - the export window is still bound by the (newer) state cursor.
+        stream.lookback_window_days = 0
+        stream.start_date = "2020-01-01"
+        stream_state = {"updatedAt": "2026-08-01T00:00:00+00:00", "createdOrSubmittedAt": "2026-08-01T00:00:00+00:00"}
+        # Expensify, queried with startDate=2026-08-01 (the state cursor), never returns rows older than that.
+        csv_data = "reportID,created\n2,2026-08-10\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
+
         mock_trigger.assert_called_once_with(start_date="2026-08-01")
-        # ...but both records returned by the export are still yielded: report 1's `created` date
-        # (2020-01-15) is older than the state's `updatedAt`, yet it must not be skipped.
+        assert [r["reportID"] for r in records] == ["2"]
+
+    def test_read_records_full_refresh_with_widened_start_date_backfills_past_records(self, stream):
+        # Complement to the test above: a full refresh ignores prior state, so the widened
+        # start_date takes effect and Expensify legitimately returns older records.
+        stream.start_date = "2020-01-01"
+        csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        mock_trigger.assert_called_once_with(start_date="2020-01-01")
         assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_widened_start_date_still_needs_reset_beyond_lookback(self, stream):
@@ -444,7 +470,7 @@ class TestGetUpdatedState:
 
 class TestTriggerExport:
     def test_trigger_export_uses_configured_date_range(self, stream):
-        with patch("source_expensify.source._post_job_description") as mock_post:
+        with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
             stream._trigger_export()
@@ -467,7 +493,7 @@ class TestTriggerExport:
         )
         assert stream.end_date == "2026-09-15"
 
-        with patch("source_expensify.source._post_job_description") as mock_post:
+        with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
             stream._trigger_export()
@@ -483,7 +509,7 @@ class TestTriggerExport:
         # so it includes reports in every state.
         assert stream.report_state is None
 
-        with patch("source_expensify.source._post_job_description") as mock_post:
+        with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
             stream._trigger_export()
@@ -502,7 +528,7 @@ class TestTriggerExport:
         )
         assert stream.report_state == "APPROVED"
 
-        with patch("source_expensify.source._post_job_description") as mock_post:
+        with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
             stream._trigger_export()
@@ -521,7 +547,7 @@ class TestTriggerExport:
         )
         assert stream.report_state == "OPEN,SUBMITTED,APPROVED"
 
-        with patch("source_expensify.source._post_job_description") as mock_post:
+        with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
             stream._trigger_export()
@@ -536,7 +562,7 @@ class TestPostJobDescription:
         response.status_code = 200
         response._content = b"file.csv"
 
-        with patch("source_expensify.source.requests.post", return_value=response) as mock_post:
+        with patch("source_expensify.base_stream.requests.post", return_value=response) as mock_post:
             result = _post_job_description({"type": "download"})
 
         assert result is response
@@ -559,7 +585,7 @@ class TestPostJobDescription:
         response.status_code = 200
         response._content = f'{{"responseCode": {response_code}}}'.encode()
 
-        with patch("source_expensify.source.requests.post", return_value=response):
+        with patch("source_expensify.base_stream.requests.post", return_value=response):
             with pytest.raises(exception):
                 _post_job_description({"type": "get"})
 
@@ -577,7 +603,7 @@ class TestDownloadFile:
         response.status_code = 200
         response._content = b"reportID,amount\n1,100\n"
 
-        with patch("source_expensify.source.requests.post", return_value=response) as mock_post:
+        with patch("source_expensify.base_stream.requests.post", return_value=response) as mock_post:
             result = stream._download_file("report.csv")
 
         assert result == "reportID,amount\n1,100\n"
@@ -598,7 +624,7 @@ class TestCheckConnection:
         source = SourceExpensify()
         logger = Mock()
 
-        with patch("source_expensify.source.requests.post", return_value=response):
+        with patch("source_expensify.base_stream.requests.post", return_value=response):
             result = source.check_connection(logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"})
 
         assert result == (True, None)
@@ -618,7 +644,7 @@ class TestCheckConnection:
         source = SourceExpensify()
         logger = Mock()
 
-        with patch("source_expensify.source.requests.post", return_value=response):
+        with patch("source_expensify.base_stream.requests.post", return_value=response):
             result = source.check_connection(logger, {"partner_user_id": "user-id", "partner_user_secret": "user-secret"})
 
         assert result[0] is expected[0]
