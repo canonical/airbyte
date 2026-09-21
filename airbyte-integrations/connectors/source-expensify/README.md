@@ -25,7 +25,7 @@ The connector requires the following configuration fields:
 | `partner_user_secret`   | The Partner User Secret, generated from the Expensify Integration Server credentials page.                                                                                                                    | Yes      |
 | `start_date`            | The start date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`.                                                                                                           | Yes      |
 | `end_date`              | The end date (inclusive) used to filter Expensify reports for export, in the format `YYYY-MM-DD`. If unset, there is no upper bound (up to today).                                                             | No       |
-| `report_state`          | One or more of `OPEN`, `SUBMITTED`, `APPROVED`, `REIMBURSED`, `ARCHIVED`. If unset, reports in all states are included.                                                                                        | No       |
+| `report_state`          | None or more of `OPEN`, `SUBMITTED`, `APPROVED`, `REIMBURSED`, `ARCHIVED`. If unset, reports in all states are included.                                                                                        | No       |
 | `lookback_window_days`  | Number of days to trail the resumed incremental export window backward, to catch reports approved/reimbursed after their `created`/`submitted` date. Defaults to 30. Never goes earlier than `start_date`.    | No       |
 
 ## Local development

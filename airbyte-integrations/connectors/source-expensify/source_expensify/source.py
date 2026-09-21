@@ -286,8 +286,6 @@ class ExpensifyReports(Stream):
         instead of re-exporting (and re-scanning) the full configured date range every time.
         """
         stream_state = stream_state or {}
-        # For incremental syncs, resume the export window from the last synced cursor value
-        # instead of re-exporting (and re-scanning) the full configured date range every time.
         state_export_cursor_value = stream_state.get(self.export_cursor_field) if sync_mode == SyncMode.incremental else None
         export_start_date = self.start_date
         if state_export_cursor_value:
