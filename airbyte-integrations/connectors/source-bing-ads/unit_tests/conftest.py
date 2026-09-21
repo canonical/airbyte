@@ -152,7 +152,14 @@ def mock_account_query_fixture(requests_mock):
 def get_source(config, state=None) -> YamlDeclarativeSource:
     catalog = CatalogBuilder().build()
     state = StateBuilder().build() if not state else state
-    return YamlDeclarativeSource(path_to_yaml=str(_YAML_FILE_PATH), catalog=catalog, config=config, state=state)
+    source = YamlDeclarativeSource(path_to_yaml=str(_YAML_FILE_PATH), catalog=catalog, config=config, state=state)
+
+    def check_connection(logger, config):
+        result = source.check(logger, config)
+        return result.status.value == "SUCCEEDED", result.message
+
+    source.check_connection = check_connection
+    return source
 
 
 def find_stream(stream_name, config, state=None):
@@ -160,6 +167,14 @@ def find_stream(stream_name, config, state=None):
     streams = get_source(config, state).streams(config=config)
     for stream in streams:
         if stream.name == stream_name:
+            retriever = stream._stream_partition_generator._partition_factory._retriever
+            stream.retriever = retriever
+
+            def stream_slices(*args, **kwargs):
+                for partition in stream._stream_partition_generator.generate():
+                    yield partition._stream_slice
+
+            stream.stream_slices = stream_slices
             return stream
     raise ValueError(f"Stream {stream_name} not found")
 

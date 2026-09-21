@@ -204,7 +204,12 @@ class TestSuiteReportStream(TestReportStream):
         job_start_time = start_time_match.group(1) if start_time_match else None
         job_end_time = end_time_match.group(1) if end_time_match else None
 
-        last_successful_sync_cursor_value = provided_state[0].stream.stream_state.state[self.cursor_field]
+        provided_stream_state = vars(provided_state[0].stream.stream_state)
+        last_successful_sync_cursor_value = next(
+            state["cursor"][self.cursor_field]
+            for state in provided_stream_state["states"]
+            if state["partition"]["account_id"] == self.account_id
+        )
         assert job_start_time == last_successful_sync_cursor_value
         if "hourly" in self.stream_name or (hasattr(self, "custom_report_aggregation") and self.custom_report_aggregation == "Hourly"):
             assert job_end_time == f"{SECOND_READ_FREEZE_TIME}T00:00:00+00:00"
