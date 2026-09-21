@@ -12,7 +12,8 @@ from typing import Any, List, Mapping
 from unittest.mock import Mock
 from urllib.parse import parse_qs
 
-from source_expensify.source import EXPENSIFY_URL, SourceExpensify
+from source_expensify.base_stream import EXPENSIFY_URL
+from source_expensify.source import SourceExpensify
 
 from airbyte_cdk.models import (
     AirbyteStateBlob,
