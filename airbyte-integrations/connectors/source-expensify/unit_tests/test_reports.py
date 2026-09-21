@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 import yaml
+from freezegun import freeze_time
 from source_expensify.source import (
     DEFAULT_LOOKBACK_WINDOW_DAYS,
     EXPENSIFY_URL,
@@ -465,6 +466,80 @@ class TestTriggerExport:
             "startDate": "2026-08-30",
             "endDate": "2026-08-31",
         }
+
+    @freeze_time("2026-09-15 12:00:00")
+    def test_omitted_end_date_defaults_to_current_date(self):
+        # No `end_date` provided: the stream should default it to "today" (UTC) rather than
+        # leaving the export window unbounded or raising an error.
+        stream = ExpensifyReports(
+            name="reports",
+            partner_user_id="user-id",
+            partner_user_secret="user-secret",
+            start_date="2026-08-30",
+        )
+        assert stream.end_date == "2026-09-15"
+
+        with patch("source_expensify.source._post_job_description") as mock_post:
+            mock_post.return_value.text = "file.csv"
+
+            stream._trigger_export()
+
+        job_description = mock_post.call_args.args[0]
+        assert job_description["inputSettings"]["filters"] == {
+            "startDate": "2026-08-30",
+            "endDate": "2026-09-15",
+        }
+
+    def test_omitted_report_state_sends_no_report_state_filter(self, stream):
+        # No `report_state` provided: Expensify should receive no "reportState" filter at all,
+        # so it includes reports in every state.
+        assert stream.report_state is None
+
+        with patch("source_expensify.source._post_job_description") as mock_post:
+            mock_post.return_value.text = "file.csv"
+
+            stream._trigger_export()
+
+        job_description = mock_post.call_args.args[0]
+        assert "reportState" not in job_description["inputSettings"]
+
+    def test_single_report_state_is_sent_unmodified(self):
+        stream = ExpensifyReports(
+            name="reports",
+            partner_user_id="user-id",
+            partner_user_secret="user-secret",
+            start_date="2026-08-30",
+            end_date="2026-08-31",
+            report_state=["APPROVED"],
+        )
+        assert stream.report_state == "APPROVED"
+
+        with patch("source_expensify.source._post_job_description") as mock_post:
+            mock_post.return_value.text = "file.csv"
+
+            stream._trigger_export()
+
+        job_description = mock_post.call_args.args[0]
+        assert job_description["inputSettings"]["reportState"] == "APPROVED"
+
+    def test_multiple_report_states_are_comma_joined(self):
+        stream = ExpensifyReports(
+            name="reports",
+            partner_user_id="user-id",
+            partner_user_secret="user-secret",
+            start_date="2026-08-30",
+            end_date="2026-08-31",
+            report_state=["OPEN", "SUBMITTED", "APPROVED"],
+        )
+        assert stream.report_state == "OPEN,SUBMITTED,APPROVED"
+
+        with patch("source_expensify.source._post_job_description") as mock_post:
+            mock_post.return_value.text = "file.csv"
+
+            stream._trigger_export()
+
+        job_description = mock_post.call_args.args[0]
+        assert job_description["inputSettings"]["reportState"] == "OPEN,SUBMITTED,APPROVED"
 
 
 class TestPostJobDescription:

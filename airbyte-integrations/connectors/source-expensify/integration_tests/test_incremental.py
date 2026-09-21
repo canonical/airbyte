@@ -9,6 +9,7 @@ Integration-style tests that drive the connector through its actual Airbyte CLI 
 import json
 from pathlib import Path
 from typing import Any, List, Mapping
+from unittest.mock import Mock
 from urllib.parse import parse_qs
 
 from source_expensify.source import EXPENSIFY_URL, SourceExpensify
@@ -41,6 +42,10 @@ CONFIG: Mapping[str, Any] = {
 # Report 101 and 102 were "already synced" as of sample_state.json's cursor (2026-08-16);
 # only report 103 is newer and should be re-emitted on a resumed sync.
 CSV_DATA = "reportID,created\n101,2026-08-01\n102,2026-08-15\n103,2026-08-31\n"
+
+
+def _load_json_config(file_name: str) -> Mapping[str, Any]:
+    return json.loads((INTEGRATION_TESTS_DIR / file_name).read_text())
 
 
 def _load_incremental_catalog():
@@ -96,6 +101,54 @@ class TestDiscover:
         assert SyncMode.incremental in reports_stream.supported_sync_modes
         assert reports_stream.source_defined_cursor is True
         assert reports_stream.default_cursor_field == ["updatedAt"]
+
+
+class TestCheck:
+    """`check`/`discover`/`read` failure-path coverage using the realistic `sample_config.json`
+    (succeeds) and `invalid_config.json` (fails authentication) fixtures in this directory."""
+
+    def test_check_succeeds_with_valid_config(self, requests_mock):
+        # Expensify returns 410 ("resource not found") for the deliberately non-existent policy
+        # requested by `check_connection`; that response confirms the credentials themselves are
+        # valid even though the policy doesn't exist.
+        requests_mock.post(EXPENSIFY_URL, json={"responseMessage": "Not found", "responseCode": 410})
+
+        is_available, error = SourceExpensify().check_connection(logger=Mock(), config=_load_json_config("sample_config.json"))
+
+        assert is_available is True
+        assert error is None
+
+    def test_check_fails_with_invalid_config(self, requests_mock):
+        # Expensify returns 401 for invalid partner credentials.
+        requests_mock.post(EXPENSIFY_URL, json={"responseMessage": "Unauthorized", "responseCode": 401})
+
+        is_available, error = SourceExpensify().check_connection(logger=Mock(), config=_load_json_config("invalid_config.json"))
+
+        assert is_available is False
+
+
+class TestReadFailurePaths:
+    def test_read_fails_with_invalid_authentication(self, requests_mock):
+        # Invalid credentials surface as a 401 when triggering the export job; `read` should
+        # report this as a config-error trace rather than emit any records.
+        requests_mock.post(
+            EXPENSIFY_URL,
+            additional_matcher=lambda request: _job_type(request) == "file",
+            json={"responseMessage": "Unauthorized", "responseCode": 401},
+        )
+
+        output = read(
+            SourceExpensify(),
+            _load_json_config("invalid_config.json"),
+            _load_incremental_catalog(),
+            expecting_exception=True,
+        )
+
+        assert output.records == []
+        assert any(
+            trace.trace.error is not None and "credentials are invalid" in trace.trace.error.message.lower()
+            for trace in output.trace_messages
+        )
 
 
 class TestIncrementalStateProgression:
