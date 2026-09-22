@@ -123,7 +123,7 @@ def test_adgroups_stream_slices(mock_auth_token, mock_user_query, mock_account_q
         },
     )
     ad_groups = find_stream("ad_groups", config)
-    stream_slices = list(ad_groups.retriever.stream_slicer.stream_slices())
+    stream_slices = list(ad_groups.stream_slices())
     assert stream_slices == [
         {"campaign_id": [1], "parent_slice": [{"account_id": 1, "parent_slice": {"account_name": "", "user_id": 1, "parent_slice": {}}}]},
         {"campaign_id": [2], "parent_slice": [{"account_id": 1, "parent_slice": {"account_name": "", "user_id": 1, "parent_slice": {}}}]},
@@ -169,7 +169,7 @@ def test_ads_stream_slices(mock_auth_token, mock_user_query, mock_account_query,
         },
     )
     ads = find_stream("ads", config)
-    stream_slices = list(ads.retriever.stream_slicer.stream_slices())
+    stream_slices = list(ads.stream_slices())
     assert stream_slices == [
         {
             "ad_group_id": [1],

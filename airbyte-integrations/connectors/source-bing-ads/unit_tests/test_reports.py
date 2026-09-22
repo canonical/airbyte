@@ -103,7 +103,7 @@ def test_get_updated_state_new_state_daily_weekly_monthly(stream_name, mock_auth
     source = get_source(TEST_CONFIG, state)
     output = read(source, TEST_CONFIG, catalog, state)
 
-    updated_state = output.most_recent_state.stream_state.state["TimePeriod"]
+    updated_state = output.most_recent_state.stream_state.states[0]["cursor"]["TimePeriod"]
     assert updated_state == "2023-01-01"
 
 
