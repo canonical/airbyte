@@ -1,0 +1,13 @@
+{
+  "next_cursor": "top-periods-page-2",
+  "previous_cursor": null,
+  "periods": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "interval": "monthly",
+      "start_date": "2026-08-01",
+      "end_date": "2026-08-31",
+      "total_conversations": 1168
+    }
+  ]
+}

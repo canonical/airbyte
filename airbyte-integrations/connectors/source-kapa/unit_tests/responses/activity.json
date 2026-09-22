@@ -1,0 +1,52 @@
+{
+  "aggregate_statistics": {
+    "total_query_count": 1476,
+    "total_conversation_query_count": 1476,
+    "total_retrieval_query_count": 0,
+    "total_upvotes": 4,
+    "total_downvotes": 0,
+    "total_uncertain_query_count": 211,
+    "total_unique_users": 348,
+    "total_support_tickets_deflected": 0,
+    "total_support_tickets_not_deflected": 0,
+    "total_queries_by_language": [
+      {
+        "iso": "en",
+        "name": "English",
+        "count": 1449
+      },
+      {
+        "iso": "ja",
+        "name": "Japanese",
+        "count": 7
+      }
+    ]
+  },
+  "statistics_by_integration": [
+    {
+      "integration": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "integration_type": "API",
+        "name": "Support Portal"
+      },
+      "statistics": {
+        "total_query_count": 1170,
+        "total_conversation_query_count": 1170,
+        "total_retrieval_query_count": 0,
+        "total_upvotes": 4,
+        "total_downvotes": 0,
+        "total_uncertain_query_count": 150,
+        "total_unique_users": 329,
+        "total_support_tickets_deflected": 0,
+        "total_support_tickets_not_deflected": 0,
+        "total_queries_by_language": [
+          {
+            "iso": "en",
+            "name": "English",
+            "count": 1141
+          }
+        ]
+      }
+    }
+  ]
+}

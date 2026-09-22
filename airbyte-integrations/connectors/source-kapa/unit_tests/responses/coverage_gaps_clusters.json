@@ -1,0 +1,25 @@
+{
+  "next_cursor": null,
+  "previous_cursor": null,
+  "period": {
+    "id": "55555555-5555-4555-8555-555555555555"
+  },
+  "total_clusters": 1,
+  "clusters": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "title": "Example documentation gap",
+      "summary": "The available guides do not explain whether two documented features can be used together.",
+      "suggestion": "Add a compatibility matrix and an FAQ covering the combined workflow.",
+      "thread_count": 3,
+      "num_unique_users": 2,
+      "threads": [
+        {
+          "id": "99999999-9999-4999-8999-999999999999",
+          "initial_question": "<redacted question>",
+          "created_at": "2026-08-31T18:43:01.396887Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "count": 2,
+  "next": "https://api.kapa.ai/ingestion/v1/projects/d7b46c01-32a3-4f74-80d3-616a3c18fb6b/source-groups/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "name": "Example product",
+      "type": "product",
+      "description": "Example product documentation",
+      "sub_groups": [
+        {
+          "id": "44444444-4444-4444-8444-444444444444",
+          "name": "Version 2",
+          "type": "version",
+          "description": null,
+          "sub_groups": [],
+          "created_at": "2026-03-01T08:00:00Z",
+          "updated_at": "2026-09-01T08:00:00Z"
+        }
+      ],
+      "created_at": "2026-01-01T08:00:00Z",
+      "updated_at": "2026-09-01T08:00:00Z"
+    }
+  ]
+}
