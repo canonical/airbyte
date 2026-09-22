@@ -7,12 +7,13 @@ EXPENSES_EXPORT_TEMPLATE_PATH = "templates/expenses_export_template.ftl"
 
 # Expensify has no single "last updated" column for a transaction, so the cursor is derived from
 # these date columns (the most recent non-null value across them represents when the expense
-# last changed).
-UPDATED_AT_SOURCE_FIELDS = ("created", "modifiedCreated", "inserted")
+# last changed). The parent report's submitted/approved/reimbursed dates are also included.
+UPDATED_AT_SOURCE_FIELDS = ("created", "modifiedCreated", "inserted", "reportSubmitted", "reportApproved", "reportReimbursed")
 UPDATED_AT_CURSOR_FIELD = "updatedAt"
 
-# The export filters only consider the (report-level) "created" date, since this template flattens
-# each report's transactions and does not surface a report-level "submitted" column.
+# The export filters only consider the (report-level) "created" date. The shared
+# lookback_window_days trailing window covers expenses whose parent report changes
+# state after its created date.
 EXPORT_FILTER_SOURCE_FIELDS = ("created",)
 EXPORT_CURSOR_FIELD = "createdAt"
 
@@ -21,8 +22,8 @@ class ExpensifyExpenses(ExpensifyStream):
     # Airbyte uses this to know what column uniquely identifies a row
     primary_key = "transactionID"
     # Expensify has no native "updated at" column, so we derive one from the created/
-    # modifiedCreated/inserted date columns. Declaring it here is what enables the Incremental
-    # Append and Incremental Append + Deduped sync modes.
+    # modifiedCreated/inserted/reportSubmitted/reportApproved/reportReimbursed date columns.
+    # This enables the Incremental Append and Incremental Append + Deduped sync modes.
     cursor_field = UPDATED_AT_CURSOR_FIELD
     cursor_source_fields = UPDATED_AT_SOURCE_FIELDS
     # Secondary, internal-only cursor (created only) used to resume/bound the export window per

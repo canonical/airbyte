@@ -1,5 +1,5 @@
 <#if addHeader == true>
-reportID,transactionID,type,created,modifiedCreated,inserted,merchant,modifiedMerchant,amount,modifiedAmount,convertedAmount,currency,currencyConversionRate,category,categoryGlCode,categoryPayrollCode,tag,tagGlCode,comment,bank,billable,reimbursable,isDistance,hasTax,taxAmount,modifiedTaxAmount,taxName,taxRate,taxRateName,taxCode,mcc,modifiedMCC,receiptFilename,receiptID,receiptURL,attendees,unitsCount,unitsRate,unitsUnit,unitsName
+reportID,transactionID,type,created,modifiedCreated,inserted,merchant,modifiedMerchant,amount,modifiedAmount,convertedAmount,currency,currencyConversionRate,category,categoryGlCode,categoryPayrollCode,tag,tagGlCode,comment,bank,billable,reimbursable,isDistance,hasTax,taxAmount,modifiedTaxAmount,taxName,taxRate,taxRateName,taxCode,mcc,modifiedMCC,receiptFilename,receiptID,receiptURL,attendees,unitsCount,unitsRate,unitsUnit,unitsName,reportSubmitted,reportApproved,reportReimbursed
 </#if>
 <#list reports as report>
 <#list report.transactionList as expense>
@@ -63,6 +63,9 @@ reportID,transactionID,type,created,modifiedCreated,inserted,merchant,modifiedMe
 "${((expense.units.count)!"")?replace('"', '""')}",<#t>
 "${((expense.units.rate)!"")?replace('"', '""')}",<#t>
 "${((expense.units.unit)!"")?replace('"', '""')}",<#t>
-"${((expense.units.name)!"")?replace('"', '""')}"<#lt>
+"${((expense.units.name)!"")?replace('"', '""')}",<#t>
+"${(report.submitted!"")?replace('"', '""')}",<#t>
+"${(report.approved!"")?replace('"', '""')}",<#t>
+"${(report.reimbursed!"")?replace('"', '""')}"<#lt>
 </#list>
 </#list>

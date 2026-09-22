@@ -26,7 +26,14 @@ class TestStreamConfiguration:
         assert stream.name == "expenses"
         assert stream.primary_key == "transactionID"
         assert stream.cursor_field == "updatedAt"
-        assert stream.cursor_source_fields == ("created", "modifiedCreated", "inserted")
+        assert stream.cursor_source_fields == (
+            "created",
+            "modifiedCreated",
+            "inserted",
+            "reportSubmitted",
+            "reportApproved",
+            "reportReimbursed",
+        )
         assert stream.export_cursor_field == "createdAt"
         assert stream.export_filter_source_fields == ("created",)
         assert stream.export_type == "combinedReportData"
@@ -73,6 +80,22 @@ class TestReadRecords:
 
         assert records[0]["updatedAt"] == "2026-08-03T00:00:00+00:00"
         assert records[1]["updatedAt"] == "2026-08-10T00:00:00+00:00"
+
+    def test_read_records_computes_updated_at_cursor_from_parent_report_date_columns(self, stream):
+        # An expense's own created/modifiedCreated/inserted don't change when its parent report
+        # later transitions state, so reportSubmitted/reportApproved/reportReimbursed must also
+        # feed the updatedAt cursor.
+        csv_data = (
+            "transactionID,created,reportSubmitted,reportApproved,reportReimbursed\n" "1,2026-08-01,2026-08-02,2026-08-03,2026-08-04\n"
+        )
+
+        with (
+            patch.object(stream, "_trigger_export", return_value="expenses.csv"),
+            patch.object(stream, "_download_file", return_value=csv_data),
+        ):
+            records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert records[0]["updatedAt"] == "2026-08-04T00:00:00+00:00"
 
     def test_read_records_computes_export_cursor_from_created_only(self, stream):
         # Unlike `updatedAt`, `createdAt` must NOT be affected by modifiedCreated/inserted.
@@ -131,6 +154,7 @@ class TestTriggerExport:
         }
         template = mock_post.call_args.kwargs.get("template")
         assert "reportID" in template and "transactionID" in template
+        assert "reportSubmitted" in template and "reportApproved" in template and "reportReimbursed" in template
 
     @freeze_time("2026-09-15 12:00:00")
     def test_omitted_end_date_defaults_to_current_date(self):

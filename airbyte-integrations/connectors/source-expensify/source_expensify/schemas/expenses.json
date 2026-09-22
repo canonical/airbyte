@@ -163,13 +163,25 @@
       "description": "The name of the unit type for a distance expense.",
       "type": ["string", "null"]
     },
+    "reportSubmitted": {
+      "description": "The date the expense's parent report was submitted, if applicable.",
+      "type": ["string", "null"]
+    },
+    "reportApproved": {
+      "description": "The date the expense's parent report was approved, if applicable.",
+      "type": ["string", "null"]
+    },
+    "reportReimbursed": {
+      "description": "The date the expense's parent report was reimbursed, if applicable.",
+      "type": ["string", "null"]
+    },
     "createdAt": {
       "description": "Derived cursor field: the parsed value of the created date for this expense. This mirrors Expensify's own startDate/endDate export filter semantics and is used to track/resume the export window.",
       "type": ["string", "null"],
       "format": "date-time"
     },
     "updatedAt": {
-      "description": "Derived cursor field: the most recent of the created, modifiedCreated, and inserted timestamps for this expense.",
+      "description": "Derived cursor field: the most recent of the created, modifiedCreated, inserted, reportSubmitted, reportApproved, and reportReimbursed timestamps for this expense.",
       "type": ["string", "null"],
       "format": "date-time"
     }
