@@ -727,9 +727,11 @@ class TestStreamsLookbackWindowWiring:
             "start_date": "2026-08-30",
         }
 
-        (reports_stream,) = source.streams(config)
+        streams = source.streams(config)
 
-        assert reports_stream.lookback_window_days == DEFAULT_LOOKBACK_WINDOW_DAYS == 30
+        assert len(streams) == 2
+        for stream in streams:
+            assert stream.lookback_window_days == DEFAULT_LOOKBACK_WINDOW_DAYS == 30
 
     def test_streams_passes_through_configured_lookback_window_days(self):
         source = SourceExpensify()
@@ -740,9 +742,11 @@ class TestStreamsLookbackWindowWiring:
             "lookback_window_days": 7,
         }
 
-        (reports_stream,) = source.streams(config)
+        streams = source.streams(config)
 
-        assert reports_stream.lookback_window_days == 7
+        assert len(streams) == 2
+        for stream in streams:
+            assert stream.lookback_window_days == 7
 
 
 class TestSpecSchema:
