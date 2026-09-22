@@ -2,8 +2,6 @@
 
 This directory contains the implementation for `source-expensify`, a Python connector built on the Airbyte CDK.
 
-For information about how to configure and use this connector within Airbyte, see [the connector's full documentation](https://docs.airbyte.com/integrations/sources/expensify).
-
 ## Streams
 
 | Stream   | Primary Key     | Cursor Field |
