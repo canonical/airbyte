@@ -11,7 +11,8 @@ from source_expensify.base_stream import (
     ResourceNotFoundError,
     _post_job_description,
 )
-from source_expensify.reports import ExpensifyReports
+from source_expensify.expenses import ExpensifyExpensesStream
+from source_expensify.reports import ExpensifyReportsStream
 
 
 class SourceExpensify(AbstractSource):
@@ -46,7 +47,7 @@ class SourceExpensify(AbstractSource):
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         # Pass the credentials from the Airbyte UI into your stream
         return [
-            ExpensifyReports(
+            ExpensifyReportsStream(
                 name="reports",
                 partner_user_id=config["partner_user_id"],
                 partner_user_secret=config["partner_user_secret"],
@@ -54,5 +55,14 @@ class SourceExpensify(AbstractSource):
                 end_date=config.get("end_date"),
                 report_state=config.get("report_state"),
                 lookback_window_days=config.get("lookback_window_days", DEFAULT_LOOKBACK_WINDOW_DAYS),
-            )
+            ),
+            ExpensifyExpensesStream(
+                name="expenses",
+                partner_user_id=config["partner_user_id"],
+                partner_user_secret=config["partner_user_secret"],
+                start_date=config["start_date"],
+                end_date=config.get("end_date"),
+                report_state=config.get("report_state"),
+                lookback_window_days=config.get("lookback_window_days", DEFAULT_LOOKBACK_WINDOW_DAYS),
+            ),
         ]

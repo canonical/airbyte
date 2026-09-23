@@ -2,18 +2,19 @@
 
 This directory contains the implementation for `source-expensify`, a Python connector built on the Airbyte CDK.
 
-For information about how to configure and use this connector within Airbyte, see [the connector's full documentation](https://docs.airbyte.com/integrations/sources/expensify).
-
 ## Streams
 
-| Stream  | Primary Key | Cursor Field |
-| ------- | ----------- | ------------ |
-| Reports | `reportID`  | `updatedAt`  |
+| Stream   | Primary Key     | Cursor Field |
+| -------- | --------------- | ------------ |
+| Reports  | `reportID`      | `updatedAt`  |
+| Expenses | `transactionID` | `updatedAt`  |
 
 The `reports` stream exports Expensify report data (via the Integration Server's `combinedReportData` export) for reports in the configured `report_state`(s) (if unset, reports in all states are included).
 Expensify has no native "last updated" column, so the connector derives the `updatedAt` cursor from the most recent non-null value across the `created`, `submitted`, `approved`, and `reimbursed` date columns on each row.
 
 Incremental syncs resume the underlying Expensify export window from a secondary, internal `createdOrSubmittedAt` cursor (matching Expensify's own `startDate`/`endDate` export filter semantics, which only consider the `created`/`submitted` columns). Because a report can be approved or reimbursed well after it was created/submitted, strictly resuming from that cursor could permanently miss such late changes once the resumed window moves past the report's `created`/`submitted` date. To avoid this without a complex per-report state machine, the connector trails the resumed export window backward by a configurable `lookback_window_days` (default 30) on every incremental sync, replaying that trailing window so late-changing reports keep being re-exported and re-synced. The configured `start_date` always remains a hard lower bound, and widening `start_date` further into the past than the lookback window still requires a state reset (or a full refresh) to backfill that older data.
+
+The `expenses` stream sources the same underlying `combinedReportData` export as `reports`, but uses a different template to flatten each report's nested transaction list into one row per expense. In addition to the transaction-level `created`/`modifiedCreated`/`inserted` date columns, this template also surfaces the parent report's `submitted`/`approved`/`reimbursed` dates (as `reportSubmitted`/`reportApproved`/`reportReimbursed`), since an expense's own date columns don't change when its parent report later transitions state; the `updatedAt` cursor is derived from the most recent non-null value across all six of these columns. The internal export-window cursor (`createdAt`) still tracks only the `created` column. The same `lookback_window_days` trailing-window strategy described above applies here as well.
 
 ## Configuration
 

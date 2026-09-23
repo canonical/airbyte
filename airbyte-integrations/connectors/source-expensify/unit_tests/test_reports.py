@@ -17,7 +17,7 @@ from source_expensify.base_stream import (
     _post_job_description,
     _send_request,
 )
-from source_expensify.reports import ExpensifyReports
+from source_expensify.reports import ExpensifyReportsStream
 from source_expensify.source import SourceExpensify
 
 from airbyte_cdk.models import FailureType, SyncMode
@@ -26,7 +26,7 @@ from airbyte_cdk.utils.traced_exception import AirbyteTracedException
 
 @pytest.fixture
 def stream():
-    return ExpensifyReports(
+    return ExpensifyReportsStream(
         name="reports",
         partner_user_id="user-id",
         partner_user_secret="user-secret",
@@ -485,7 +485,7 @@ class TestTriggerExport:
     def test_omitted_end_date_defaults_to_current_date(self):
         # No `end_date` provided: the stream should default it to "today" (UTC) rather than
         # leaving the export window unbounded or raising an error.
-        stream = ExpensifyReports(
+        stream = ExpensifyReportsStream(
             name="reports",
             partner_user_id="user-id",
             partner_user_secret="user-secret",
@@ -518,7 +518,7 @@ class TestTriggerExport:
         assert "reportState" not in job_description["inputSettings"]
 
     def test_single_report_state_is_sent_unmodified(self):
-        stream = ExpensifyReports(
+        stream = ExpensifyReportsStream(
             name="reports",
             partner_user_id="user-id",
             partner_user_secret="user-secret",
@@ -537,7 +537,7 @@ class TestTriggerExport:
         assert job_description["inputSettings"]["reportState"] == "APPROVED"
 
     def test_multiple_report_states_are_comma_joined(self):
-        stream = ExpensifyReports(
+        stream = ExpensifyReportsStream(
             name="reports",
             partner_user_id="user-id",
             partner_user_secret="user-secret",
@@ -727,9 +727,11 @@ class TestStreamsLookbackWindowWiring:
             "start_date": "2026-08-30",
         }
 
-        (reports_stream,) = source.streams(config)
+        streams = source.streams(config)
 
-        assert reports_stream.lookback_window_days == DEFAULT_LOOKBACK_WINDOW_DAYS == 30
+        assert len(streams) == 2
+        for stream in streams:
+            assert stream.lookback_window_days == DEFAULT_LOOKBACK_WINDOW_DAYS == 30
 
     def test_streams_passes_through_configured_lookback_window_days(self):
         source = SourceExpensify()
@@ -740,9 +742,11 @@ class TestStreamsLookbackWindowWiring:
             "lookback_window_days": 7,
         }
 
-        (reports_stream,) = source.streams(config)
+        streams = source.streams(config)
 
-        assert reports_stream.lookback_window_days == 7
+        assert len(streams) == 2
+        for stream in streams:
+            assert stream.lookback_window_days == 7
 
 
 class TestSpecSchema:

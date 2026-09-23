@@ -44,20 +44,34 @@ CONFIG: Mapping[str, Any] = {
 # only report 103 is newer and should be re-emitted on a resumed sync.
 CSV_DATA = "reportID,created\n101,2026-08-01\n102,2026-08-15\n103,2026-08-31\n"
 
+# Expenses analogue of CSV_DATA/sample_state.json above: transaction 1 and 2 were "already
+# synced" as of the expenses sample state's cursor (2026-08-16); only transaction 3 is newer.
+EXPENSES_CSV_DATA = "transactionID,created\n1,2026-08-01\n2,2026-08-15\n3,2026-08-31\n"
+EXPENSES_SAMPLE_STATE = {"expenses": {"updatedAt": "2026-08-16T00:00:00+00:00", "createdAt": "2026-08-16T00:00:00+00:00"}}
+EXPENSES_ABNORMAL_STATE = {"expenses": {"updatedAt": "2222-01-01T00:00:00+00:00", "createdAt": "2222-01-01T00:00:00+00:00"}}
+
 
 def _load_json_config(file_name: str) -> Mapping[str, Any]:
     return json.loads((INTEGRATION_TESTS_DIR / file_name).read_text())
 
 
-def _load_incremental_catalog():
+def _load_incremental_catalog(stream_names: List[str] = ("reports",)):
+    """Load `configured_catalog_incremental.json`, filtered down to only `stream_names`.
+
+    The on-disk catalog declares both `reports` and `expenses` (so `test_discover_*`-style
+    coverage sees both), but most of the tests below only mock/assert one stream at a time;
+    defaulting to `("reports",)` and requiring callers to opt in to `expenses` keeps each test's
+    catalog, mocks, and assertions in sync with each other.
+    """
     catalog_path = INTEGRATION_TESTS_DIR / "configured_catalog_incremental.json"
-    return ConfiguredAirbyteCatalogSerializer.load(json.loads(catalog_path.read_text()))
+    raw_catalog = json.loads(catalog_path.read_text())
+    raw_catalog = {**raw_catalog, "streams": [s for s in raw_catalog["streams"] if s["stream"]["name"] in stream_names]}
+    return ConfiguredAirbyteCatalogSerializer.load(raw_catalog)
 
 
-def _load_legacy_state(file_name: str) -> List[AirbyteStateMessage]:
-    """Convert a legacy `{stream_name: {cursor_field: value}}` state fixture into the modern
+def _state_messages(legacy_state: Mapping[str, Mapping[str, Any]]) -> List[AirbyteStateMessage]:
+    """Convert a legacy `{stream_name: {cursor_field: value}}` state mapping into the modern
     per-stream `AirbyteStateMessage` list expected by the CDK's `read()` test helper."""
-    legacy_state = json.loads((INTEGRATION_TESTS_DIR / file_name).read_text())
     return [
         AirbyteStateMessage(
             type=AirbyteStateType.STREAM,
@@ -68,6 +82,12 @@ def _load_legacy_state(file_name: str) -> List[AirbyteStateMessage]:
         )
         for stream_name, stream_state in legacy_state.items()
     ]
+
+
+def _load_legacy_state(file_name: str) -> List[AirbyteStateMessage]:
+    """Load a legacy `{stream_name: {cursor_field: value}}` state fixture from disk and convert
+    it via `_state_messages`."""
+    return _state_messages(json.loads((INTEGRATION_TESTS_DIR / file_name).read_text()))
 
 
 def _job_type(request) -> str:
@@ -81,7 +101,21 @@ def _triggered_start_date(request) -> str:
     return job_description["inputSettings"]["filters"]["startDate"]
 
 
+def _triggered_template(request) -> str:
+    return parse_qs(request.text)["template"][0]
+
+
+def _downloaded_file_name(request) -> str:
+    form = parse_qs(request.text)
+    return json.loads(form["requestJobDescription"][0])["fileName"]
+
+
 def _mock_expensify_export(requests_mock, csv_data: str, file_name: str = "combined_report.csv") -> None:
+    """Mock a single stream's export trigger/download round-trip, regardless of which stream
+    triggers it. Only safe to use when at most one stream is present in the configured catalog -
+    with two streams sharing this shared export endpoint, both would otherwise be routed through
+    the same trigger/download responses. Use `_mock_expensify_exports` for multi-stream catalogs.
+    """
     requests_mock.post(
         EXPENSIFY_URL,
         additional_matcher=lambda request: _job_type(request) == "file",
@@ -92,6 +126,35 @@ def _mock_expensify_export(requests_mock, csv_data: str, file_name: str = "combi
         additional_matcher=lambda request: _job_type(request) == "download",
         text=csv_data,
     )
+
+
+def _mock_expensify_exports(requests_mock, reports_csv_data: str = None, expenses_csv_data: str = None) -> None:
+    """Mock export trigger/download round-trips for reports and/or expenses independently,
+    distinguishing the two by the (stream-specific) FreeMarker template sent alongside the
+    "file" trigger request - the expenses template is the only one containing "transactionID".
+    """
+    if reports_csv_data is not None:
+        requests_mock.post(
+            EXPENSIFY_URL,
+            additional_matcher=lambda request: _job_type(request) == "file" and "transactionID" not in _triggered_template(request),
+            text="reports_export.csv",
+        )
+        requests_mock.post(
+            EXPENSIFY_URL,
+            additional_matcher=lambda request: _job_type(request) == "download" and _downloaded_file_name(request) == "reports_export.csv",
+            text=reports_csv_data,
+        )
+    if expenses_csv_data is not None:
+        requests_mock.post(
+            EXPENSIFY_URL,
+            additional_matcher=lambda request: _job_type(request) == "file" and "transactionID" in _triggered_template(request),
+            text="expenses_export.csv",
+        )
+        requests_mock.post(
+            EXPENSIFY_URL,
+            additional_matcher=lambda request: _job_type(request) == "download" and _downloaded_file_name(request) == "expenses_export.csv",
+            text=expenses_csv_data,
+        )
 
 
 class TestDiscover:
@@ -290,3 +353,86 @@ class TestIncrementalLookbackWindow:
         # The resumed export still only trails back 30 days from the state cursor (2026-07-17),
         # not all the way back to the widened start_date (2020-01-01).
         assert _triggered_start_date(trigger_request) == "2026-07-17"
+
+
+class TestIncrementalExpenses:
+    """Expenses-stream analogues of `TestIncrementalStateProgression`'s coverage, using a
+    single-stream (`expenses`-only) catalog and expenses-shaped CSV/state fixtures so these
+    assertions stay valid independent of what `reports` is doing."""
+
+    def _expenses_trigger_request(self, requests_mock):
+        return next(r for r in requests_mock.request_history if _job_type(r) == "file")
+
+    def test_initial_sync_emits_all_records_and_final_state(self, requests_mock):
+        _mock_expensify_exports(requests_mock, expenses_csv_data=EXPENSES_CSV_DATA)
+
+        output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(["expenses"]))
+
+        record_ids = sorted(r.record.data["transactionID"] for r in output.records)
+        assert record_ids == ["1", "2", "3"]
+        assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
+        assert output.most_recent_state.stream_state.createdAt == "2026-08-31T00:00:00+00:00"
+
+    def test_resumed_sync_with_sample_state_resumes_export_window_from_state_cursor(self, requests_mock):
+        _mock_expensify_exports(requests_mock, expenses_csv_data=EXPENSES_CSV_DATA)
+        state = _state_messages(EXPENSES_SAMPLE_STATE)
+
+        output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(["expenses"]), state=state)
+
+        record_ids = [r.record.data["transactionID"] for r in output.records]
+        assert record_ids == ["1", "2", "3"]
+        assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
+
+        trigger_request = self._expenses_trigger_request(requests_mock)
+        assert (
+            _triggered_start_date(trigger_request) == "2026-08-16"
+        ), "Export window should resume from the state cursor, not the configured start_date"
+
+    def test_resumed_sync_with_abnormal_future_state_yields_no_records(self, requests_mock):
+        _mock_expensify_exports(requests_mock, expenses_csv_data=EXPENSES_CSV_DATA)
+        state = _state_messages(EXPENSES_ABNORMAL_STATE)
+
+        output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(["expenses"]), state=state)
+
+        assert output.records == []
+
+
+class TestIncrementalMultiStreamCatalog:
+    """`configured_catalog_incremental.json` declares both `reports` and `expenses`; this class
+    exercises a `read()` against the full, unfiltered catalog to confirm the two streams are
+    synced independently within a single sync - each honoring only its own state and neither
+    stream's mocked data or state bleeding into the other's output."""
+
+    def test_read_with_both_streams_syncs_each_independently(self, requests_mock):
+        _mock_expensify_exports(requests_mock, reports_csv_data=CSV_DATA, expenses_csv_data=EXPENSES_CSV_DATA)
+        # Only reports has prior state; expenses should still sync (from start_date) rather than
+        # being skipped, and should not inherit reports' state or vice versa.
+        state = _state_messages(json.loads((INTEGRATION_TESTS_DIR / "sample_state.json").read_text()))
+
+        output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(["reports", "expenses"]), state=state)
+
+        report_records = [r.record.data["reportID"] for r in output.records if r.record.stream == "reports"]
+        expense_records = [r.record.data["transactionID"] for r in output.records if r.record.stream == "expenses"]
+        # Both streams' mocked exports return all rows regardless of the requested startDate (see
+        # `test_resumed_sync_with_sample_state_does_not_skip_records_by_updated_at` above), so all
+        # records are emitted for both streams; what this test actually verifies is that reports'
+        # export resumes from its state cursor while expenses' (state-less) export does not.
+        assert report_records == ["101", "102", "103"]
+        assert expense_records == ["1", "2", "3"]
+
+        reports_state = next(s for s in output.state_messages if s.state.stream.stream_descriptor.name == "reports")
+        expenses_state = next(s for s in output.state_messages if s.state.stream.stream_descriptor.name == "expenses")
+        assert reports_state.state.stream.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
+        assert expenses_state.state.stream.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
+
+        reports_trigger = next(
+            r for r in requests_mock.request_history if _job_type(r) == "file" and "transactionID" not in _triggered_template(r)
+        )
+        expenses_trigger = next(
+            r for r in requests_mock.request_history if _job_type(r) == "file" and "transactionID" in _triggered_template(r)
+        )
+        # reports resumes from sample_state.json's cursor (2026-08-16); expenses has no prior
+        # state, so its export window starts from the configured start_date instead - confirming
+        # each stream's export window is governed only by its own state.
+        assert _triggered_start_date(reports_trigger) == "2026-08-16"
+        assert _triggered_start_date(expenses_trigger) == "2026-07-01"

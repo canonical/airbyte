@@ -1,0 +1,22 @@
+# See [Connector Acceptance Tests](https://docs.airbyte.com/connector-development/testing-connectors/connector-acceptance-tests-reference)
+# for more information about how to configure these tests.
+#
+# Run these with `make acceptance-test` (or `make test`), which invokes
+# `airbyte-cdk connector test`. The `connection` and `basic_read` scenarios below require a
+# valid `secrets/config.json` (see README.md for how to obtain one).
+connector_image: airbyte/source-expensify:dev
+acceptance_tests:
+  spec:
+    tests:
+      - spec_path: "source_expensify/spec.yaml"
+  connection:
+    tests:
+      - config_path: "secrets/config.json"
+        status: "succeed"
+      - config_path: "integration_tests/invalid_config.json"
+        status: "failed"
+  basic_read:
+    tests:
+      - config_path: "secrets/config.json"
+        configured_catalog_path: "integration_tests/configured_catalog.json"
+        empty_streams: []

@@ -1,0 +1,86 @@
+Table "reports" {
+    "accountEmail" string
+    "accountID" string
+    "actionList" string
+    "approved" string
+    "approvers" string
+    "createdOrSubmittedAt" string
+    "created" string
+    "currency" string
+    "entryID" string
+    "isACHReimbursed" string
+    "managerEmail" string
+    "managerUserID" string
+    "managerPayrollID" string
+    "managerFirstName" string
+    "managerLastName" string
+    "managerFullName" string
+    "policyName" string
+    "policyID" string
+    "reimbursed" string
+    "reportID" string [pk]
+    "oldReportID" string
+    "reportName" string
+    "status" string
+    "displayStatus" string
+    "submitted" string
+    "employeeCustomField1" string
+    "employeeCustomField2" string
+    "submitterFirstName" string
+    "submitterLastName" string
+    "submitterFullName" string
+    "total" string
+    "updatedAt" string
+}
+
+Table "expenses" {
+    "reportID" string
+    "transactionID" string [pk]
+    "type" string
+    "created" string
+    "modifiedCreated" string
+    "inserted" string
+    "merchant" string
+    "modifiedMerchant" string
+    "amount" string
+    "modifiedAmount" string
+    "convertedAmount" string
+    "currency" string
+    "currencyConversionRate" string
+    "category" string
+    "categoryGlCode" string
+    "categoryPayrollCode" string
+    "tag" string
+    "tagGlCode" string
+    "comment" string
+    "bank" string
+    "billable" string
+    "reimbursable" string
+    "isDistance" string
+    "hasTax" string
+    "taxAmount" string
+    "modifiedTaxAmount" string
+    "taxName" string
+    "taxRate" string
+    "taxRateName" string
+    "taxCode" string
+    "mcc" string
+    "modifiedMCC" string
+    "receiptFilename" string
+    "receiptID" string
+    "receiptURL" string
+    "attendees" string
+    "unitsCount" string
+    "unitsRate" string
+    "unitsUnit" string
+    "unitsName" string
+    "reportSubmitted" string
+    "reportApproved" string
+    "reportReimbursed" string
+    "createdAt" string
+    "updatedAt" string
+}
+
+Ref {
+    "expenses"."reportID" <> "reports"."reportID"
+}

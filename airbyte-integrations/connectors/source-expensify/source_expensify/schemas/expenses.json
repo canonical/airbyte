@@ -1,0 +1,189 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "reportID": {
+      "description": "The ID of the report this expense belongs to.",
+      "type": ["string", "null"]
+    },
+    "transactionID": {
+      "description": "The ID of the expense (transaction).",
+      "type": ["string", "null"]
+    },
+    "type": {
+      "description": "The type of the expense (e.g. cash, card).",
+      "type": ["string", "null"]
+    },
+    "created": {
+      "description": "The date the expense was created.",
+      "type": ["string", "null"]
+    },
+    "modifiedCreated": {
+      "description": "The user-modified date of the expense, if it was changed after creation.",
+      "type": ["string", "null"]
+    },
+    "inserted": {
+      "description": "The date the expense was inserted into Expensify's system.",
+      "type": ["string", "null"]
+    },
+    "merchant": {
+      "description": "The merchant of the expense.",
+      "type": ["string", "null"]
+    },
+    "modifiedMerchant": {
+      "description": "The user-modified merchant of the expense, if it was changed after creation.",
+      "type": ["string", "null"]
+    },
+    "amount": {
+      "description": "The amount of the expense, in cents.",
+      "type": ["string", "null"]
+    },
+    "modifiedAmount": {
+      "description": "The user-modified amount of the expense, in cents, if it was changed after creation.",
+      "type": ["string", "null"]
+    },
+    "convertedAmount": {
+      "description": "The amount of the expense converted to the report's currency, in cents.",
+      "type": ["string", "null"]
+    },
+    "currency": {
+      "description": "The currency of the expense.",
+      "type": ["string", "null"]
+    },
+    "currencyConversionRate": {
+      "description": "The conversion rate used to convert the expense's currency to the report's currency.",
+      "type": ["string", "null"]
+    },
+    "category": {
+      "description": "The category of the expense.",
+      "type": ["string", "null"]
+    },
+    "categoryGlCode": {
+      "description": "The GL code associated with the expense's category.",
+      "type": ["string", "null"]
+    },
+    "categoryPayrollCode": {
+      "description": "The payroll code associated with the expense's category.",
+      "type": ["string", "null"]
+    },
+    "tag": {
+      "description": "The tag(s) associated with the expense.",
+      "type": ["string", "null"]
+    },
+    "tagGlCode": {
+      "description": "The GL code associated with the expense's tag.",
+      "type": ["string", "null"]
+    },
+    "comment": {
+      "description": "The comment/description of the expense.",
+      "type": ["string", "null"]
+    },
+    "bank": {
+      "description": "The bank account the expense was paid from, if applicable.",
+      "type": ["string", "null"]
+    },
+    "billable": {
+      "description": "String value indicating whether the expense is billable (\"true\" or \"false\").",
+      "type": ["string", "null"]
+    },
+    "reimbursable": {
+      "description": "String value indicating whether the expense is reimbursable (\"true\" or \"false\").",
+      "type": ["string", "null"]
+    },
+    "isDistance": {
+      "description": "String value indicating whether the expense is a distance/mileage expense (\"true\" or \"false\").",
+      "type": ["string", "null"]
+    },
+    "hasTax": {
+      "description": "String value indicating whether the expense has tax applied (\"true\" or \"false\").",
+      "type": ["string", "null"]
+    },
+    "taxAmount": {
+      "description": "The tax amount of the expense, in cents.",
+      "type": ["string", "null"]
+    },
+    "modifiedTaxAmount": {
+      "description": "The user-modified tax amount of the expense, in cents, if it was changed after creation.",
+      "type": ["string", "null"]
+    },
+    "taxName": {
+      "description": "The name of the tax applied to the expense.",
+      "type": ["string", "null"]
+    },
+    "taxRate": {
+      "description": "The tax rate applied to the expense.",
+      "type": ["string", "null"]
+    },
+    "taxRateName": {
+      "description": "The name of the tax rate applied to the expense.",
+      "type": ["string", "null"]
+    },
+    "taxCode": {
+      "description": "The tax code applied to the expense.",
+      "type": ["string", "null"]
+    },
+    "mcc": {
+      "description": "The merchant category code of the expense.",
+      "type": ["string", "null"]
+    },
+    "modifiedMCC": {
+      "description": "The user-modified merchant category code of the expense, if it was changed after creation.",
+      "type": ["string", "null"]
+    },
+    "receiptFilename": {
+      "description": "The filename of the expense's receipt, if any.",
+      "type": ["string", "null"]
+    },
+    "receiptID": {
+      "description": "The ID of the expense's receipt, if any.",
+      "type": ["string", "null"]
+    },
+    "receiptURL": {
+      "description": "The URL of the expense's receipt, if any.",
+      "type": ["string", "null"]
+    },
+    "attendees": {
+      "description": "Comma-separated list of attendee email addresses associated with the expense.",
+      "type": ["string", "null"]
+    },
+    "unitsCount": {
+      "description": "The number of units (e.g. miles) for a distance expense.",
+      "type": ["string", "null"]
+    },
+    "unitsRate": {
+      "description": "The per-unit rate applied to a distance expense.",
+      "type": ["string", "null"]
+    },
+    "unitsUnit": {
+      "description": "The unit of measurement (e.g. mi, km) for a distance expense.",
+      "type": ["string", "null"]
+    },
+    "unitsName": {
+      "description": "The name of the unit type for a distance expense.",
+      "type": ["string", "null"]
+    },
+    "reportSubmitted": {
+      "description": "The date the expense's parent report was submitted, if applicable.",
+      "type": ["string", "null"]
+    },
+    "reportApproved": {
+      "description": "The date the expense's parent report was approved, if applicable.",
+      "type": ["string", "null"]
+    },
+    "reportReimbursed": {
+      "description": "The date the expense's parent report was reimbursed, if applicable.",
+      "type": ["string", "null"]
+    },
+    "createdAt": {
+      "description": "Derived cursor field: the parsed value of the created date for this expense. This mirrors Expensify's own startDate/endDate export filter semantics and is used to track/resume the export window.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "description": "Derived cursor field: the most recent of the created, modifiedCreated, inserted, reportSubmitted, reportApproved, and reportReimbursed timestamps for this expense.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  }
+}
