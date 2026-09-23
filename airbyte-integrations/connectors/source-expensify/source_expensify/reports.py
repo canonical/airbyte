@@ -15,7 +15,7 @@ EXPORT_FILTER_SOURCE_FIELDS = ("created", "submitted")
 EXPORT_CURSOR_FIELD = "createdOrSubmittedAt"
 
 
-class ExpensifyReports(ExpensifyStream):
+class ExpensifyReportsStream(ExpensifyStream):
     # Airbyte uses this to know what column uniquely identifies a row
     primary_key = "reportID"
     # Expensify has no native "updated at" column, so we derive one from the created/submitted/

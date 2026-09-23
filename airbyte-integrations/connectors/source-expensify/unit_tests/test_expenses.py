@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from freezegun import freeze_time
-from source_expensify.expenses import ExpensifyExpenses
+from source_expensify.expenses import ExpensifyExpensesStream
 from source_expensify.source import SourceExpensify
 
 from airbyte_cdk.models import SyncMode
@@ -12,7 +12,7 @@ from airbyte_cdk.models import SyncMode
 
 @pytest.fixture
 def stream():
-    return ExpensifyExpenses(
+    return ExpensifyExpensesStream(
         name="expenses",
         partner_user_id="user-id",
         partner_user_secret="user-secret",
@@ -158,7 +158,7 @@ class TestTriggerExport:
 
     @freeze_time("2026-09-15 12:00:00")
     def test_omitted_end_date_defaults_to_current_date(self):
-        stream = ExpensifyExpenses(
+        stream = ExpensifyExpensesStream(
             name="expenses",
             partner_user_id="user-id",
             partner_user_secret="user-secret",
@@ -180,5 +180,5 @@ class TestStreamsWiring:
 
         assert [s.name for s in streams] == ["reports", "expenses"]
         expenses_stream = streams[1]
-        assert isinstance(expenses_stream, ExpensifyExpenses)
+        assert isinstance(expenses_stream, ExpensifyExpensesStream)
         assert expenses_stream.primary_key == "transactionID"
