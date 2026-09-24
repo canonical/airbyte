@@ -19,6 +19,7 @@ import csv
 import json
 import pkgutil
 import time
+from calendar import monthrange
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
@@ -273,25 +274,57 @@ class ExpensifyStream(Stream):
             )
             return
 
+        export_chunks = self._generate_export_chunks(export_start_date, self.end_date)
         self.logger.info(
-            f"Requesting Expensify export for {self.name} with filters: "
-            f"startDate={export_start_date}, endDate={self.end_date}, "
-            f"reportState={self.report_state or 'all'}."
+            f"Splitting Expensify export for {self.name} into {len(export_chunks)} chunk(s) of at most one "
+            f"calendar month each, covering startDate={export_start_date} to endDate={self.end_date}."
         )
 
-        csv_data = self._retrieve_csv(export_start_date)
-
-        # Parse CSV in memory and yield rows to Airbyte
-        reader = csv.DictReader(StringIO(csv_data))
         record_count = 0
-        for row in reader:
-            # Airbyte takes these yielded dicts, validates them against the schema,
-            # and streams them to the destination connector.
-            row[self.cursor_field] = self._compute_cursor(row)
-            row[self.export_cursor_field] = self._compute_export_cursor(row)
-            record_count += 1
-            yield row
+        for chunk_start_date, chunk_end_date in export_chunks:
+            self.logger.info(
+                f"Requesting Expensify export chunk for {self.name} with filters: "
+                f"startDate={chunk_start_date}, endDate={chunk_end_date}, "
+                f"reportState={self.report_state or 'all'}."
+            )
+
+            csv_data = self._retrieve_csv(chunk_start_date, chunk_end_date)
+
+            # Parse CSV in memory and yield rows to Airbyte
+            reader = csv.DictReader(StringIO(csv_data))
+            for row in reader:
+                # Airbyte takes these yielded dicts, validates them against the schema,
+                # and streams them to the destination connector.
+                row[self.cursor_field] = self._compute_cursor(row)
+                row[self.export_cursor_field] = self._compute_export_cursor(row)
+                record_count += 1
+                yield row
         self.logger.info(f"Parsed {record_count} record(s) from Expensify export.")
+
+    @staticmethod
+    def _generate_export_chunks(start_date: str, end_date: str) -> List[Tuple[str, str]]:
+        """
+        Split [start_date, end_date] into calendar-month-aligned chunks, so that each individual
+        Expensify export request covers at most one month of data. This bounds the size of any
+        single downloaded CSV file and of the data held in memory at once, regardless of how wide
+        the overall configured (or resumed) export window is.
+
+        The first chunk runs from `start_date` through the last day of that month; any full
+        months in between form their own chunk; the final chunk runs from the first day of its
+        month through `end_date`.
+        """
+        chunk_start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        chunks: List[Tuple[str, str]] = []
+        while chunk_start <= end:
+            last_day_of_month = monthrange(chunk_start.year, chunk_start.month)[1]
+            month_end = chunk_start.replace(day=last_day_of_month)
+            chunk_end = min(month_end, end)
+            chunks.append((chunk_start.strftime("%Y-%m-%d"), chunk_end.strftime("%Y-%m-%d")))
+            chunk_start = chunk_end + timedelta(days=1)
+
+        return chunks
 
     def _parse_state(self, stream_state: Mapping[str, Any], sync_mode: SyncMode = SyncMode.full_refresh) -> str:
         """
@@ -314,12 +347,13 @@ class ExpensifyStream(Stream):
 
         return export_start_date
 
-    def _retrieve_csv(self, export_start_date: str) -> str:
+    def _retrieve_csv(self, export_start_date: str, export_end_date: str) -> str:
         """
         Triggers an Expensify export and downloads the resulting CSV.
 
         Params:
-            export_start_date: The start date for the export window.
+            export_start_date: The start date for the export window (chunk).
+            export_end_date: The end date for the export window (chunk).
 
         Returns:
             The CSV data as a string.
@@ -330,7 +364,7 @@ class ExpensifyStream(Stream):
         """
         try:
             # Trigger the Export Job
-            file_name = self._trigger_export(start_date=export_start_date)
+            file_name = self._trigger_export(start_date=export_start_date, end_date=export_end_date)
         except ResourceNotFoundError as e:
             raise AirbyteTracedException(
                 internal_message=str(e),
@@ -362,12 +396,12 @@ class ExpensifyStream(Stream):
 
         return csv_data
 
-    def _trigger_export(self, start_date: Optional[str] = None) -> str:
+    def _trigger_export(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
         input_settings = {
             "type": self.export_type,
             "filters": {
                 "startDate": start_date if start_date is not None else self.start_date,
-                "endDate": self.end_date,
+                "endDate": end_date if end_date is not None else self.end_date,
             },
         }
         # Omitting "reportState" entirely means Expensify includes reports in all states.
