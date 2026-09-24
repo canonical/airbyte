@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 import requests
@@ -45,7 +45,7 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
         mock_download.assert_called_once_with("report.csv")
 
         assert records == [
@@ -67,7 +67,7 @@ class TestReadRecords:
     def test_read_records_calls_steps_in_order(self, stream):
         call_order = []
 
-        def trigger_export(start_date=None):
+        def trigger_export(start_date=None, end_date=None):
             call_order.append("trigger")
             return "file.csv"
 
@@ -190,7 +190,7 @@ class TestReadRecords:
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
         # Export window resumes from the later of the two dates (config start_date already newer here).
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_resumes_export_from_state_cursor_when_newer(self, stream):
@@ -207,7 +207,7 @@ class TestReadRecords:
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
         # State cursor (2026-08-31) is newer than the configured start_date (2026-08-30), so it wins.
-        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        mock_trigger.assert_called_once_with(start_date="2026-08-31", end_date="2026-08-31")
         # All records returned by the export are yielded; the connector does not re-filter rows
         # locally based on the `updatedAt` cursor.
         assert [r["reportID"] for r in records] == ["1", "2"]
@@ -227,7 +227,7 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        mock_trigger.assert_called_once_with(start_date="2026-08-31", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["1"]
 
     def test_read_records_incremental_widened_start_date_without_reset_does_not_backfill(self, stream):
@@ -245,22 +245,30 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-01")
+        mock_trigger.assert_called_once_with(start_date="2026-08-01", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["2"]
 
     def test_read_records_full_refresh_with_widened_start_date_backfills_past_records(self, stream):
         # Complement to the test above: a full refresh ignores prior state, so the widened
-        # start_date takes effect and Expensify legitimately returns older records.
+        # start_date takes effect and Expensify legitimately returns older records. Since this
+        # window now spans many years, it is split into one export chunk per calendar month; only
+        # the chunks actually containing data are stubbed to return rows here.
         stream.start_date = "2020-01-01"
-        csv_data = "reportID,created\n1,2020-01-15\n2,2026-08-10\n"
 
-        with (
-            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
-            patch.object(stream, "_download_file", return_value=csv_data),
-        ):
+        def retrieve_csv(export_start_date, export_end_date):
+            if (export_start_date, export_end_date) == ("2020-01-01", "2020-01-31"):
+                return "reportID,created\n1,2020-01-15\n"
+            if (export_start_date, export_end_date) == ("2026-08-01", "2026-08-31"):
+                return "reportID,created\n2,2026-08-10\n"
+            return "reportID,created\n"
+
+        with patch.object(stream, "_retrieve_csv", side_effect=retrieve_csv) as mock_retrieve_csv:
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
-        mock_trigger.assert_called_once_with(start_date="2020-01-01")
+        # 2020-01-01 through 2026-08-31 spans 80 calendar months.
+        assert mock_retrieve_csv.call_count == 80
+        assert mock_retrieve_csv.call_args_list[0].args == ("2020-01-01", "2020-01-31")
+        assert mock_retrieve_csv.call_args_list[-1].args == ("2026-08-01", "2026-08-31")
         assert [r["reportID"] for r in records] == ["1", "2"]
 
     def test_read_records_incremental_widened_start_date_still_needs_reset_beyond_lookback(self, stream):
@@ -280,7 +288,7 @@ class TestReadRecords:
         # The resumed export window only trails back by the (default 30-day) lookback window from
         # the state cursor (2026-08-31 -> 2026-08-01), NOT all the way back to the widened
         # start_date (2020-01-01). Fully backfilling from 2020-01-01 still requires a state reset.
-        mock_trigger.assert_called_once_with(start_date="2026-08-01")
+        mock_trigger.assert_called_once_with(start_date="2026-08-01", end_date="2026-08-31")
 
     def test_read_records_incremental_resumes_export_from_lookback_window_before_state_cursor(self, stream):
         # Core regression test for the lookback window: the export resumes from
@@ -295,7 +303,7 @@ class TestReadRecords:
         ):
             list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        mock_trigger.assert_called_once_with(start_date="2026-08-31", end_date="2026-08-31")
 
     def test_read_records_incremental_lookback_window_never_precedes_configured_start_date(self, stream):
         # The lookback window must never push the export start earlier than the configured
@@ -311,7 +319,7 @@ class TestReadRecords:
 
         # 2026-09-10 minus 365 days is well before the configured start_date (2026-08-30), so the
         # configured start_date wins.
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
 
     def test_read_records_incremental_replays_report_created_before_cursor_but_approved_later(self, stream):
         # End-to-end regression test: a report created before the (trailed-back) resumed export
@@ -333,7 +341,7 @@ class TestReadRecords:
 
         # Lookback window (10 days) pulls the export start back to 2026-08-31, before the report's
         # created date (2026-09-05), so the report is included in the re-export.
-        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        mock_trigger.assert_called_once_with(start_date="2026-08-31", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["1"]
         assert records[0]["updatedAt"] == "2026-09-12T00:00:00+00:00"
 
@@ -353,7 +361,7 @@ class TestReadRecords:
 
         # Lookback window (15 days) pulls the export start back to 2026-08-26, before the report's
         # created date (2026-09-01).
-        mock_trigger.assert_called_once_with(start_date="2026-08-26")
+        mock_trigger.assert_called_once_with(start_date="2026-08-26", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["1"]
         assert records[0]["updatedAt"] == "2026-09-20T00:00:00+00:00"
 
@@ -372,7 +380,7 @@ class TestReadRecords:
             list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
         # No `createdOrSubmittedAt` in state, so the export window starts from the configured start_date.
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
 
     def test_read_records_incremental_skips_export_when_resumed_export_cursor_is_past_end_date(self, stream):
         # Isolate from the lookback window (which would otherwise pull the resumed cursor back
@@ -407,7 +415,7 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["1"]
 
     def test_read_records_full_refresh_ignores_stream_state(self, stream):
@@ -420,8 +428,73 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh, stream_state=stream_state))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
         assert [r["reportID"] for r in records] == ["1", "2"]
+
+    def test_read_records_issues_one_export_per_calendar_month_chunk(self, stream):
+        # A window spanning multiple months must be split into one export request per calendar
+        # month, each bounded to at most one month of data.
+        stream.start_date = "2026-06-15"
+        stream.end_date = "2026-08-10"
+
+        def trigger_export(start_date=None, end_date=None):
+            return f"{start_date}_{end_date}.csv"
+
+        with (
+            patch.object(stream, "_trigger_export", side_effect=trigger_export) as mock_trigger,
+            patch.object(stream, "_download_file", return_value="reportID,created\n"),
+        ):
+            list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        assert mock_trigger.call_args_list == [
+            call(start_date="2026-06-15", end_date="2026-06-30"),
+            call(start_date="2026-07-01", end_date="2026-07-31"),
+            call(start_date="2026-08-01", end_date="2026-08-10"),
+        ]
+
+    def test_read_records_single_month_window_issues_one_export(self, stream):
+        # A window entirely within one calendar month must still result in exactly one export.
+        with (
+            patch.object(stream, "_trigger_export", return_value="report.csv") as mock_trigger,
+            patch.object(stream, "_download_file", return_value="reportID,created\n"),
+        ):
+            list(stream.read_records(sync_mode=SyncMode.full_refresh))
+
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
+
+
+class TestGenerateExportChunks:
+    def test_single_day_window_produces_one_chunk(self, stream):
+        assert stream._generate_export_chunks("2026-08-30", "2026-08-30") == [("2026-08-30", "2026-08-30")]
+
+    def test_window_within_one_month_produces_one_chunk(self, stream):
+        assert stream._generate_export_chunks("2026-08-01", "2026-08-31") == [("2026-08-01", "2026-08-31")]
+
+    def test_window_spanning_partial_months_is_split_by_calendar_month(self, stream):
+        # First chunk runs from start_date through the end of its month; the final chunk runs
+        # from the first of its month through end_date.
+        assert stream._generate_export_chunks("2026-06-15", "2026-08-10") == [
+            ("2026-06-15", "2026-06-30"),
+            ("2026-07-01", "2026-07-31"),
+            ("2026-08-01", "2026-08-10"),
+        ]
+
+    def test_window_spanning_years_produces_one_chunk_per_month(self, stream):
+        chunks = stream._generate_export_chunks("2020-01-01", "2026-08-31")
+
+        # 2020-01 through 2026-08 inclusive is 80 calendar months.
+        assert len(chunks) == 80
+        assert chunks[0] == ("2020-01-01", "2020-01-31")
+        assert chunks[-1] == ("2026-08-01", "2026-08-31")
+
+    def test_handles_leap_year_february(self, stream):
+        assert stream._generate_export_chunks("2024-02-01", "2024-03-01") == [
+            ("2024-02-01", "2024-02-29"),
+            ("2024-03-01", "2024-03-01"),
+        ]
+
+    def test_start_date_after_end_date_produces_no_chunks(self, stream):
+        assert stream._generate_export_chunks("2026-09-01", "2026-08-31") == []
 
 
 class TestGetUpdatedState:

@@ -50,7 +50,7 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.full_refresh))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-30")
+        mock_trigger.assert_called_once_with(start_date="2026-08-30", end_date="2026-08-31")
         mock_download.assert_called_once_with("expenses.csv")
 
         assert records == [
@@ -120,7 +120,7 @@ class TestReadRecords:
         ):
             records = list(stream.read_records(sync_mode=SyncMode.incremental, stream_state=stream_state))
 
-        mock_trigger.assert_called_once_with(start_date="2026-08-31")
+        mock_trigger.assert_called_once_with(start_date="2026-08-31", end_date="2026-08-31")
         assert [r["transactionID"] for r in records] == ["1", "2"]
 
 

@@ -6,9 +6,11 @@ Integration-style tests that drive the connector through its actual Airbyte CLI 
 `abnormal_state.json` fixtures in this directory.
 """
 
+import csv
 import json
+from io import StringIO
 from pathlib import Path
-from typing import Any, List, Mapping
+from typing import Any, Dict, List, Mapping
 from unittest.mock import Mock
 from urllib.parse import parse_qs
 
@@ -33,7 +35,7 @@ CONFIG: Mapping[str, Any] = {
     "partner_user_id": "test-partner-id",
     "partner_user_secret": "test-partner-secret",
     "start_date": "2026-07-01",
-    "end_date": "2026-09-01",
+    "end_date": "2026-08-31",
     # Disabled here so existing assertions about the resumed export window's exact start_date are
     # unaffected by the lookback window; the lookback window itself is covered by
     # `TestIncrementalLookbackWindow` below.
@@ -95,10 +97,13 @@ def _job_type(request) -> str:
     return json.loads(form["requestJobDescription"][0])["type"]
 
 
-def _triggered_start_date(request) -> str:
+def _job_description(request) -> Mapping[str, Any]:
     form = parse_qs(request.text)
-    job_description = json.loads(form["requestJobDescription"][0])
-    return job_description["inputSettings"]["filters"]["startDate"]
+    return json.loads(form["requestJobDescription"][0])
+
+
+def _triggered_start_date(request) -> str:
+    return _job_description(request)["inputSettings"]["filters"]["startDate"]
 
 
 def _triggered_template(request) -> str:
@@ -106,54 +111,110 @@ def _triggered_template(request) -> str:
 
 
 def _downloaded_file_name(request) -> str:
-    form = parse_qs(request.text)
-    return json.loads(form["requestJobDescription"][0])["fileName"]
+    return _job_description(request)["fileName"]
 
 
-def _mock_expensify_export(requests_mock, csv_data: str, file_name: str = "combined_report.csv") -> None:
+def _rows_matching_date_range(csv_data: str, start_date: str, end_date: str) -> str:
+    """Filter CSV rows down to those whose 'created' column falls within [start_date, end_date],
+    mimicking Expensify's own server-side date filtering for a single (chunked) export request.
+    """
+    reader = csv.DictReader(StringIO(csv_data))
+    fieldnames = reader.fieldnames or []
+    matching_rows = [row for row in reader if start_date <= row.get("created", "") <= end_date]
+
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(matching_rows)
+    return output.getvalue()
+
+
+def _mock_expensify_export(requests_mock, csv_data: str, file_name: str = "combined_report.csv", filtered: bool = True) -> None:
     """Mock a single stream's export trigger/download round-trip, regardless of which stream
     triggers it. Only safe to use when at most one stream is present in the configured catalog -
     with two streams sharing this shared export endpoint, both would otherwise be routed through
     the same trigger/download responses. Use `_mock_expensify_exports` for multi-stream catalogs.
+
+    Since the export window may now be split into multiple (at most one calendar month each)
+    chunks, each chunk's download response is filtered down to `csv_data` rows whose 'created'
+    date falls within that chunk's requested startDate/endDate by default, avoiding rows being
+    (unrealistically) returned - and double-counted - by every chunk. Pass `filtered=False` for
+    tests that specifically assert the connector does not additionally filter rows itself beyond
+    whatever Expensify's export already returned.
     """
+    requested_range: Dict[str, str] = {}
+
+    def trigger_callback(request, context):
+        requested_range.update(_job_description(request)["inputSettings"]["filters"])
+        return file_name
+
+    def download_callback(request, context):
+        if not filtered:
+            return csv_data
+        return _rows_matching_date_range(csv_data, requested_range["startDate"], requested_range["endDate"])
+
     requests_mock.post(
         EXPENSIFY_URL,
         additional_matcher=lambda request: _job_type(request) == "file",
-        text=file_name,
+        text=trigger_callback,
     )
     requests_mock.post(
         EXPENSIFY_URL,
         additional_matcher=lambda request: _job_type(request) == "download",
-        text=csv_data,
+        text=download_callback,
     )
 
 
-def _mock_expensify_exports(requests_mock, reports_csv_data: str = None, expenses_csv_data: str = None) -> None:
+def _mock_expensify_exports(requests_mock, reports_csv_data: str = None, expenses_csv_data: str = None, filtered: bool = True) -> None:
     """Mock export trigger/download round-trips for reports and/or expenses independently,
     distinguishing the two by the (stream-specific) FreeMarker template sent alongside the
     "file" trigger request - the expenses template is the only one containing "transactionID".
+
+    See `_mock_expensify_export` for the meaning of `filtered`.
     """
     if reports_csv_data is not None:
+        reports_range: Dict[str, str] = {}
+
+        def reports_trigger_callback(request, context):
+            reports_range.update(_job_description(request)["inputSettings"]["filters"])
+            return "reports_export.csv"
+
+        def reports_download_callback(request, context):
+            if not filtered:
+                return reports_csv_data
+            return _rows_matching_date_range(reports_csv_data, reports_range["startDate"], reports_range["endDate"])
+
         requests_mock.post(
             EXPENSIFY_URL,
             additional_matcher=lambda request: _job_type(request) == "file" and "transactionID" not in _triggered_template(request),
-            text="reports_export.csv",
+            text=reports_trigger_callback,
         )
         requests_mock.post(
             EXPENSIFY_URL,
             additional_matcher=lambda request: _job_type(request) == "download" and _downloaded_file_name(request) == "reports_export.csv",
-            text=reports_csv_data,
+            text=reports_download_callback,
         )
     if expenses_csv_data is not None:
+        expenses_range: Dict[str, str] = {}
+
+        def expenses_trigger_callback(request, context):
+            expenses_range.update(_job_description(request)["inputSettings"]["filters"])
+            return "expenses_export.csv"
+
+        def expenses_download_callback(request, context):
+            if not filtered:
+                return expenses_csv_data
+            return _rows_matching_date_range(expenses_csv_data, expenses_range["startDate"], expenses_range["endDate"])
+
         requests_mock.post(
             EXPENSIFY_URL,
             additional_matcher=lambda request: _job_type(request) == "file" and "transactionID" in _triggered_template(request),
-            text="expenses_export.csv",
+            text=expenses_trigger_callback,
         )
         requests_mock.post(
             EXPENSIFY_URL,
             additional_matcher=lambda request: _job_type(request) == "download" and _downloaded_file_name(request) == "expenses_export.csv",
-            text=expenses_csv_data,
+            text=expenses_download_callback,
         )
 
 
@@ -227,7 +288,7 @@ class TestIncrementalStateProgression:
         assert output.most_recent_state.stream_state.createdOrSubmittedAt == "2026-08-31T00:00:00+00:00"
 
     def test_resumed_sync_with_sample_state_does_not_skip_records_by_updated_at(self, requests_mock):
-        _mock_expensify_export(requests_mock, CSV_DATA)
+        _mock_expensify_export(requests_mock, CSV_DATA, filtered=False)
         state = _load_legacy_state("sample_state.json")
 
         output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(), state=state)
@@ -253,12 +314,12 @@ class TestIncrementalStateProgression:
 
     def test_resumed_sync_not_skipped_when_only_reimbursed_date_is_past_end_date(self, requests_mock):
         # Regression test: report 103 was created 2026-08-31 (within the configured start/end_date
-        # window) but reimbursed 2026-09-05, after the configured end_date (2026-09-01). The prior
+        # window) but reimbursed 2026-09-05, after the configured end_date (2026-08-31). The prior
         # sync's state therefore has a stale `updatedAt` past end_date, even though
         # `createdOrSubmittedAt` is still within range. The resumed sync must still run (using
         # `createdOrSubmittedAt` to resume the export window) instead of skipping entirely.
         csv_data = "reportID,created,reimbursed\n101,2026-08-01,\n102,2026-08-15,\n103,2026-08-31,2026-09-05\n"
-        _mock_expensify_export(requests_mock, csv_data)
+        _mock_expensify_export(requests_mock, csv_data, filtered=False)
         state = _load_legacy_state("sample_state.json")
 
         output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(), state=state)
@@ -374,7 +435,10 @@ class TestIncrementalExpenses:
         assert output.most_recent_state.stream_state.createdAt == "2026-08-31T00:00:00+00:00"
 
     def test_resumed_sync_with_sample_state_resumes_export_window_from_state_cursor(self, requests_mock):
-        _mock_expensify_exports(requests_mock, expenses_csv_data=EXPENSES_CSV_DATA)
+        # `filtered=False`: analogous to the reports "does not skip records by updated_at"
+        # regression test - all rows returned by the export are emitted regardless of the
+        # requested startDate, since the connector must not additionally filter them itself.
+        _mock_expensify_exports(requests_mock, expenses_csv_data=EXPENSES_CSV_DATA, filtered=False)
         state = _state_messages(EXPENSES_SAMPLE_STATE)
 
         output = read(SourceExpensify(), CONFIG, _load_incremental_catalog(["expenses"]), state=state)
@@ -413,11 +477,12 @@ class TestIncrementalMultiStreamCatalog:
 
         report_records = [r.record.data["reportID"] for r in output.records if r.record.stream == "reports"]
         expense_records = [r.record.data["transactionID"] for r in output.records if r.record.stream == "expenses"]
-        # Both streams' mocked exports return all rows regardless of the requested startDate (see
-        # `test_resumed_sync_with_sample_state_does_not_skip_records_by_updated_at` above), so all
-        # records are emitted for both streams; what this test actually verifies is that reports'
-        # export resumes from its state cursor while expenses' (state-less) export does not.
-        assert report_records == ["101", "102", "103"]
+        # reports resumes from sample_state.json's cursor (2026-08-16), so its single export chunk
+        # (mocked with realistic date filtering) only returns report 103 (created 2026-08-31);
+        # expenses has no prior state, so its export window covers the full configured range and
+        # returns all three rows - confirming each stream's export window is governed only by its
+        # own state, independent of the other.
+        assert report_records == ["103"]
         assert expense_records == ["1", "2", "3"]
 
         reports_state = next(s for s in output.state_messages if s.state.stream.stream_descriptor.name == "reports")
