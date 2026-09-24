@@ -49,6 +49,7 @@ If there are more endpoints you'd like Airbyte to support, please [create an iss
 
 | Version | Date       | Pull Request                                       | Subject                                            |
 | :------ | :--------- | :------------------------------------------------- | :------------------------------------------------- |
+| 0.1.1   | 2026-07-21 | [#83](https://github.com/canonical/airbyte/pull/#83) | Leverage on Discourse's Retry-After on 429s and throttle requests under the API rate limit |
 | 0.1.0   | 2025-09-09 | [#31](https://github.com/canonical/airbyte/pull/#31) | Initial release of Discourse connector for Airbyte |
 
 </details>

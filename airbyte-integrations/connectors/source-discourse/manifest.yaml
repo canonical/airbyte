@@ -7,6 +7,18 @@ check:
   stream_names:
     - topics
 
+# Stay under Discourse's shared 60 req/min admin bucket instead of racing to a 429.
+api_budget:
+  type: HTTPAPIBudget
+  status_codes_for_ratelimit_hit:
+    - 429
+  policies:
+    - type: MovingWindowCallRatePolicy
+      rates:
+        - limit: 50
+          interval: PT1M
+      matchers: []
+
 definitions:
   streams:
     topics:
@@ -117,6 +129,16 @@ definitions:
         type: RequestOption
         field_name: Api-Key
         inject_into: header
+    error_handler:
+      type: DefaultErrorHandler
+      max_retries: 10
+      backoff_strategies:
+        # Leverage on Discourse's Retry-After on 429s.
+        - type: WaitTimeFromHeader
+          header: Retry-After
+          max_waiting_time_in_seconds: 180
+        - type: ExponentialBackoffStrategy
+          factor: 5
 
 streams:
   - $ref: "#/definitions/streams/topics"
