@@ -8,13 +8,16 @@ Integration-style tests that drive the connector through its actual Airbyte CLI 
 
 import csv
 import json
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Tuple
 from unittest.mock import Mock
 from urllib.parse import parse_qs
 
-from source_expensify.base_stream import EXPENSIFY_URL
+from source_expensify.base_stream import EXPENSIFY_URL, _parse_expensify_datetime
+from source_expensify.expenses import EXPORT_FILTER_SOURCE_FIELDS as EXPENSES_EXPORT_FILTER_SOURCE_FIELDS
+from source_expensify.reports import EXPORT_FILTER_SOURCE_FIELDS as REPORTS_EXPORT_FILTER_SOURCE_FIELDS
 from source_expensify.source import SourceExpensify
 
 from airbyte_cdk.models import (
@@ -114,13 +117,34 @@ def _downloaded_file_name(request) -> str:
     return _job_description(request)["fileName"]
 
 
-def _rows_matching_date_range(csv_data: str, start_date: str, end_date: str) -> str:
-    """Filter CSV rows down to those whose 'created' column falls within [start_date, end_date],
-    mimicking Expensify's own server-side date filtering for a single (chunked) export request.
+def _rows_matching_date_range(
+    csv_data: str, start_date: str, end_date: str, filter_fields: Tuple[str, ...] = REPORTS_EXPORT_FILTER_SOURCE_FIELDS
+) -> str:
+    """Filter CSV rows down to those whose max(`filter_fields`) date falls within
+    [start_date, end_date] (inclusive, compared by calendar date), mimicking Expensify's own
+    server-side date filtering for a single (chunked) export request.
+
+    Real Expensify export filters consider the *maximum* of `filter_fields` (e.g. reports use
+    max("created", "submitted"); see reports.py/expenses.py's `EXPORT_FILTER_SOURCE_FIELDS`), not
+    just "created" - a report submitted in a later chunk than it was created must still be matched
+    against (and only appear in) the chunk covering its submitted date. Values are parsed with
+    `_parse_expensify_datetime` (the same helper the connector itself uses) and compared by
+    calendar date only, since raw column values may include a time component (e.g.
+    "2026-08-31 10:00:00") that would otherwise sort after the date-only `end_date` bound.
     """
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    def _matches(row: Mapping[str, str]) -> bool:
+        parsed_dates = [_parse_expensify_datetime(row.get(field)) for field in filter_fields]
+        parsed_dates = [d for d in parsed_dates if d is not None]
+        if not parsed_dates:
+            return False
+        return start <= max(parsed_dates).date() <= end
+
     reader = csv.DictReader(StringIO(csv_data))
     fieldnames = reader.fieldnames or []
-    matching_rows = [row for row in reader if start_date <= row.get("created", "") <= end_date]
+    matching_rows = [row for row in reader if _matches(row)]
 
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -129,18 +153,25 @@ def _rows_matching_date_range(csv_data: str, start_date: str, end_date: str) -> 
     return output.getvalue()
 
 
-def _mock_expensify_export(requests_mock, csv_data: str, file_name: str = "combined_report.csv", filtered: bool = True) -> None:
+def _mock_expensify_export(
+    requests_mock,
+    csv_data: str,
+    file_name: str = "combined_report.csv",
+    filtered: bool = True,
+    filter_fields: Tuple[str, ...] = REPORTS_EXPORT_FILTER_SOURCE_FIELDS,
+) -> None:
     """Mock a single stream's export trigger/download round-trip, regardless of which stream
     triggers it. Only safe to use when at most one stream is present in the configured catalog -
     with two streams sharing this shared export endpoint, both would otherwise be routed through
     the same trigger/download responses. Use `_mock_expensify_exports` for multi-stream catalogs.
 
     Since the export window may now be split into multiple (at most one calendar month each)
-    chunks, each chunk's download response is filtered down to `csv_data` rows whose 'created'
-    date falls within that chunk's requested startDate/endDate by default, avoiding rows being
-    (unrealistically) returned - and double-counted - by every chunk. Pass `filtered=False` for
-    tests that specifically assert the connector does not additionally filter rows itself beyond
-    whatever Expensify's export already returned.
+    chunks, each chunk's download response is filtered down to `csv_data` rows whose max of
+    `filter_fields` (default: the reports stream's `EXPORT_FILTER_SOURCE_FIELDS`, i.e.
+    max("created", "submitted")) falls within that chunk's requested startDate/endDate by
+    default, avoiding rows being (unrealistically) returned - and double-counted - by every
+    chunk. Pass `filtered=False` for tests that specifically assert the connector does not
+    additionally filter rows itself beyond whatever Expensify's export already returned.
     """
     requested_range: Dict[str, str] = {}
 
@@ -151,7 +182,7 @@ def _mock_expensify_export(requests_mock, csv_data: str, file_name: str = "combi
     def download_callback(request, context):
         if not filtered:
             return csv_data
-        return _rows_matching_date_range(csv_data, requested_range["startDate"], requested_range["endDate"])
+        return _rows_matching_date_range(csv_data, requested_range["startDate"], requested_range["endDate"], filter_fields)
 
     requests_mock.post(
         EXPENSIFY_URL,
@@ -182,7 +213,9 @@ def _mock_expensify_exports(requests_mock, reports_csv_data: str = None, expense
         def reports_download_callback(request, context):
             if not filtered:
                 return reports_csv_data
-            return _rows_matching_date_range(reports_csv_data, reports_range["startDate"], reports_range["endDate"])
+            return _rows_matching_date_range(
+                reports_csv_data, reports_range["startDate"], reports_range["endDate"], REPORTS_EXPORT_FILTER_SOURCE_FIELDS
+            )
 
         requests_mock.post(
             EXPENSIFY_URL,
@@ -204,7 +237,9 @@ def _mock_expensify_exports(requests_mock, reports_csv_data: str = None, expense
         def expenses_download_callback(request, context):
             if not filtered:
                 return expenses_csv_data
-            return _rows_matching_date_range(expenses_csv_data, expenses_range["startDate"], expenses_range["endDate"])
+            return _rows_matching_date_range(
+                expenses_csv_data, expenses_range["startDate"], expenses_range["endDate"], EXPENSES_EXPORT_FILTER_SOURCE_FIELDS
+            )
 
         requests_mock.post(
             EXPENSIFY_URL,
@@ -216,6 +251,43 @@ def _mock_expensify_exports(requests_mock, reports_csv_data: str = None, expense
             additional_matcher=lambda request: _job_type(request) == "download" and _downloaded_file_name(request) == "expenses_export.csv",
             text=expenses_download_callback,
         )
+
+
+class TestRowsMatchingDateRangeHelper:
+    """Unit tests for the `_rows_matching_date_range` test helper itself, since it must faithfully
+    mimic Expensify's own server-side per-chunk export filtering (max of `filter_fields`, compared
+    by calendar date) for the integration tests above to be trustworthy.
+    """
+
+    # Report 201 was *created* on 2026-07-15 (within the July chunk) but not *submitted* until
+    # 2026-08-01 (within the August chunk). Since reports.py's `EXPORT_FILTER_SOURCE_FIELDS` is
+    # ("created", "submitted") - i.e. the real filter uses max(created, submitted) - Expensify's
+    # export should return this row only for the August chunk's request, never July's.
+    BOUNDARY_CSV_DATA = "reportID,created,submitted\n201,2026-07-15,2026-08-01\n"
+
+    def test_row_is_matched_by_submitted_date_not_only_created_date(self):
+        july_chunk = _rows_matching_date_range(self.BOUNDARY_CSV_DATA, "2026-07-01", "2026-07-31", REPORTS_EXPORT_FILTER_SOURCE_FIELDS)
+        august_chunk = _rows_matching_date_range(self.BOUNDARY_CSV_DATA, "2026-08-01", "2026-08-31", REPORTS_EXPORT_FILTER_SOURCE_FIELDS)
+
+        assert "201" not in july_chunk, "A report submitted in a later chunk must not also be matched by its (earlier) created chunk"
+        assert "201" in august_chunk, "A report submitted in a later chunk must be matched by that (submitted) chunk"
+
+    def test_row_with_only_created_field_considered_is_matched_by_created_chunk(self):
+        # Sanity check: with filter_fields restricted to ("created",) - e.g. as expenses.py
+        # declares - the same row is instead matched by its created (July) chunk.
+        july_chunk = _rows_matching_date_range(self.BOUNDARY_CSV_DATA, "2026-07-01", "2026-07-31", ("created",))
+        august_chunk = _rows_matching_date_range(self.BOUNDARY_CSV_DATA, "2026-08-01", "2026-08-31", ("created",))
+
+        assert "201" in july_chunk
+        assert "201" not in august_chunk
+
+    def test_timestamp_valued_row_on_end_date_is_matched(self):
+        # A raw column value with a time component (as real Expensify exports may contain) must
+        # still be matched when its calendar date equals the (date-only) end_date bound, rather
+        # than being excluded by a lexical string comparison against "2026-08-31".
+        csv_data = "reportID,created\n301,2026-08-31 23:59:59\n"
+
+        assert "301" in _rows_matching_date_range(csv_data, "2026-08-01", "2026-08-31", ("created",))
 
 
 class TestDiscover:
@@ -285,6 +357,22 @@ class TestIncrementalStateProgression:
         record_ids = sorted(r.record.data["reportID"] for r in output.records)
         assert record_ids == ["101", "102", "103"]
         assert output.most_recent_state.stream_state.updatedAt == "2026-08-31T00:00:00+00:00"
+        assert output.most_recent_state.stream_state.createdOrSubmittedAt == "2026-08-31T00:00:00+00:00"
+
+    def test_report_submitted_in_a_later_chunk_than_created_is_emitted_exactly_once(self, requests_mock):
+        # Regression test: the configured CONFIG start_date/end_date (2026-07-01/2026-08-31) spans
+        # two calendar-month export chunks (July, August). Report 201 was created 2026-07-15 (in
+        # the July chunk) but not submitted until 2026-08-01 (in the August chunk); since
+        # Expensify's real export filter is max(created, submitted) (see reports.py's
+        # `EXPORT_FILTER_SOURCE_FIELDS`), it must be returned - and therefore emitted - exactly
+        # once, by the August chunk only.
+        csv_data = "reportID,created,submitted\n201,2026-07-15,2026-08-01\n103,2026-08-31,\n"
+        _mock_expensify_export(requests_mock, csv_data)
+
+        output = read(SourceExpensify(), CONFIG, _load_incremental_catalog())
+
+        record_ids = sorted(r.record.data["reportID"] for r in output.records)
+        assert record_ids == ["103", "201"]
         assert output.most_recent_state.stream_state.createdOrSubmittedAt == "2026-08-31T00:00:00+00:00"
 
     def test_resumed_sync_with_sample_state_does_not_skip_records_by_updated_at(self, requests_mock):
