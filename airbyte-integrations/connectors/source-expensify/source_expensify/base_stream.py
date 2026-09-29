@@ -396,12 +396,12 @@ class ExpensifyStream(Stream):
 
         return csv_data
 
-    def _trigger_export(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
+    def _trigger_export(self, start_date: str, end_date: str) -> str:
         input_settings = {
             "type": self.export_type,
             "filters": {
-                "startDate": start_date if start_date is not None else self.start_date,
-                "endDate": end_date if end_date is not None else self.end_date,
+                "startDate": start_date,
+                "endDate": end_date,
             },
         }
         # Omitting "reportState" entirely means Expensify includes reports in all states.

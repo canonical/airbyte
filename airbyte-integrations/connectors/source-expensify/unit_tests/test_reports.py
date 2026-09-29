@@ -546,7 +546,7 @@ class TestTriggerExport:
         with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
-            stream._trigger_export()
+            stream._trigger_export(start_date="2026-08-30", end_date="2026-08-31")
 
         job_description = mock_post.call_args.args[0]
         assert job_description["inputSettings"]["filters"] == {
@@ -569,7 +569,7 @@ class TestTriggerExport:
         with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
-            stream._trigger_export()
+            stream._trigger_export(start_date="2026-08-30", end_date="2026-09-15")
 
         job_description = mock_post.call_args.args[0]
         assert job_description["inputSettings"]["filters"] == {
@@ -585,7 +585,7 @@ class TestTriggerExport:
         with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
-            stream._trigger_export()
+            stream._trigger_export(start_date="2026-08-30", end_date="2026-08-31")
 
         job_description = mock_post.call_args.args[0]
         assert "reportState" not in job_description["inputSettings"]
@@ -604,7 +604,7 @@ class TestTriggerExport:
         with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
-            stream._trigger_export()
+            stream._trigger_export(start_date="2026-08-30", end_date="2026-08-31")
 
         job_description = mock_post.call_args.args[0]
         assert job_description["inputSettings"]["reportState"] == "APPROVED"
@@ -623,7 +623,7 @@ class TestTriggerExport:
         with patch("source_expensify.base_stream._post_job_description") as mock_post:
             mock_post.return_value.text = "file.csv"
 
-            stream._trigger_export()
+            stream._trigger_export(start_date="2026-08-30", end_date="2026-08-31")
 
         job_description = mock_post.call_args.args[0]
         assert job_description["inputSettings"]["reportState"] == "OPEN,SUBMITTED,APPROVED"
