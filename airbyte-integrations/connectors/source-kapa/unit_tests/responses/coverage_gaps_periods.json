@@ -1,0 +1,13 @@
+{
+  "next_cursor": null,
+  "previous_cursor": null,
+  "periods": [
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "interval": "weekly",
+      "start_date": "2026-08-24",
+      "end_date": "2026-08-30",
+      "total_conversations": 116
+    }
+  ]
+}
