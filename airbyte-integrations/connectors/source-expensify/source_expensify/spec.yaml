@@ -34,7 +34,9 @@ connectionSpecification:
         - "2026-08-30"
       order: 2
     end_date:
-      type: string
+      type:
+        - "null"
+        - string
       title: End Date
       description: >-
         The end date (inclusive) used to filter Expensify reports for export, in the format
@@ -45,7 +47,9 @@ connectionSpecification:
         - "2026-08-31"
       order: 3
     report_state:
-      type: array
+      type:
+        - "null"
+        - array
       title: Report State
       description: >-
         One or more Expensify report states to include in the export: "OPEN", "SUBMITTED",
