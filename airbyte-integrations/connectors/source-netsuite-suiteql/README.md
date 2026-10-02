@@ -100,34 +100,45 @@ SuiteAnalytics Connect when a query must return more data.
 
 ## Local Development
 
-Install the connector dependencies from this directory:
+Install dependencies and list the available workflow targets:
 
 ```bash
+make install
+make help
+```
+
+Run the standard local validation sequence:
+
+```bash
+make unit-test
+make integration-test
+make connector-test
+make build
+make spec
+```
+
+Create an untracked `.secrets/config.json` containing real NetSuite credentials
+before running live protocol commands. These commands use `CONFIG`, `CATALOG`,
+and `STATE` Make variables, which can be overridden for another test fixture.
+
+```bash
+make check
+make discover
+make read
+```
+
+Run the Airbyte CI acceptance workflow after preparing its Poetry environment:
+
+```bash
+cd ../../../airbyte-ci/connectors/pipelines
 poetry install
+cd ../../../airbyte-integrations/connectors/source-netsuite-suiteql
+make test
 ```
 
-Run the unit tests:
-
-```bash
-poetry run pytest unit_tests
-```
-
-Run the mocked integration tests:
-
-```bash
-poetry run pytest integration_tests
-```
-
-Run Airbyte commands with a local configuration:
-
-```bash
-poetry run source-netsuite-suiteql spec
-poetry run source-netsuite-suiteql check --config .secrets/config.json
-poetry run source-netsuite-suiteql discover --config .secrets/config.json
-poetry run source-netsuite-suiteql read \
-  --config .secrets/config.json \
-  --catalog integration_tests/configured_catalog.json
-```
+The committed acceptance configuration validates the connector specification
+without credentials. Live acceptance checks require a local
+`.secrets/config.json` with permission to execute the configured queries.
 
 ## API References
 
