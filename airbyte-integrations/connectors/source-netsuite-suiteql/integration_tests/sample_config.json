@@ -6,8 +6,8 @@
   "token_secret": "<token_secret>",
   "queries": [
     {
-      "name": "customers",
-      "query": "SELECT id, email FROM customer ORDER BY id"
+      "name": "transactions",
+      "query": "SELECT id, lastmodifiedat FROM transaction ORDER BY id"
     }
   ],
   "page_size": 1

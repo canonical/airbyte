@@ -47,8 +47,8 @@ Example configuration using non-production placeholders:
   "token_secret": "<token_secret>",
   "queries": [
     {
-      "name": "customers",
-      "query": "SELECT id, email, lastmodifieddate FROM customer WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
+      "name": "transactions",
+      "query": "SELECT id, email, lastmodifieddate FROM transaction WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
       "parameters": ["2024-01-01T00:00:00Z"],
       "primary_key": ["id"],
       "cursor_field": "lastmodifieddate",

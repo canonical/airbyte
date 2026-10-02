@@ -6,8 +6,8 @@
   "token_secret": "<invalid_token_secret>",
   "queries": [
     {
-      "name": "journal",
-      "query": "SELECT id, lastmodifiedat FROM journal ORDER BY id"
+      "name": "transaction",
+      "query": "SELECT id, lastmodifiedat FROM transaction ORDER BY id"
     }
   ],
   "page_size": 1
