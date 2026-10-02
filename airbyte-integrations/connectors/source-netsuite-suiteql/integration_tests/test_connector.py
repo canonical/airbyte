@@ -98,7 +98,7 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
         "id": {"type": ["null", "string"]},
         "lastmodifiedat": {"type": ["null", "string"]},
     }
-    assert requests_mock.last_request.qs == {"limit": ["1"], "offset": ["0"]}
+    assert requests_mock.last_request.qs == {"limit": ["100"], "offset": ["0"]}
 
 
 def test_read_emits_records_across_pages(requests_mock) -> None:
@@ -145,7 +145,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
     assert [request.qs for request in requests_mock.request_history] == [
         {"limit": ["1"], "offset": ["0"]},
         {"limit": ["1"], "offset": ["0"]},
-        {"limit": ["1"], "offset": ["0"]},
+        {"limit": ["100"], "offset": ["0"]},
         {"limit": ["1"], "offset": ["1"]},
     ]
 

@@ -12,7 +12,7 @@ data:
   dockerRepository: airbyte/source-netsuite-suiteql
   documentationUrl: https://docs.airbyte.com/integrations/sources/netsuite-suiteql
   githubIssueLabel: source-netsuite-suiteql
-  icon: netsuite.svg
+  icon: icon.svg
   license: ELv2
   name: NetSuite SuiteQL
   remoteRegistries:

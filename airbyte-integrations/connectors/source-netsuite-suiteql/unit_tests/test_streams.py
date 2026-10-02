@@ -35,7 +35,7 @@ def test_read_records_posts_query_and_paginates(requests_mock) -> None:
         "q": "SELECT id, email FROM customer WHERE id > ?",
         "params": ["100"],
     }
-    assert requests_mock.request_history[0].headers["Prefer"].decode() == "transient"
+    assert requests_mock.request_history[0].headers["Prefer"] == b"transient"
 
 
 def test_get_json_schema_infers_sampled_fields(requests_mock) -> None:
@@ -49,7 +49,19 @@ def test_get_json_schema_infers_sampled_fields(requests_mock) -> None:
         "active": {"type": ["null", "boolean"]},
         "amount": {"type": ["null", "number"]},
     }
-    assert requests_mock.last_request.qs == {"limit": ["1"], "offset": ["0"]}
+    assert requests_mock.last_request.qs == {"limit": ["100"], "offset": ["0"]}
+
+
+def test_get_json_schema_merges_types_across_sampled_records(requests_mock) -> None:
+    endpoint = "https://12345.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql"
+    requests_mock.post(
+        endpoint,
+        json={"items": [{"id": "101", "lastmodifiedat": None}, {"id": "102", "lastmodifiedat": "2024-06-01T12:00:00Z"}]},
+    )
+
+    schema = make_stream().get_json_schema()
+
+    assert schema["properties"]["lastmodifiedat"] == {"type": ["null", "string"]}
 
 
 def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() -> None:
