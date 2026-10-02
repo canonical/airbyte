@@ -1,0 +1,14 @@
+{
+  "realm": "12345_SB1",
+  "consumer_key": "<invalid_consumer_key>",
+  "consumer_secret": "<invalid_consumer_secret>",
+  "token_key": "<invalid_token_id>",
+  "token_secret": "<invalid_token_secret>",
+  "queries": [
+    {
+      "name": "journal",
+      "query": "SELECT id, lastmodifiedat FROM journal ORDER BY id"
+    }
+  ],
+  "page_size": 1
+}
