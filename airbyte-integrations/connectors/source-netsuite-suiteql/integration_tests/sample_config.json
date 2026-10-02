@@ -1,0 +1,14 @@
+{
+  "realm": "12345_SB1",
+  "consumer_key": "<consumer_key>",
+  "consumer_secret": "<consumer_secret>",
+  "token_key": "<token_id>",
+  "token_secret": "<token_secret>",
+  "queries": [
+    {
+      "name": "transactions",
+      "query": "SELECT id, lastmodifiedat FROM transaction ORDER BY id"
+    }
+  ],
+  "page_size": 1
+}
