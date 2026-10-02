@@ -7,14 +7,15 @@ This is separate from `source-netsuite`, which discovers and reads NetSuite
 objects through the Record API. SuiteQL has a different endpoint, response
 shape, schema-discovery strategy, and configuration workflow.
 
-## Features
+## Supports: 
 
 - NetSuite token-based OAuth 1 authentication with HMAC-SHA256
 - Multiple named SuiteQL queries in one source configuration
 - Anonymous bound query parameters
 - Offset pagination with a configurable page size
 - Runtime JSON schema inference from the first returned row
-- Full-refresh syncs for arbitrary user-defined queries
+- Full-refresh syncs
+- Incremental syncs with deduplication
 
 ## Configuration
 
@@ -47,8 +48,11 @@ Example configuration using non-production placeholders:
   "queries": [
     {
       "name": "customers",
-      "query": "SELECT id, email FROM customer WHERE id > ? ORDER BY id",
-      "parameters": ["100"]
+      "query": "SELECT id, email, lastmodifieddate FROM customer WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
+      "parameters": ["2024-01-01T00:00:00Z"],
+      "primary_key": ["id"],
+      "cursor_field": "lastmodifieddate",
+      "cursor_parameter_index": 0
     },
     {
       "name": "transaction_totals",
@@ -74,17 +78,22 @@ schema from the first row. An empty query result therefore produces a stream
 with an open, empty object schema until a row is available on a later discovery.
 NetSuite may normalize result field aliases to lowercase.
 
-All streams currently use full refresh because arbitrary user queries do not
-provide a common, reliable cursor or primary key. Queries may contain joins,
-aggregations, computed fields, or aliases, so the connector cannot safely infer
-incremental state.
+Queries without incremental settings support full refresh only. To enable
+incremental sync with destination deduplication, configure all three of these
+settings on the query:
 
-Incremental sync is not currently configurable. Supporting it safely would
-require each incremental query to declare a returned cursor field and identify
-the bound parameter that receives the saved cursor value. The query would also
-need a cursor predicate and deterministic ordering. Until that configuration is
-implemented, add stable ordering to queries where practical so offset
-pagination remains deterministic while source data changes.
+| Field | Description |
+| --- | --- |
+| `primary_key` | One or more selected fields that uniquely identify each record. |
+| `cursor_field` | A selected field with a consistently sortable value used for stream state. |
+| `cursor_parameter_index` | The zero-based `parameters` position replaced with the saved cursor in incremental reads. |
+
+The query must select both the primary-key and cursor fields, include a cursor
+predicate with a bound parameter at the configured index, and use deterministic
+ordering beginning with the cursor and ending with the primary key. Use an
+inclusive predicate such as `lastmodifieddate >= ?`; records at the saved
+cursor may be read again, and the primary key lets destinations deduplicate
+them safely.
 
 NetSuite REST SuiteQL returns at most 100,000 rows per query. Use
 SuiteAnalytics Connect when a query must return more data.

@@ -50,3 +50,27 @@ def test_get_json_schema_infers_sampled_fields(requests_mock) -> None:
         "amount": {"type": ["null", "number"]},
     }
     assert requests_mock.last_request.qs == {"limit": ["1"], "offset": ["0"]}
+
+
+def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() -> None:
+    stream = SuiteqlStream(
+        name="customers",
+        query="SELECT id, lastmodifieddate FROM customer WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
+        parameters=["2024-01-01T00:00:00Z"],
+        base_url="https://12345.suitetalk.api.netsuite.com",
+        page_size=1000,
+        auth=OAuth1("key", "secret", "token", "token-secret"),
+        primary_key=["id", "email"],
+        cursor_field="lastmodifieddate",
+        cursor_parameter_index=0,
+    )
+
+    assert stream.supports_incremental
+    assert stream.primary_key == [["id"], ["email"]]
+    assert stream.request_body_json(stream_state={"lastmodifieddate": "2024-02-01T00:00:00Z"}) == {
+        "q": "SELECT id, lastmodifieddate FROM customer WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
+        "params": ["2024-02-01T00:00:00Z"],
+    }
+    assert stream.get_updated_state(
+        {"lastmodifieddate": "2024-02-01T00:00:00Z"}, {"lastmodifieddate": "2024-03-01T00:00:00Z"}
+    ) == {"lastmodifieddate": "2024-03-01T00:00:00Z"}

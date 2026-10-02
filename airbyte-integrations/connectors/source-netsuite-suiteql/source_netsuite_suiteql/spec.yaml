@@ -41,7 +41,7 @@ connectionSpecification:
     queries:
       type: array
       title: SuiteQL Queries
-      description: Named SuiteQL queries. Each query is exposed as a full-refresh Airbyte stream.
+      description: Named SuiteQL queries. Configure primary_key, cursor_field, and cursor_parameter_index together to enable incremental sync and deduplication for a query.
       minItems: 1
       order: 5
       items:
@@ -63,6 +63,22 @@ connectionSpecification:
             title: Bound Parameters
             default: []
             items: {}
+          primary_key:
+            type: array
+            title: Primary Key Fields
+            description: Returned fields that uniquely identify records for destination deduplication. Required with cursor_field and cursor_parameter_index.
+            minItems: 1
+            items:
+              type: string
+          cursor_field:
+            type: string
+            title: Cursor Field
+            description: Returned field whose greatest value is saved as incremental state. Required with primary_key and cursor_parameter_index.
+          cursor_parameter_index:
+            type: integer
+            title: Cursor Parameter Index
+            description: Zero-based index in parameters that receives the saved cursor value for incremental reads. Required with primary_key and cursor_field.
+            minimum: 0
     page_size:
       type: integer
       title: Page Size

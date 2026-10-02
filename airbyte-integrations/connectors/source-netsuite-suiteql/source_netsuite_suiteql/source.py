@@ -8,8 +8,12 @@ from requests_oauthlib import OAuth1
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
 
-from .errors import DuplicateQueryNameError, InvalidQueryNameError
+from .errors import (
+    DuplicateQueryNameError,
+    InvalidQueryNameError,
+)
 from .streams import SuiteqlStream
+from .validation import SuiteQLQueryValidator
 
 
 STREAM_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -41,15 +45,19 @@ class SourceNetsuiteSuiteql(AbstractSource):
         if invalid_names:
             raise InvalidQueryNameError(invalid_names)
 
+        for query in queries:
+            SuiteQLQueryValidator(query).validate()
+
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         self.validate_queries(config)
         auth = self.auth(config)
         base_url = self.base_url(config)
         page_size = config.get("page_size", 1000)
+        queries = config["queries"]
 
         return [
             self._get_stream(query=query, base_url=base_url, page_size=page_size, auth=auth)
-            for query in config["queries"]
+            for query in queries
         ]
 
     def check_connection(self, logger, config: Mapping[str, Any]) -> Tuple[bool, Any]:
@@ -82,8 +90,10 @@ class SourceNetsuiteSuiteql(AbstractSource):
 
     def _query_body(self, query: Mapping[str, Any]) -> Mapping[str, Any]:
         body = {"q": query["query"]}
+
         if query.get("parameters"):
             body["params"] = query["parameters"]
+
         return body
 
     def _get_stream(self, query: Mapping[str, Any], base_url: str, page_size: int, auth: OAuth1) -> SuiteqlStream:
@@ -94,4 +104,7 @@ class SourceNetsuiteSuiteql(AbstractSource):
             base_url=base_url,
             page_size=page_size,
             auth=auth,
+            primary_key=query.get("primary_key"),
+            cursor_field=query.get("cursor_field"),
+            cursor_parameter_index=query.get("cursor_parameter_index"),
         )
