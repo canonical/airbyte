@@ -5,7 +5,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 version = "0.1.0"
 name = "source-netsuite-suiteql"
-description = "Airbyte source for user-defined NetSuite SuiteQL queries."
+description = "Airbyte source for cursor-based NetSuite SuiteQL table replication."
 authors = ["Airbyte <contact@airbyte.io>"]
 license = "ELv2"
 readme = "README.md"

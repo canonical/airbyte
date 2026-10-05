@@ -10,7 +10,7 @@ connectionSpecification:
     - consumer_secret
     - token_key
     - token_secret
-    - queries
+    - tables
   properties:
     realm:
       type: string
@@ -38,47 +38,37 @@ connectionSpecification:
       title: Token Secret
       airbyte_secret: true
       order: 4
-    queries:
+    tables:
       type: array
-      title: SuiteQL Queries
-      description: Named SuiteQL queries. Configure primary_key, cursor_field, and cursor_parameter_index together to enable incremental sync and deduplication for a query.
+      title: NetSuite Tables
+      description: Tables to replicate with connector-generated SELECT * queries and cursor filtering.
       minItems: 1
       order: 5
       items:
         type: object
         additionalProperties: false
         required:
-          - name
-          - query
+          - table_name
+          - primary_key
+          - cursor_field
         properties:
-          name:
+          table_name:
             type: string
-            title: Stream Name
+            title: Table Name
             pattern: ^[A-Za-z_][A-Za-z0-9_]*$
-          query:
-            type: string
-            title: SuiteQL Query
-          parameters:
-            type: array
-            title: Bound Parameters
-            default: []
-            items: {}
           primary_key:
             type: array
             title: Primary Key Fields
-            description: Returned fields that uniquely identify records for destination deduplication. Required with cursor_field and cursor_parameter_index.
+            description: Fields that uniquely identify records for destination deduplication.
             minItems: 1
             items:
               type: string
+              pattern: ^[A-Za-z_][A-Za-z0-9_]*$
           cursor_field:
             type: string
             title: Cursor Field
-            description: Returned field whose greatest value is saved as incremental state. Required with primary_key and cursor_parameter_index.
-          cursor_parameter_index:
-            type: integer
-            title: Cursor Parameter Index
-            description: Zero-based index in parameters that receives the saved cursor value for incremental reads. Required with primary_key and cursor_field.
-            minimum: 0
+            description: Field whose greatest value is saved as incremental state and used by the generated cursor predicate.
+            pattern: ^[A-Za-z_][A-Za-z0-9_]*$
     page_size:
       type: integer
       title: Page Size

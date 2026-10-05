@@ -4,10 +4,11 @@
   "consumer_secret": "<invalid_consumer_secret>",
   "token_key": "<invalid_token_id>",
   "token_secret": "<invalid_token_secret>",
-  "queries": [
+  "tables": [
     {
-      "name": "transaction",
-      "query": "SELECT id, lastmodifiedat FROM transaction ORDER BY id"
+      "table_name": "transaction",
+      "primary_key": ["id"],
+      "cursor_field": "lastmodifiedat"
     }
   ],
   "page_size": 1

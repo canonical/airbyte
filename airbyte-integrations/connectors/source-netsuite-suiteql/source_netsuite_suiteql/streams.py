@@ -86,7 +86,12 @@ class SuiteqlStream(HttpStream):
         super().__init__(authenticator=auth)
 
     @staticmethod
-    def build_query(table_name: str, primary_key: Sequence[str], cursor_field: str, incremental: bool = False) -> str:
+    def build_query(
+        table_name: str,
+        primary_key: Sequence[str],
+        cursor_field: str,
+        incremental: bool = False,
+    ) -> str:
         query = f"SELECT *, TO_CHAR({cursor_field}, '{CURSOR_FORMAT}') AS {CURSOR_ALIAS} FROM {table_name}"
         if incremental:
             query += f" WHERE {cursor_field} >= TO_DATE(?, '{CURSOR_FORMAT}')"

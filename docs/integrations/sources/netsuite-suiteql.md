@@ -1,15 +1,15 @@
 # NetSuite SuiteQL
 
-The NetSuite SuiteQL source runs user-defined SuiteQL queries through NetSuite
-REST Web Services. Every named query in the source configuration is exposed as
-an Airbyte stream. This connector is distinct from the NetSuite source, which
-reads Record API objects rather than SuiteQL query results.
+The NetSuite SuiteQL source replicates configured NetSuite tables through REST
+Web Services. It generates `SELECT *` SuiteQL queries so source configurations
+cannot transform data. This connector is distinct from the NetSuite source,
+which reads Record API objects rather than SuiteQL query results.
 
 ## Prerequisites
 
 - A NetSuite account with REST Web Services enabled
 - A token-based authentication integration and access token
-- A NetSuite role permitted to execute each configured SuiteQL query
+- A NetSuite role permitted to query each configured table
 
 ## Setup Guide
 
@@ -28,37 +28,34 @@ See NetSuite's [authentication documentation](https://docs.oracle.com/en/cloud/s
 2. Choose **NetSuite SuiteQL**.
 3. Enter a source name.
 4. Enter the NetSuite realm, consumer key and secret, and token ID and secret.
-5. Add one or more named SuiteQL queries.
+5. Add one or more tables with their primary-key and cursor fields.
 6. Optionally set a page size from 1 through 1000.
 7. Select **Set up source**.
 
-Each query name must begin with a letter or underscore and contain only
+Table and field names must begin with a letter or underscore and contain only
 letters, numbers, and underscores.
 
 ## Supported Sync Modes
 
-All SuiteQL query streams support Full Refresh. A query supports Incremental
-Append + Deduped when it defines `primary_key`, `cursor_field`, and
-`cursor_parameter_index` together.
-
-The query must select its primary-key and cursor fields, use a cursor predicate
-with the configured bound parameter, and order records deterministically by the
-cursor followed by the primary key. Inclusive cursor predicates can emit the
-state-boundary row again; destination deduplication removes that duplicate.
+All table streams support Full Refresh and Incremental Append + Deduped. The
+connector formats the configured date or timestamp cursor with `TO_CHAR` into a
+stable `cursor_ts` state field and uses a matching `TO_DATE` predicate on later
+incremental reads. Inclusive cursor predicates can emit the state-boundary row
+again; destination deduplication removes that duplicate.
 
 ## Supported Streams
 
-Streams are defined by the `queries` array in source configuration. Each query
-creates one stream using its `name`; its schema is inferred during discovery
-from the first returned row. Empty query results produce an open object schema
-until a later discovery sees a row.
+Streams are defined by the `tables` array in source configuration. Each table
+creates a stream using its `table_name`; its schema is inferred during
+discovery from sampled rows. Empty results produce an open object schema until
+a later discovery sees a row.
 
 ## Pagination and Limits
 
 The connector sends query requests to NetSuite's SuiteQL REST endpoint and
 follows the `hasMore`, `offset`, and `count` response fields. NetSuite returns
-at most 100,000 rows per SuiteQL query. Narrow high-volume queries or use
-SuiteAnalytics Connect when more rows are required.
+at most 100,000 rows per SuiteQL query. Use SuiteAnalytics Connect when a table
+sync must return more rows.
 
 ## IP Allow List
 

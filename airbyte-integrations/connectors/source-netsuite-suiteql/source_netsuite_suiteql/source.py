@@ -75,7 +75,13 @@ class SourceNetsuiteSuiteql(AbstractSource):
             endpoint,
             headers={"Prefer": "transient"},
             params={"limit": 1, "offset": 0},
-            json={"q": SuiteqlStream.build_query(table["table_name"], table["primary_key"], table["cursor_field"])},
+            json={
+                "q": SuiteqlStream.build_query(
+                    table["table_name"],
+                    table["primary_key"],
+                    table["cursor_field"],
+                )
+            },
         )
         raise_for_netsuite_status(response)
 

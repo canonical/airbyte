@@ -1,7 +1,8 @@
 # NetSuite SuiteQL Source
 
-This connector runs user-defined SuiteQL queries through NetSuite REST web
-services. Each named query is exposed as a separate Airbyte stream.
+This connector replicates configured NetSuite tables through SuiteQL REST web
+services. It generates the SuiteQL itself so configurations cannot project,
+aggregate, alias, or otherwise transform source data.
 
 This is separate from `source-netsuite`, which discovers and reads NetSuite
 objects through the Record API. SuiteQL has a different endpoint, response
@@ -10,8 +11,8 @@ shape, schema-discovery strategy, and configuration workflow.
 ## Supports: 
 
 - NetSuite token-based OAuth 1 authentication with HMAC-SHA256
-- Multiple named SuiteQL queries in one source configuration
-- Anonymous bound query parameters
+- Multiple tables in one source configuration
+- Connector-generated `SELECT *` queries
 - Offset pagination with a configurable page size
 - Runtime JSON schema inference from the first returned row
 - Full-refresh syncs
@@ -30,11 +31,12 @@ records.
 | `consumer_secret` | Yes | Integration consumer secret. |
 | `token_key` | Yes | Access token ID. |
 | `token_secret` | Yes | Access token secret. |
-| `queries` | Yes | One or more named SuiteQL queries. |
+| `tables` | Yes | One or more table definitions containing `table_name`, `primary_key`, and `cursor_field`. |
 | `page_size` | No | Rows requested per page, from 1 to 1000. Defaults to 1000. |
 
-Query names must be unique valid Airbyte stream names: they must start with a
-letter or underscore and contain only letters, numbers, and underscores.
+Table names, primary-key fields, and cursor fields must start with a letter or
+underscore and contain only letters, numbers, and underscores. Table names
+must be unique and are also used as Airbyte stream names.
 
 Example configuration using non-production placeholders:
 
@@ -45,18 +47,11 @@ Example configuration using non-production placeholders:
   "consumer_secret": "<consumer_secret>",
   "token_key": "<token_id>",
   "token_secret": "<token_secret>",
-  "queries": [
+  "tables": [
     {
-      "name": "transactions",
-      "query": "SELECT id, email, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts FROM transaction WHERE lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS') ORDER BY cursor_ts, id",
-      "parameters": ["2024-01-01 00:00:00"],
+      "table_name": "transaction",
       "primary_key": ["id"],
-      "cursor_field": "cursor_ts",
-      "cursor_parameter_index": 0
-    },
-    {
-      "name": "transaction_totals",
-      "query": "SELECT entity, SUM(total) AS total FROM transaction GROUP BY entity"
+      "cursor_field": "lastmodifieddate"
     }
   ],
   "page_size": 1000
@@ -68,51 +63,40 @@ real account IDs, tokens, or consumer secrets.
 
 ## Sync Behavior
 
-The connector sends each query as a `POST` request to
+The connector sends each generated query as a `POST` request to
 `/services/rest/query/v1/suiteql` with the required `Prefer: transient` header.
 It returns the response `items` as records and follows NetSuite's `hasMore`,
 `offset`, and `count` fields until all available pages have been read.
 
-Discovery executes each configured query with `limit=1` and infers its stream
-schema from the first row. An empty query result therefore produces a stream
+Discovery executes each generated query and infers its stream schema from a
+sample of returned rows. An empty result therefore produces a stream
 with an open, empty object schema until a row is available on a later discovery.
 NetSuite may normalize result field aliases to lowercase.
 
-Queries without incremental settings support full refresh only. To enable
-incremental sync with destination deduplication, configure all three of these
-settings on the query:
+Every table supports full refresh and incremental sync with destination
+deduplication. Each table config contains:
 
 | Field | Description |
 | --- | --- |
 | `primary_key` | One or more selected fields that uniquely identify each record. |
-| `cursor_field` | A selected field with a consistently sortable value used for stream state. |
-| `cursor_parameter_index` | The zero-based `parameters` position replaced with the saved cursor in incremental reads. |
+| `cursor_field` | A date or timestamp field used for stream state and incremental filtering. |
 
-The query must select both the primary-key and cursor fields, include a cursor
-predicate with a bound parameter at the configured index, and use deterministic
-ordering beginning with the cursor and ending with the primary key. Use an
-inclusive predicate such as `lastmodifieddate >= ?`; records at the saved
-cursor may be read again, and the primary key lets destinations deduplicate
-them safely.
-
-For date or timestamp cursors, select a fixed-width textual value and parse the
-bound cursor with the same format. NetSuite's default rendering of a date can
-depend on account preferences, while the connector saves the returned cursor
-verbatim and supplies it as the next bound parameter. For example:
+The connector owns the query shape. For `transaction`, `id`, and
+`lastmodifieddate`, it generates the equivalent of:
 
 ```sql
 SELECT
-  id,
+  *,
   TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts
 FROM transaction
 WHERE lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
 ORDER BY cursor_ts, id
 ```
 
-Configure `cursor_field` as `cursor_ts` and use an initial parameter in the
-same `YYYY-MM-DD HH24:MI:SS` format. This format is lexicographically sortable,
-so the connector can safely retain the greatest cursor value. Use four `Y`
-characters (`YYYY`), not `YYY`, to preserve the full year.
+The fixed-width `cursor_ts` alias avoids account-specific date rendering and is
+used for Airbyte state. Incremental reads add the matching inclusive predicate
+`lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')`; boundary records may
+be read again and are safely deduplicated by the configured primary key.
 
 NetSuite REST SuiteQL returns at most 100,000 rows per query. Use
 SuiteAnalytics Connect when a query must return more data.
@@ -157,7 +141,7 @@ make test
 
 The committed acceptance configuration validates the connector specification
 without credentials. Live acceptance checks require a local
-`.secrets/config.json` with permission to execute the configured queries.
+`.secrets/config.json` with permission to query the configured tables.
 
 ## API References
 
