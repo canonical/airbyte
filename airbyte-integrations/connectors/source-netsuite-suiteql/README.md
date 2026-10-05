@@ -14,7 +14,7 @@ shape, schema-discovery strategy, and configuration workflow.
 - Multiple tables in one source configuration
 - Connector-generated `SELECT *` queries
 - Offset pagination with a configurable page size
-- Runtime JSON schema inference from the first returned row
+- Runtime JSON schema inference from up to the first 100 returned rows
 - Full-refresh syncs
 - Incremental syncs with deduplication
 

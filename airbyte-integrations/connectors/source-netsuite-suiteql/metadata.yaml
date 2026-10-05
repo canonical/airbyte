@@ -31,6 +31,13 @@ data:
     - cdk:python
   connectorTestSuitesOptions:
     - suite: unitTests
+    - suite: acceptanceTests
+      testSecrets:
+        - name: SECRET_SOURCE_NETSUITE_CREDS
+          fileName: config.json
+          secretStore:
+            type: GSM
+            alias: airbyte-connector-testing-secret-store
   externalDocumentationUrls:
     - title: Executing SuiteQL Queries Through REST Web Services
       url: https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157909186990.html

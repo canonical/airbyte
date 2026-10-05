@@ -44,8 +44,10 @@ def test_streams_build_named_query_stream() -> None:
 def test_streams_reject_invalid_identifiers(name: str) -> None:
     config = {**CONFIG, "tables": [{"table_name": name, "primary_key": ["id"], "cursor_field": "lastmodifiedat"}]}
 
-    with pytest.raises(InvalidIdentifierError, match="Table names and fields must"):
+    with pytest.raises(InvalidIdentifierError, match="Table names, primary keys, and cursor fields must"):
         SourceNetsuiteSuiteql().streams(config)
+
+
 def test_streams_reject_duplicate_names() -> None:
     config = {**CONFIG, "tables": [CONFIG["tables"][0], CONFIG["tables"][0]]}
 
