@@ -74,10 +74,7 @@ def test_check_succeeds_with_valid_config(requests_mock) -> None:
     assert is_available is True
     assert error is None
     assert requests_mock.last_request.json() == {
-        "q": (
-            "SELECT *, TO_CHAR(lastmodifiedat, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts "
-            "FROM transaction ORDER BY cursor_ts, id"
-        )
+        "q": ("SELECT *, TO_CHAR(lastmodifiedat, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts " "FROM transaction ORDER BY cursor_ts, id")
     }
 
 

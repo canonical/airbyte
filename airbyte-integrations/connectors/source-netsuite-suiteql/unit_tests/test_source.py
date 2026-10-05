@@ -33,10 +33,7 @@ def test_streams_build_named_query_stream() -> None:
     assert stream.supports_incremental
     assert stream.is_resumable
     assert stream.request_body_json() == {
-        "q": (
-            "SELECT *, TO_CHAR(lastmodifiedat, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts "
-            "FROM transaction ORDER BY cursor_ts, id"
-        )
+        "q": ("SELECT *, TO_CHAR(lastmodifiedat, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts " "FROM transaction ORDER BY cursor_ts, id")
     }
 
 

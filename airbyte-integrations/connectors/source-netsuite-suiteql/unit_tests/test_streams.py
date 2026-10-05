@@ -33,10 +33,7 @@ def test_read_records_posts_query_and_paginates(requests_mock) -> None:
         {"limit": ["1"], "offset": ["1"]},
     ]
     assert requests_mock.request_history[0].json() == {
-        "q": (
-            "SELECT *, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts "
-            "FROM customer ORDER BY cursor_ts, id"
-        ),
+        "q": ("SELECT *, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts " "FROM customer ORDER BY cursor_ts, id"),
     }
     assert requests_mock.request_history[0].headers["Prefer"] == b"transient"
 
@@ -86,8 +83,6 @@ def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() 
         ),
         "params": ["2024-02-01 00:00:00"],
     }
-    assert stream.get_updated_state(
-        {"cursor_ts": "2024-02-01 00:00:00"}, {"cursor_ts": "2024-03-01 00:00:00"}
-    ) == {
+    assert stream.get_updated_state({"cursor_ts": "2024-02-01 00:00:00"}, {"cursor_ts": "2024-03-01 00:00:00"}) == {
         "cursor_ts": "2024-03-01 00:00:00"
     }
