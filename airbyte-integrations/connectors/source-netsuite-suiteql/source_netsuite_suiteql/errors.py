@@ -26,19 +26,19 @@ class InvalidCursorParameterIndexError(ValueError):
 
 
 class MissingCursorFieldError(ValueError):
-	def __init__(self, cursor_field: str) -> None:
-		super().__init__(f"Incremental query record is missing cursor field '{cursor_field}'.")
+    def __init__(self, cursor_field: str) -> None:
+        super().__init__(f"Incremental query record is missing cursor field '{cursor_field}'.")
 
 
 def raise_for_netsuite_status(response: requests.Response) -> None:
-	try:
-		response.raise_for_status()
-	except requests.HTTPError as error:
-		try:
-			details = response.json().get("o:errorDetails", [])
-			message = "; ".join(detail.get("detail", "") for detail in details if detail.get("detail"))
-		except ValueError:
-			message = response.text
-		if message:
-			raise requests.HTTPError(f"{error} NetSuite error: {message}", response=response) from error
-		raise
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as error:
+        try:
+            details = response.json().get("o:errorDetails", [])
+            message = "; ".join(detail.get("detail", "") for detail in details if detail.get("detail"))
+        except ValueError:
+            message = response.text
+        if message:
+            raise requests.HTTPError(f"{error} NetSuite error: {message}", response=response) from error
+        raise
