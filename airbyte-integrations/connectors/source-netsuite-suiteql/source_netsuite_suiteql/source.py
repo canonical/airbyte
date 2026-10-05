@@ -1,6 +1,5 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
-import re
 from collections import Counter
 from typing import Any, List, Mapping, Tuple
 
@@ -11,15 +10,11 @@ from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
 
 from .errors import (
-    DuplicateQueryNameError,
-    InvalidQueryNameError,
+    DuplicateTableNameError,
     raise_for_netsuite_status,
 )
 from .streams import SuiteqlStream
-from .validation import SuiteQLQueryValidator
-
-
-STREAM_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+from .validation import SuiteQLTableValidator
 
 
 class SourceNetsuiteSuiteql(AbstractSource):
@@ -37,37 +32,33 @@ class SourceNetsuiteSuiteql(AbstractSource):
             signature_method="HMAC-SHA256",
         )
 
-    def validate_queries(self, config: Mapping[str, Any]) -> None:
-        queries = config["queries"]
-        names = [query["name"] for query in queries]
+    def validate_tables(self, config: Mapping[str, Any]) -> None:
+        tables = config["tables"]
+        names = [table["table_name"] for table in tables]
         duplicates = [name for name, count in Counter(names).items() if count > 1]
         if duplicates:
-            raise DuplicateQueryNameError(duplicates)
+            raise DuplicateTableNameError(duplicates)
 
-        invalid_names = [name for name in names if not STREAM_NAME_PATTERN.fullmatch(name)]
-        if invalid_names:
-            raise InvalidQueryNameError(invalid_names)
-
-        for query in queries:
-            SuiteQLQueryValidator(query).validate()
+        for table in tables:
+            SuiteQLTableValidator(table).validate()
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
-        self.validate_queries(config)
+        self.validate_tables(config)
         auth = self.auth(config)
         base_url = self.base_url(config)
         page_size = config.get("page_size", 1000)
-        queries = config["queries"]
+        tables = config["tables"]
 
-        return [self._get_stream(query=query, base_url=base_url, page_size=page_size, auth=auth) for query in queries]
+        return [self._get_stream(table=table, base_url=base_url, page_size=page_size, auth=auth) for table in tables]
 
     def check_connection(self, logger, config: Mapping[str, Any]) -> Tuple[bool, Any]:
         try:
-            self.validate_queries(config)
+            self.validate_tables(config)
             session = self._get_session(self.auth(config))
             endpoint = self.base_url(config) + SuiteqlStream.api_path
 
-            for query in config["queries"]:
-                self._check_query(session, endpoint, query)
+            for table in config["tables"]:
+                self._check_table(session, endpoint, table)
 
             return True, None
 
@@ -79,32 +70,21 @@ class SourceNetsuiteSuiteql(AbstractSource):
         session.auth = auth
         return session
 
-    def _check_query(self, session: requests.Session, endpoint: str, query: Mapping[str, Any]) -> None:
+    def _check_table(self, session: requests.Session, endpoint: str, table: Mapping[str, Any]) -> None:
         response = session.post(
             endpoint,
             headers={"Prefer": "transient"},
             params={"limit": 1, "offset": 0},
-            json=self._query_body(query),
+            json={"q": SuiteqlStream.build_query(table["table_name"], table["primary_key"], table["cursor_field"])},
         )
         raise_for_netsuite_status(response)
 
-    def _query_body(self, query: Mapping[str, Any]) -> Mapping[str, Any]:
-        body = {"q": query["query"]}
-
-        if query.get("parameters"):
-            body["params"] = query["parameters"]
-
-        return body
-
-    def _get_stream(self, query: Mapping[str, Any], base_url: str, page_size: int, auth: OAuth1) -> SuiteqlStream:
+    def _get_stream(self, table: Mapping[str, Any], base_url: str, page_size: int, auth: OAuth1) -> SuiteqlStream:
         return SuiteqlStream(
-            name=query["name"],
-            query=query["query"],
-            parameters=query.get("parameters", []),
+            table_name=table["table_name"],
             base_url=base_url,
             page_size=page_size,
             auth=auth,
-            primary_key=query.get("primary_key"),
-            cursor_field=query.get("cursor_field"),
-            cursor_parameter_index=query.get("cursor_parameter_index"),
+            primary_key=table["primary_key"],
+            cursor_field=table["cursor_field"],
         )

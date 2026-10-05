@@ -11,6 +11,8 @@ from .errors import MissingCursorFieldError, raise_for_netsuite_status
 
 
 SCHEMA_SAMPLE_SIZE = 100
+CURSOR_ALIAS = "cursor_ts"
+CURSOR_FORMAT = "YYYY-MM-DD HH24:MI:SS"
 SchemaProperties = Mapping[str, Mapping[str, list[str]]]
 SuiteQLJsonSchema = TypedDict(
     "SuiteQLJsonSchema",
@@ -68,30 +70,31 @@ class SuiteqlStream(HttpStream):
 
     def __init__(
         self,
-        name: str,
-        query: str,
-        parameters: Sequence[Any],
+        table_name: str,
         base_url: str,
         page_size: int,
         auth: OAuth1,
-        primary_key: Sequence[str] | None = None,
-        cursor_field: str | None = None,
-        cursor_parameter_index: int | None = None,
+        primary_key: Sequence[str],
+        cursor_field: str,
     ) -> None:
-        self._name = name
-        self.query = query
-        self.parameters = list(parameters)
+        self.table_name = table_name
         self._url_base = base_url
         self.page_size = page_size
-        self._primary_key = [[field] for field in primary_key] if primary_key else None
-        self._cursor_field = cursor_field or []
-        self.cursor_parameter_index = cursor_parameter_index
+        self._primary_key = [[field] for field in primary_key]
+        self.source_cursor_field = cursor_field
         self._schema: Mapping[str, Any] | None = None
         super().__init__(authenticator=auth)
 
+    @staticmethod
+    def build_query(table_name: str, primary_key: Sequence[str], cursor_field: str, incremental: bool = False) -> str:
+        query = f"SELECT *, TO_CHAR({cursor_field}, '{CURSOR_FORMAT}') AS {CURSOR_ALIAS} FROM {table_name}"
+        if incremental:
+            query += f" WHERE {cursor_field} >= TO_DATE(?, '{CURSOR_FORMAT}')"
+        return f"{query} ORDER BY {', '.join([CURSOR_ALIAS, *primary_key])}"
+
     @property
     def name(self) -> str:
-        return self._name
+        return self.table_name
 
     @property
     def url_base(self) -> str:
@@ -102,11 +105,11 @@ class SuiteqlStream(HttpStream):
         return "POST"
 
     @property
-    def cursor_field(self) -> str | list[str]:
-        return self._cursor_field
+    def cursor_field(self) -> str:
+        return CURSOR_ALIAS
 
     @property
-    def primary_key(self) -> list[list[str]] | None:
+    def primary_key(self) -> list[list[str]]:
         return self._primary_key
 
     @property
@@ -128,17 +131,17 @@ class SuiteqlStream(HttpStream):
         return dict(next_page_token or {"limit": self.page_size, "offset": 0})
 
     def request_body_json(self, stream_state: Mapping[str, Any] | None = None, **kwargs) -> Mapping[str, Any]:
-        body: dict[str, Any] = {"q": self.query}
-        parameters = self.parameters.copy()
-
-        if self.cursor_parameter_index is not None and stream_state:
-            cursor = stream_state.get(self.cursor_field)
-
-            if cursor is not None:
-                parameters[self.cursor_parameter_index] = cursor
-
-        if parameters:
-            body["params"] = parameters
+        cursor = stream_state.get(self.cursor_field) if stream_state else None
+        body: dict[str, Any] = {
+            "q": self.build_query(
+                self.table_name,
+                [field[0] for field in self.primary_key],
+                self.source_cursor_field,
+                cursor is not None,
+            )
+        }
+        if cursor is not None:
+            body["params"] = [cursor]
 
         return body
 
