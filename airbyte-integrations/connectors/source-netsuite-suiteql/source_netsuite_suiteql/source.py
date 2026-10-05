@@ -11,6 +11,7 @@ from airbyte_cdk.sources.streams import Stream
 from .errors import (
     DuplicateQueryNameError,
     InvalidQueryNameError,
+    raise_for_netsuite_status,
 )
 from .streams import SuiteqlStream
 from .validation import SuiteQLQueryValidator
@@ -86,7 +87,7 @@ class SourceNetsuiteSuiteql(AbstractSource):
             params={"limit": 1, "offset": 0},
             json=self._query_body(query),
         )
-        response.raise_for_status()
+        raise_for_netsuite_status(response)
 
     def _query_body(self, query: Mapping[str, Any]) -> Mapping[str, Any]:
         body = {"q": query["query"]}

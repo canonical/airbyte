@@ -5,7 +5,7 @@ from requests_oauthlib import OAuth1
 
 from airbyte_cdk.sources.streams.http import HttpStream
 
-from .errors import MissingCursorFieldError
+from .errors import MissingCursorFieldError, raise_for_netsuite_status
 
 
 SCHEMA_SAMPLE_SIZE = 100
@@ -177,7 +177,7 @@ class SuiteqlStream(HttpStream):
             params={"limit": SCHEMA_SAMPLE_SIZE, "offset": 0},
             json=self.request_body_json(),
         )
-        response.raise_for_status()
+        raise_for_netsuite_status(response)
         records = response.json().get("items", [])
         properties = SchemaProcessor.infer(records)
         schema: SuiteQLJsonSchema = {
