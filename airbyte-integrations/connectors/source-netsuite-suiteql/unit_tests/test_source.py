@@ -1,5 +1,6 @@
-import pytest
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
+import pytest
 from source_netsuite_suiteql.errors import (
     DuplicateQueryNameError,
     IncompleteIncrementalConfigurationError,

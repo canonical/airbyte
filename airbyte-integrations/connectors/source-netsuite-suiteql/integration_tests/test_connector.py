@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 import json
 from pathlib import Path
 from unittest.mock import Mock
@@ -182,10 +184,6 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
 
     output = read(SourceNetsuiteSuiteql(), config, configured_incremental_catalog(), state=state)
 
-    assert [message.record.data for message in output.records] == [
-        {"id": "103", "lastmodifiedat": "2024-06-03T00:00:00Z"}
-    ]
-    assert any(
-        request.json()["params"] == ["2024-06-02T00:00:00Z"] for request in requests_mock.request_history
-    )
+    assert [message.record.data for message in output.records] == [{"id": "103", "lastmodifiedat": "2024-06-03T00:00:00Z"}]
+    assert any(request.json()["params"] == ["2024-06-02T00:00:00Z"] for request in requests_mock.request_history)
     assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(lastmodifiedat="2024-06-03T00:00:00Z")

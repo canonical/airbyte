@@ -1,5 +1,6 @@
-from requests_oauthlib import OAuth1
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
+from requests_oauthlib import OAuth1
 from source_netsuite_suiteql.streams import SuiteqlStream
 
 
@@ -83,6 +84,6 @@ def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() 
         "q": "SELECT id, lastmodifieddate FROM customer WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
         "params": ["2024-02-01T00:00:00Z"],
     }
-    assert stream.get_updated_state(
-        {"lastmodifieddate": "2024-02-01T00:00:00Z"}, {"lastmodifieddate": "2024-03-01T00:00:00Z"}
-    ) == {"lastmodifieddate": "2024-03-01T00:00:00Z"}
+    assert stream.get_updated_state({"lastmodifieddate": "2024-02-01T00:00:00Z"}, {"lastmodifieddate": "2024-03-01T00:00:00Z"}) == {
+        "lastmodifieddate": "2024-03-01T00:00:00Z"
+    }

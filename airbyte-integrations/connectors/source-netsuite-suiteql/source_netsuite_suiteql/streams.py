@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 from typing import Any, Iterable, Mapping, MutableMapping, Sequence, TypedDict
 
 import requests
@@ -119,8 +121,8 @@ class SuiteqlStream(HttpStream):
 
     def request_params(
         self,
-        stream_state: Mapping[str, Any] | None, # needed by CDK
-        stream_slice: Mapping[str, Any] | None = None, # needed by CDK
+        stream_state: Mapping[str, Any] | None,  # needed by CDK
+        stream_slice: Mapping[str, Any] | None = None,  # needed by CDK
         next_page_token: Mapping[str, Any] | None = None,
     ) -> MutableMapping[str, Any]:
         return dict(next_page_token or {"limit": self.page_size, "offset": 0})
@@ -140,9 +142,7 @@ class SuiteqlStream(HttpStream):
 
         return body
 
-    def get_updated_state(
-        self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
+    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
         cursor_field = self.cursor_field
         if not cursor_field:
             return current_stream_state
@@ -150,7 +150,7 @@ class SuiteqlStream(HttpStream):
         latest_cursor = latest_record.get(cursor_field)
         if latest_cursor is None:
             raise MissingCursorFieldError(cursor_field)
-        
+
         current_cursor = current_stream_state.get(cursor_field)
         return {cursor_field: max(cursor for cursor in (current_cursor, latest_cursor) if cursor is not None)}
 
@@ -159,7 +159,7 @@ class SuiteqlStream(HttpStream):
 
         if payload.get("hasMore"):
             return {"limit": self.page_size, "offset": payload["offset"] + payload["count"]}
-        
+
         return None
 
     def parse_response(self, response: requests.Response, **kwargs) -> Iterable[Mapping[str, Any]]:

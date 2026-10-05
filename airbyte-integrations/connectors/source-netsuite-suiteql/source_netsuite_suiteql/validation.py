@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -20,10 +21,10 @@ class IncrementalQueryConfiguration:
 
         if not configured_fields:
             return None
-        
+
         if len(configured_fields) != len(INCREMENTAL_FIELDS):
             raise IncompleteIncrementalConfigurationError(query["name"])
-        
+
         return cls(
             query_name=query["name"],
             parameters=query.get("parameters", []),

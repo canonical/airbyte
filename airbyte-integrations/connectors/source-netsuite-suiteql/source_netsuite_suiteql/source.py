@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 import re
 from collections import Counter
 from typing import Any, List, Mapping, Tuple
@@ -56,10 +58,7 @@ class SourceNetsuiteSuiteql(AbstractSource):
         page_size = config.get("page_size", 1000)
         queries = config["queries"]
 
-        return [
-            self._get_stream(query=query, base_url=base_url, page_size=page_size, auth=auth)
-            for query in queries
-        ]
+        return [self._get_stream(query=query, base_url=base_url, page_size=page_size, auth=auth) for query in queries]
 
     def check_connection(self, logger, config: Mapping[str, Any]) -> Tuple[bool, Any]:
         try:
@@ -69,9 +68,9 @@ class SourceNetsuiteSuiteql(AbstractSource):
 
             for query in config["queries"]:
                 self._check_query(session, endpoint, query)
-                
+
             return True, None
-    
+
         except (KeyError, ValueError, requests.RequestException) as error:
             return False, error
 
