@@ -48,10 +48,10 @@ Example configuration using non-production placeholders:
   "queries": [
     {
       "name": "transactions",
-      "query": "SELECT id, email, lastmodifieddate FROM transaction WHERE lastmodifieddate >= ? ORDER BY lastmodifieddate, id",
-      "parameters": ["2024-01-01T00:00:00Z"],
+      "query": "SELECT id, email, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts FROM transaction WHERE lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS') ORDER BY cursor_ts, id",
+      "parameters": ["2024-01-01 00:00:00"],
       "primary_key": ["id"],
-      "cursor_field": "lastmodifieddate",
+      "cursor_field": "cursor_ts",
       "cursor_parameter_index": 0
     },
     {
@@ -94,6 +94,25 @@ ordering beginning with the cursor and ending with the primary key. Use an
 inclusive predicate such as `lastmodifieddate >= ?`; records at the saved
 cursor may be read again, and the primary key lets destinations deduplicate
 them safely.
+
+For date or timestamp cursors, select a fixed-width textual value and parse the
+bound cursor with the same format. NetSuite's default rendering of a date can
+depend on account preferences, while the connector saves the returned cursor
+verbatim and supplies it as the next bound parameter. For example:
+
+```sql
+SELECT
+  id,
+  TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts
+FROM transaction
+WHERE lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
+ORDER BY cursor_ts, id
+```
+
+Configure `cursor_field` as `cursor_ts` and use an initial parameter in the
+same `YYYY-MM-DD HH24:MI:SS` format. This format is lexicographically sortable,
+so the connector can safely retain the greatest cursor value. Use four `Y`
+characters (`YYYY`), not `YYY`, to preserve the full year.
 
 NetSuite REST SuiteQL returns at most 100,000 rows per query. Use
 SuiteAnalytics Connect when a query must return more data.
