@@ -4,8 +4,14 @@ import pytest
 from source_netsuite_suiteql.errors import (
     DuplicateTableNameError,
     InvalidIdentifierError,
+    MissingCatalogCursorFieldError,
+    MultipleCatalogFieldsError,
+    NestedCatalogFieldError,
 )
 from source_netsuite_suiteql.source import SourceNetsuiteSuiteql
+from source_netsuite_suiteql.validation import SuiteQLCatalogStreamValidator
+
+from airbyte_cdk.models import AirbyteStream, ConfiguredAirbyteCatalog, ConfiguredAirbyteStream, DestinationSyncMode, SyncMode
 
 
 CONFIG = {
@@ -17,8 +23,6 @@ CONFIG = {
     "tables": [
         {
             "table_name": "transaction",
-            "primary_key": ["id"],
-            "cursor_field": "lastmodifiedat",
         }
     ],
 }
@@ -29,17 +33,15 @@ def test_streams_build_named_query_stream() -> None:
 
     assert stream.name == "transaction"
     assert stream.url_base == "https://12345-sb1.suitetalk.api.netsuite.com"
-    assert stream.cursor_field == "cursor_ts"
+    assert stream.cursor_field == []
     assert stream.supports_incremental
-    assert stream.is_resumable
-    assert stream.request_body_json() == {
-        "q": ("SELECT *, TO_CHAR(lastmodifiedat, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts " "FROM transaction ORDER BY cursor_ts, id")
-    }
+    assert not stream.is_resumable
+    assert stream.request_body_json() == {"q": "SELECT * FROM transaction"}
 
 
 @pytest.mark.parametrize("name", ["contains spaces", "1_starts_with_number", "contains-hyphen"])
 def test_streams_reject_invalid_identifiers(name: str) -> None:
-    config = {**CONFIG, "tables": [{"table_name": name, "primary_key": ["id"], "cursor_field": "lastmodifiedat"}]}
+    config = {**CONFIG, "tables": [{"table_name": name}]}
 
     with pytest.raises(InvalidIdentifierError, match="Table names, primary keys, and cursor fields must"):
         SourceNetsuiteSuiteql().streams(config)
@@ -50,3 +52,58 @@ def test_streams_reject_duplicate_names() -> None:
 
     with pytest.raises(DuplicateTableNameError, match="Duplicate table names: transaction"):
         SourceNetsuiteSuiteql().streams(config)
+
+
+def test_stream_is_configured_from_the_catalog() -> None:
+    catalog = ConfiguredAirbyteCatalog(
+        streams=[
+            ConfiguredAirbyteStream(
+                stream=AirbyteStream(name="transaction", json_schema={}, supported_sync_modes=[SyncMode.incremental]),
+                sync_mode=SyncMode.incremental,
+                destination_sync_mode=DestinationSyncMode.append_dedup,
+                primary_key=[["id"]],
+                cursor_field=["lastmodifiedat"],
+            )
+        ]
+    )
+
+    assert SuiteQLCatalogStreamValidator(catalog.streams[0]).table_fields() == {
+        "primary_key": ["id"],
+        "cursor_field": "lastmodifiedat",
+    }
+
+
+def test_catalog_requires_cursor_for_incremental_streams() -> None:
+    configured_stream = ConfiguredAirbyteStream(
+        stream=AirbyteStream(name="transaction", json_schema={}, supported_sync_modes=[SyncMode.incremental]),
+        sync_mode=SyncMode.incremental,
+        destination_sync_mode=DestinationSyncMode.append,
+    )
+
+    with pytest.raises(MissingCatalogCursorFieldError, match="transaction"):
+        SuiteQLCatalogStreamValidator(configured_stream).table_fields()
+
+
+def test_catalog_rejects_nested_primary_keys() -> None:
+    configured_stream = ConfiguredAirbyteStream(
+        stream=AirbyteStream(name="transaction", json_schema={}, supported_sync_modes=[SyncMode.incremental]),
+        sync_mode=SyncMode.incremental,
+        destination_sync_mode=DestinationSyncMode.append_dedup,
+        primary_key=[["metadata", "id"]],
+        cursor_field=["lastmodifiedat"],
+    )
+
+    with pytest.raises(NestedCatalogFieldError, match="primary key"):
+        SuiteQLCatalogStreamValidator(configured_stream).table_fields()
+
+
+def test_catalog_rejects_multiple_cursor_fields() -> None:
+    configured_stream = ConfiguredAirbyteStream(
+        stream=AirbyteStream(name="transaction", json_schema={}, supported_sync_modes=[SyncMode.incremental]),
+        sync_mode=SyncMode.incremental,
+        destination_sync_mode=DestinationSyncMode.append,
+        cursor_field=["lastmodifiedat", "createdat"],
+    )
+
+    with pytest.raises(MultipleCatalogFieldsError, match="cursor field"):
+        SuiteQLCatalogStreamValidator(configured_stream).table_fields()

@@ -6,9 +6,7 @@
   "token_secret": "<token_secret>",
   "tables": [
     {
-      "table_name": "transaction",
-      "primary_key": ["id"],
-      "cursor_field": "lastmodifiedat"
+      "table_name": "transaction"
     }
   ],
   "page_size": 1

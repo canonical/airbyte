@@ -76,13 +76,13 @@ def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() 
 
     assert stream.supports_incremental
     assert stream.primary_key == [["id"], ["email"]]
-    assert stream.request_body_json(stream_state={"cursor_ts": "2024-02-01 00:00:00"}) == {
+    assert stream.request_body_json(stream_state={"lastmodifieddate": "2024-02-01 00:00:00"}) == {
         "q": (
             "SELECT *, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts FROM customer "
             "WHERE lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS') ORDER BY cursor_ts, id, email"
         ),
         "params": ["2024-02-01 00:00:00"],
     }
-    assert stream.get_updated_state({"cursor_ts": "2024-02-01 00:00:00"}, {"cursor_ts": "2024-03-01 00:00:00"}) == {
-        "cursor_ts": "2024-03-01 00:00:00"
+    assert stream.get_updated_state({"lastmodifieddate": "2024-02-01 00:00:00"}, {"lastmodifieddate": "2024-03-01 00:00:00"}) == {
+        "lastmodifieddate": "2024-03-01 00:00:00"
     }

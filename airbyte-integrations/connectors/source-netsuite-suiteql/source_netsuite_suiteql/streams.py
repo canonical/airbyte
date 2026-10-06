@@ -99,7 +99,7 @@ class SuiteqlStream(HttpStream):
 
         if incremental and cursor_field:
             query += f" WHERE {cursor_field} >= TO_DATE(?, '{CURSOR_FORMAT}')"
-            
+
         order_by = ([CURSOR_ALIAS] if cursor_field else []) + list(primary_key)
         return f"{query} ORDER BY {', '.join(order_by)}" if order_by else query
 
@@ -129,7 +129,7 @@ class SuiteqlStream(HttpStream):
 
     @property
     def is_resumable(self) -> bool:
-        return self.supports_incremental
+        return self.source_cursor_field is not None
 
     def path(self, **kwargs) -> str:
         return self.api_path

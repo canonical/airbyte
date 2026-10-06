@@ -53,12 +53,10 @@ def configured_incremental_catalog() -> ConfiguredAirbyteCatalog:
                     name="transaction",
                     json_schema={},
                     supported_sync_modes=[SyncMode.full_refresh, SyncMode.incremental],
-                    source_defined_cursor=True,
-                    default_cursor_field=["cursor_ts"],
-                    source_defined_primary_key=[["id"]],
+                    source_defined_cursor=False,
                 ),
                 sync_mode=SyncMode.incremental,
-                cursor_field=["cursor_ts"],
+                cursor_field=["lastmodifiedat"],
                 primary_key=[["id"]],
                 destination_sync_mode=DestinationSyncMode.append_dedup,
             )
@@ -73,9 +71,7 @@ def test_check_succeeds_with_valid_config(requests_mock) -> None:
 
     assert is_available is True
     assert error is None
-    assert requests_mock.last_request.json() == {
-        "q": ("SELECT *, TO_CHAR(lastmodifiedat, 'YYYY-MM-DD HH24:MI:SS') AS cursor_ts " "FROM transaction ORDER BY cursor_ts, id")
-    }
+    assert requests_mock.last_request.json() == {"q": "SELECT * FROM transaction"}
 
 
 def test_check_fails_with_invalid_credentials(requests_mock) -> None:
@@ -91,7 +87,7 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     requests_mock.post(
         ENDPOINT,
         json={
-            "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z", "cursor_ts": "2024-06-01 12:00:00"}],
+            "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
             "count": 1,
             "offset": 0,
             "hasMore": False,
@@ -106,7 +102,6 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     assert stream.json_schema["properties"] == {
         "id": {"type": ["null", "string"]},
         "lastmodifiedat": {"type": ["null", "string"]},
-        "cursor_ts": {"type": ["null", "string"]},
     }
     assert requests_mock.last_request.qs == {"limit": ["100"], "offset": ["0"]}
 
@@ -117,7 +112,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
         [
             {
                 "json": {
-                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z", "cursor_ts": "2024-06-01 12:00:00"}],
+                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
                     "count": 1,
                     "offset": 0,
                     "hasMore": False,
@@ -125,7 +120,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
             },
             {
                 "json": {
-                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z", "cursor_ts": "2024-06-01 12:00:00"}],
+                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
                     "count": 1,
                     "offset": 0,
                     "hasMore": True,
@@ -133,7 +128,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
             },
             {
                 "json": {
-                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z", "cursor_ts": "2024-06-01 12:00:00"}],
+                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
                     "count": 1,
                     "offset": 0,
                     "hasMore": False,
@@ -141,7 +136,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
             },
             {
                 "json": {
-                    "items": [{"id": "102", "lastmodifiedat": "2024-06-02T12:00:00Z", "cursor_ts": "2024-06-02 12:00:00"}],
+                    "items": [{"id": "102", "lastmodifiedat": "2024-06-02T12:00:00Z"}],
                     "count": 1,
                     "offset": 1,
                     "hasMore": False,
@@ -167,7 +162,7 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
             type=AirbyteStateType.STREAM,
             stream=AirbyteStreamState(
                 stream_descriptor=StreamDescriptor(name="transaction", namespace=None),
-                stream_state=AirbyteStateBlob(cursor_ts="2024-06-02 00:00:00"),
+                stream_state=AirbyteStateBlob(lastmodifiedat="2024-06-02 00:00:00"),
             ),
         )
     ]
@@ -183,8 +178,6 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
 
     output = read(SourceNetsuiteSuiteql(), config, configured_incremental_catalog(), state=state)
 
-    assert [message.record.data for message in output.records] == [
-        {"id": "103", "lastmodifiedat": "2024-06-03T00:00:00Z", "cursor_ts": "2024-06-03 00:00:00"}
-    ]
+    assert [message.record.data for message in output.records] == [{"id": "103", "lastmodifiedat": "2024-06-03 00:00:00"}]
     assert any(request.json().get("params") == ["2024-06-02 00:00:00"] for request in requests_mock.request_history)
-    assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(cursor_ts="2024-06-03 00:00:00")
+    assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(lastmodifiedat="2024-06-03 00:00:00")
