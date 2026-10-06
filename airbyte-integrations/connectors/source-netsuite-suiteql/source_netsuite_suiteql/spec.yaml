@@ -41,7 +41,7 @@ connectionSpecification:
     tables:
       type: array
       title: NetSuite Tables
-      description: Tables to replicate with connector-generated SELECT * queries and cursor filtering.
+      description: Tables to replicate with connector-generated SELECT * queries. Configure primary keys and cursor fields in the Airbyte connection catalog.
       minItems: 1
       order: 5
       items:
@@ -49,25 +49,10 @@ connectionSpecification:
         additionalProperties: false
         required:
           - table_name
-          - primary_key
-          - cursor_field
         properties:
           table_name:
             type: string
             title: Table Name
-            pattern: ^[A-Za-z_][A-Za-z0-9_]*$
-          primary_key:
-            type: array
-            title: Primary Key Fields
-            description: Fields that uniquely identify records for destination deduplication.
-            minItems: 1
-            items:
-              type: string
-              pattern: ^[A-Za-z_][A-Za-z0-9_]*$
-          cursor_field:
-            type: string
-            title: Cursor Field
-            description: Field whose greatest value is saved as incremental state and used by the generated cursor predicate.
             pattern: ^[A-Za-z_][A-Za-z0-9_]*$
     page_size:
       type: integer

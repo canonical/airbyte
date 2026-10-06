@@ -21,6 +21,21 @@ class MissingCursorFieldError(ValueError):
         super().__init__(f"Incremental table record is missing cursor field '{cursor_field}'.")
 
 
+class MissingCatalogCursorFieldError(ValueError):
+    def __init__(self, stream_name: str) -> None:
+        super().__init__(f"Incremental stream '{stream_name}' requires a cursor field.")
+
+
+class NestedCatalogFieldError(ValueError):
+    def __init__(self, field_type: str) -> None:
+        super().__init__(f"NetSuite SuiteQL does not support nested {field_type} fields.")
+
+
+class MultipleCatalogFieldsError(ValueError):
+    def __init__(self, field_type: str) -> None:
+        super().__init__(f"NetSuite SuiteQL supports only one {field_type}.")
+
+
 def raise_for_netsuite_status(response: requests.Response) -> None:
     try:
         response.raise_for_status()

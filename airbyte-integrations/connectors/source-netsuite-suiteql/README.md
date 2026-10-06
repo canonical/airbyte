@@ -31,12 +31,12 @@ records.
 | `consumer_secret` | Yes | Integration consumer secret. |
 | `token_key` | Yes | Access token ID. |
 | `token_secret` | Yes | Access token secret. |
-| `tables` | Yes | One or more table definitions containing `table_name`, `primary_key`, and `cursor_field`. |
+| `tables` | Yes | One or more table definitions containing only `table_name`. |
 | `page_size` | No | Rows requested per page, from 1 to 1000. Defaults to 1000. |
 
-Table names, primary-key fields, and cursor fields must start with a letter or
-underscore and contain only letters, numbers, and underscores. Table names
-must be unique and are also used as Airbyte stream names.
+Table names must start with a letter or underscore and contain only letters,
+numbers, and underscores. They must be unique and are also used as Airbyte
+stream names.
 
 Example configuration using non-production placeholders:
 
@@ -49,9 +49,7 @@ Example configuration using non-production placeholders:
   "token_secret": "<token_secret>",
   "tables": [
     {
-      "table_name": "transaction",
-      "primary_key": ["id"],
-      "cursor_field": "lastmodifieddate"
+      "table_name": "transaction"
     }
   ],
   "page_size": 1000
@@ -68,21 +66,20 @@ The connector sends each generated query as a `POST` request to
 It returns the response `items` as records and follows NetSuite's `hasMore`,
 `offset`, and `count` fields until all available pages have been read.
 
-Discovery executes each generated query and infers its stream schema from a
-sample of returned rows. An empty result therefore produces a stream
-with an open, empty object schema until a row is available on a later discovery.
-NetSuite may normalize result field aliases to lowercase.
+Discovery runs `SELECT *` for each configured table and infers its stream schema
+from a sample of returned rows. An empty result therefore produces a stream with
+an open, empty object schema until a row is available on a later discovery.
+NetSuite may normalize field names to lowercase.
 
-Every table supports full refresh and incremental sync with destination
-deduplication. Each table config contains:
+Every table supports full refresh and incremental sync. Configure the primary
+key and cursor after discovery in the Airbyte connection catalog:
 
-| Field | Description |
-| --- | --- |
-| `primary_key` | One or more selected fields that uniquely identify each record. |
-| `cursor_field` | A date or timestamp field used for stream state and incremental filtering. |
+1. Select the stream and choose **Incremental | Append + Deduped** as its sync mode.
+2. Select one or more top-level primary-key fields for deduplication.
+3. Select one top-level date or timestamp cursor field.
 
 The connector owns the query shape. For `transaction`, `id`, and
-`lastmodifieddate`, it generates the equivalent of:
+`lastmodifieddate` selected in the catalog, it generates the equivalent of:
 
 ```sql
 SELECT
@@ -93,10 +90,11 @@ WHERE lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')
 ORDER BY cursor_ts, id
 ```
 
-The fixed-width `cursor_ts` alias avoids account-specific date rendering and is
-used for Airbyte state. Incremental reads add the matching inclusive predicate
-`lastmodifieddate >= TO_DATE(?, 'YYYY-MM-DD HH24:MI:SS')`; boundary records may
-be read again and are safely deduplicated by the configured primary key.
+The connector uses the fixed-width `cursor_ts` alias internally, then writes the
+normalized value back to the selected cursor field for Airbyte state. Incremental
+reads add the matching inclusive predicate `lastmodifieddate >= TO_DATE(?,
+'YYYY-MM-DD HH24:MI:SS')`; boundary records may be read again and are safely
+deduplicated by the selected primary key.
 
 NetSuite REST SuiteQL returns at most 100,000 rows per query. Use
 SuiteAnalytics Connect when a query must return more data.
@@ -129,6 +127,24 @@ make check
 make discover
 make read
 ```
+
+## Local Airbyte UI
+
+Build the local development image and start an Airbyte instance:
+
+```bash
+make build
+abctl local install
+```
+
+In **Workspace settings** > **Sources**, choose **New connector** > **Add a new
+Docker connector**. Set the image name to `airbyte/source-netsuite-suiteql` and
+the tag to `dev`. Ensure the Airbyte deployment can access that image. You can
+then create a source with table names only, refresh the schema, and choose the
+primary key and cursor in the connection catalog.
+
+Make the rebuilt image available to the deployment after each `make build`
+before starting another sync.
 
 Run the Airbyte CI acceptance workflow after preparing its Poetry environment:
 
