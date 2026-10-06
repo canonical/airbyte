@@ -99,6 +99,8 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     stream = output.catalog.catalog.streams[0]
     assert stream.name == "transaction"
     assert stream.supported_sync_modes == [SyncMode.full_refresh, SyncMode.incremental]
+    assert stream.source_defined_cursor is False
+    assert stream.default_cursor_field == []
     assert stream.json_schema["properties"] == {
         "id": {"type": ["null", "string"]},
         "lastmodifiedat": {"type": ["null", "string"]},

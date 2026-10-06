@@ -7,6 +7,7 @@ import requests
 from requests_oauthlib import OAuth1
 
 from airbyte_cdk.models import (
+    AirbyteCatalog,
     AirbyteMessage,
     ConfiguredAirbyteCatalog,
     ConfiguredAirbyteStream,
@@ -60,6 +61,12 @@ class SourceNetsuiteSuiteql(AbstractSource):
         tables = config["tables"]
 
         return [self._get_stream(table=table, base_url=base_url, page_size=page_size, auth=auth) for table in tables]
+
+    def discover(self, logger, config: Mapping[str, Any]) -> AirbyteCatalog:
+        catalog = super().discover(logger, config)
+        for stream in catalog.streams:
+            stream.source_defined_cursor = False
+        return catalog
 
     def read(
         self,
