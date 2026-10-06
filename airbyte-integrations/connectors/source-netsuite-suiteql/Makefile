@@ -11,10 +11,11 @@ PYTHON ?= python3
 DAGGER ?= dagger
 AIRBYTE_CI ?= poetry run airbyte-ci
 POETRY ?= poetry
+PRE_COMMIT ?= ../../../.venv/bin/pre-commit
 SCRIPT := $(POETRY) run $(CONNECTOR)
 AIRBYTE_CDK := $(POETRY) run airbyte-cdk
 
-.PHONY: help install build spec check discover read unit-test integration-test connector-test test
+.PHONY: help install build spec check discover read unit-test integration-test connector-test lint test
 
 help:  ## Show available targets and input defaults.
 	@printf "Inputs: IMAGE=%s CONFIG=%s CATALOG=%s STATE=%s\n\n" "$(IMAGE)" "$(CONFIG)" "$(CATALOG)" "$(STATE)"
@@ -46,6 +47,9 @@ integration-test:  ## Run mocked integration tests.
 
 connector-test:  ## Run connector acceptance configuration validation.
 	$(AIRBYTE_CDK) connector test
+
+lint:  ## Run the repository pre-commit checks as in CI
+	$(PRE_COMMIT) run --show-diff-on-failure --all-files
 
 test:  ## Run acceptance tests through airbyte-ci.
 	cd ../../../airbyte-ci/connectors/pipelines && $(AIRBYTE_CI) connectors --name $(CONNECTOR) test

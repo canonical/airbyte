@@ -75,35 +75,22 @@ class SuiteQLCatalogStreamValidator:
         configured_cursor = self.configured_stream.cursor_field or []
 
         primary_key = self._top_level_fields(configured_key, "primary key")
-        cursor_field = self._single_top_level_field(
-            configured_cursor, "cursor field"
-        )
+        cursor_field = self._single_top_level_field(configured_cursor, "cursor field")
 
-        if (
-            self.configured_stream.sync_mode == SyncMode.incremental
-            and not cursor_field
-        ):
-            raise MissingCatalogCursorFieldError(
-                self.configured_stream.stream.name
-            )
+        if self.configured_stream.sync_mode == SyncMode.incremental and not cursor_field:
+            raise MissingCatalogCursorFieldError(self.configured_stream.stream.name)
 
         return SuiteQLTableFields(
             primary_key=primary_key,
             cursor_field=cursor_field,
         )
 
-    def _top_level_fields(
-        self,
-        fields: list[list[str]], field_type: str
-    ) -> list[str]:
+    def _top_level_fields(self, fields: list[list[str]], field_type: str) -> list[str]:
         if any(len(field) != 1 for field in fields):
             raise NestedCatalogFieldError(field_type)
         return [field[0] for field in fields]
 
-    def _single_top_level_field(
-        self,
-        fields: list[str], field_type: str
-    ) -> str | None:
+    def _single_top_level_field(self, fields: list[str], field_type: str) -> str | None:
         if len(fields) > 1:
             raise MultipleCatalogFieldsError(field_type)
         return fields[0] if fields else None

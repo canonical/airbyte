@@ -6,13 +6,13 @@ from typing import Any, Iterator, List, Mapping, MutableMapping, Tuple, cast
 import requests
 from requests_oauthlib import OAuth1
 
-from airbyte_cdk.sources import AbstractSource
-from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.models import (
     AirbyteMessage,
     ConfiguredAirbyteCatalog,
     ConfiguredAirbyteStream,
 )
+from airbyte_cdk.sources import AbstractSource
+from airbyte_cdk.sources.streams import Stream
 
 from .errors import (
     DuplicateTableNameError,
@@ -72,17 +72,17 @@ class SourceNetsuiteSuiteql(AbstractSource):
         source_config = cast(SuiteQLSourceConfig, config)
         configured_tables = self._configured_streams_by_name(catalog)
         tables = []
-        
+
         for table in source_config["tables"]:
             configured_stream = configured_tables.get(table["table_name"])
-            
+
             # prevent modifying the original table configuration
             configured_table = dict(table)
 
             if configured_stream:
                 fields = SuiteQLCatalogStreamValidator(configured_stream).table_fields()
                 configured_table.update(fields)
-            
+
             tables.append(configured_table)
 
         return super().read(
