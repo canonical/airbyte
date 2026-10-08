@@ -64,6 +64,24 @@ def test_get_json_schema_merges_types_across_sampled_records(requests_mock) -> N
     assert schema["properties"]["lastmodifiedat"] == {"type": ["null", "string"]}
 
 
+def test_get_json_schema_appends_only_undiscovered_overrides(requests_mock) -> None:
+    endpoint = "https://12345.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql"
+    requests_mock.post(endpoint, json={"items": [{"id": "101", "amount": 12.5}]})
+    stream = make_stream()
+    stream.schema_override = {
+        "custcol_can_percent_complete": "number",
+        "amount": "string",
+    }
+
+    schema = stream.get_json_schema()
+
+    assert schema["properties"] == {
+        "id": {"type": ["null", "string"]},
+        "amount": {"type": ["null", "number"]},
+        "custcol_can_percent_complete": {"type": ["null", "number"]},
+    }
+
+
 def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() -> None:
     stream = SuiteqlStream(
         table_name="customer",

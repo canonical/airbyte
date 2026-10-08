@@ -50,6 +50,10 @@ class SchemaProcessor:
             types = self._field_types.setdefault(field, set())
             types.update(self._types_for(value))
 
+    def add_type(self, field: str, field_type: str) -> None:
+        types = self._field_types.setdefault(field, set())
+        types.update({"null", field_type})
+
     @property
     def properties(self) -> SchemaProperties:
         properties = {}
@@ -76,12 +80,14 @@ class SuiteqlStream(HttpStream):
         auth: OAuth1,
         primary_key: Sequence[str] = (),
         cursor_field: str | None = None,
+        schema_override: Mapping[str, str] | None = None,
     ) -> None:
         self.table_name = table_name
         self._url_base = base_url
         self.page_size = page_size
         self._primary_key = [[field] for field in primary_key]
         self.source_cursor_field = cursor_field
+        self.schema_override = schema_override or {}
         self._schema: Mapping[str, Any] | None = None
         super().__init__(authenticator=auth)
 
@@ -204,7 +210,17 @@ class SuiteqlStream(HttpStream):
         )
         raise_for_netsuite_status(response)
         records = response.json().get("items", [])
-        properties = SchemaProcessor.infer(records)
+        processor = SchemaProcessor()
+
+        for record in records:
+            processor.add(record)
+
+        discovered_fields = {field for record in records for field in record}
+        for field, field_type in self.schema_override.items():
+            if field not in discovered_fields:
+                processor.add_type(field, field_type)
+
+        properties = processor.properties
         schema: SuiteQLJsonSchema = {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",

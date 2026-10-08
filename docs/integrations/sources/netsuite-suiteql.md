@@ -28,9 +28,12 @@ See NetSuite's [authentication documentation](https://docs.oracle.com/en/cloud/s
 2. Choose **NetSuite SuiteQL**.
 3. Enter a source name.
 4. Enter the NetSuite realm, consumer key and secret, and token ID and secret.
-5. Add one or more tables with their primary-key and cursor fields.
+5. Add one or more table names and optional schema overrides.
 6. Optionally set a page size from 1 through 1000.
 7. Select **Set up source**.
+
+After discovery, configure primary-key and cursor fields in the Airbyte
+connection catalog.
 
 Table and field names must begin with a letter or underscore and contain only
 letters, numbers, and underscores.
@@ -48,7 +51,27 @@ again; destination deduplication removes that duplicate.
 Streams are defined by the `tables` array in source configuration. Each table
 creates a stream using its `table_name`; its schema is inferred during
 discovery from sampled rows. Empty results produce an open object schema until
-a later discovery sees a row.
+a later discovery sees a row. NetSuite also omits null-valued fields from query
+responses. To retain known fields that may be absent from every sampled row, add
+`schema_override` field/type entries to the table configuration. Overrides are
+appended to the inferred schema rather than replacing inferred fields or types.
+
+```json
+{
+  "table_name": "transactionLine",
+  "schema_override": [
+    {
+      "field_name": "custcol_can_percent_complete",
+      "field_type": "number"
+    },
+    {"field_name": "netamount", "field_type": "number"},
+    {"field_name": "item", "field_type": "string"}
+  ]
+}
+```
+
+Supported override types are `string`, `number`, `integer`, `boolean`, `object`,
+and `array`. All override fields remain nullable.
 
 ## Pagination and Limits
 

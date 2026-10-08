@@ -152,6 +152,10 @@ class SourceNetsuiteSuiteql(AbstractSource):
             auth=auth,
             primary_key=table.get("primary_key", []),
             cursor_field=table.get("cursor_field"),
+            schema_override={
+                override["field_name"]: override["field_type"]
+                for override in table.get("schema_override", [])
+            },
         )
 
     def _configured_streams_by_name(

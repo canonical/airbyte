@@ -108,6 +108,28 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     assert requests_mock.last_request.qs == {"limit": ["100"], "offset": ["0"]}
 
 
+def test_discover_appends_schema_override_for_empty_objects(requests_mock) -> None:
+    requests_mock.post(
+        ENDPOINT,
+        json={"items": [{}, {}], "count": 2, "offset": 0, "hasMore": False},
+    )
+    config = load_json("sample_config.json")
+    config["tables"][0]["schema_override"] = [
+        {
+            "field_name": "custcol_can_percent_complete",
+            "field_type": "number",
+        },
+        {"field_name": "item", "field_type": "string"},
+    ]
+
+    output = discover(SourceNetsuiteSuiteql(), config)
+
+    assert output.catalog.catalog.streams[0].json_schema["properties"] == {
+        "custcol_can_percent_complete": {"type": ["null", "number"]},
+        "item": {"type": ["null", "string"]},
+    }
+
+
 def test_read_emits_records_across_pages(requests_mock) -> None:
     requests_mock.post(
         ENDPOINT,
