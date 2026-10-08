@@ -16,6 +16,11 @@ class InvalidIdentifierError(ValueError):
         )
 
 
+class InvalidRealmError(ValueError):
+    def __init__(self, realm: str) -> None:
+        super().__init__(f"Invalid NetSuite account ID: {realm}")
+
+
 class MissingCursorFieldError(ValueError):
     def __init__(self, cursor_field: str) -> None:
         super().__init__(f"Incremental table record is missing cursor field '{cursor_field}'.")

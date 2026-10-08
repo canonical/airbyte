@@ -6,6 +6,7 @@ from airbyte_cdk.models import ConfiguredAirbyteStream, SyncMode
 
 from .errors import (
     InvalidIdentifierError,
+    InvalidRealmError,
     MissingCatalogCursorFieldError,
     MultipleCatalogFieldsError,
     NestedCatalogFieldError,
@@ -13,6 +14,7 @@ from .errors import (
 
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+REALM_PATTERN = re.compile(r"^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$")
 
 
 class SuiteQLTableFields(TypedDict):
@@ -42,6 +44,13 @@ class SuiteQLIdentifierValidator:
         invalid_identifiers = [identifier for identifier in identifiers if not IDENTIFIER_PATTERN.fullmatch(identifier)]
         if invalid_identifiers:
             raise InvalidIdentifierError(invalid_identifiers)
+
+
+class SuiteQLRealmValidator:
+    @staticmethod
+    def validate(realm: str) -> None:
+        if not REALM_PATTERN.fullmatch(realm):
+            raise InvalidRealmError(realm)
 
 
 class SuiteQLTableValidator:

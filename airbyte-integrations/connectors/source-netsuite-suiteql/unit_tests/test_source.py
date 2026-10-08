@@ -4,6 +4,7 @@ import pytest
 from source_netsuite_suiteql.errors import (
     DuplicateTableNameError,
     InvalidIdentifierError,
+    InvalidRealmError,
     MissingCatalogCursorFieldError,
     MultipleCatalogFieldsError,
     NestedCatalogFieldError,
@@ -37,6 +38,21 @@ def test_streams_build_named_query_stream() -> None:
     assert stream.supports_incremental
     assert not stream.is_resumable
     assert stream.request_body_json() == {"q": "SELECT * FROM transaction"}
+
+
+@pytest.mark.parametrize("realm", ["2344535", "2344535_SB1"])
+def test_base_url_accepts_documented_realms(realm: str) -> None:
+    config = {**CONFIG, "realm": realm}
+
+    assert SourceNetsuiteSuiteql().base_url(config) == f"https://{realm.replace('_', '-').lower()}.suitetalk.api.netsuite.com"
+
+
+@pytest.mark.parametrize("realm", ["evil.example/", "evil.example?", "evil.example#"])
+def test_base_url_rejects_invalid_realms(realm: str) -> None:
+    config = {**CONFIG, "realm": realm}
+
+    with pytest.raises(InvalidRealmError, match="Invalid NetSuite account ID"):
+        SourceNetsuiteSuiteql().base_url(config)
 
 
 @pytest.mark.parametrize(

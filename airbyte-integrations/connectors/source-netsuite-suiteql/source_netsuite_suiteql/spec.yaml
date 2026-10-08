@@ -16,6 +16,7 @@ connectionSpecification:
       type: string
       title: Realm (Account ID)
       description: NetSuite account ID, such as 2344535 for production or 2344535_SB1 for a sandbox.
+      pattern: ^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$
       airbyte_secret: true
       order: 0
     consumer_key:

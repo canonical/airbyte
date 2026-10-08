@@ -22,6 +22,7 @@ from .errors import (
 from .streams import SuiteqlStream
 from .validation import (
     SuiteQLCatalogStreamValidator,
+    SuiteQLRealmValidator,
     SuiteQLSourceConfig,
     SuiteQLTableConfig,
     SuiteQLTableValidator,
@@ -30,6 +31,7 @@ from .validation import (
 
 class SourceNetsuiteSuiteql(AbstractSource):
     def base_url(self, config: SuiteQLSourceConfig) -> str:
+        SuiteQLRealmValidator.validate(config["realm"])
         account_subdomain = config["realm"].replace("_", "-").lower()
         return f"https://{account_subdomain}.suitetalk.api.netsuite.com"
 

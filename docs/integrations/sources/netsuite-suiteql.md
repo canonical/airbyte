@@ -1,4 +1,3 @@
-5. Add one or more table names.
 # NetSuite SuiteQL
 
 The NetSuite SuiteQL source replicates configured NetSuite tables through REST
