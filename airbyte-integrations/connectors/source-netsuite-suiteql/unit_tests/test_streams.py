@@ -4,9 +4,9 @@ from requests_oauthlib import OAuth1
 from source_netsuite_suiteql.streams import SuiteqlStream
 
 
-def make_stream(page_size: int = 1000) -> SuiteqlStream:
+def make_stream(page_size: int = 1000, table_name: str = "customer") -> SuiteqlStream:
     return SuiteqlStream(
-        table_name="customer",
+        table_name=table_name,
         base_url="https://12345.suitetalk.api.netsuite.com",
         page_size=page_size,
         auth=OAuth1("key", "secret", "token", "token-secret"),
@@ -64,22 +64,16 @@ def test_get_json_schema_merges_types_across_sampled_records(requests_mock) -> N
     assert schema["properties"]["lastmodifiedat"] == {"type": ["null", "string"]}
 
 
-def test_get_json_schema_appends_only_undiscovered_overrides(requests_mock) -> None:
+def test_get_json_schema_appends_only_undiscovered_schema_hints(requests_mock) -> None:
     endpoint = "https://12345.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql"
-    requests_mock.post(endpoint, json={"items": [{"id": "101", "amount": 12.5}]})
-    stream = make_stream()
-    stream.schema_override = {
-        "custcol_can_percent_complete": "number",
-        "amount": "string",
-    }
+    requests_mock.post(endpoint, json={"items": [{"id": "101", "custcol_can_percent_complete": "12"}]})
 
-    schema = stream.get_json_schema()
+    schema = make_stream(table_name="transactionLine").get_json_schema()
 
-    assert schema["properties"] == {
-        "id": {"type": ["null", "string"]},
-        "amount": {"type": ["null", "number"]},
-        "custcol_can_percent_complete": {"type": ["null", "number"]},
-    }
+    assert schema["properties"]["id"] == {"type": ["null", "string"]}
+    assert schema["properties"]["custcol_can_percent_complete"] == {"type": ["null", "string"]}
+    assert schema["properties"]["item"] == {"type": ["null", "string"]}
+    assert schema["properties"]["netamount"] == {"type": ["null", "number"]}
 
 
 def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() -> None:

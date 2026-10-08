@@ -108,25 +108,30 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     assert requests_mock.last_request.qs == {"limit": ["100"], "offset": ["0"]}
 
 
-def test_discover_appends_schema_override_for_empty_objects(requests_mock) -> None:
+def test_discover_appends_packaged_schema_for_empty_objects(
+    requests_mock,
+) -> None:
     requests_mock.post(
         ENDPOINT,
         json={"items": [{}, {}], "count": 2, "offset": 0, "hasMore": False},
     )
     config = load_json("sample_config.json")
-    config["tables"][0]["schema_override"] = [
-        {
-            "field_name": "custcol_can_percent_complete",
-            "field_type": "number",
-        },
-        {"field_name": "item", "field_type": "string"},
-    ]
+    config["tables"][0]["table_name"] = "transactionLine"
 
     output = discover(SourceNetsuiteSuiteql(), config)
 
     assert output.catalog.catalog.streams[0].json_schema["properties"] == {
+        "custcol_ns_can_contract": {"type": ["null", "string"]},
+        "netamount": {"type": ["null", "number"]},
         "custcol_can_percent_complete": {"type": ["null", "number"]},
         "item": {"type": ["null", "string"]},
+        "custcol_ns_can_oli": {"type": ["null", "string"]},
+        "cseg_lobs": {"type": ["null", "string"]},
+        "cseg_revenue_family": {"type": ["null", "string"]},
+        "expenseaccount": {"type": ["null", "string"]},
+        "amortizstartdate": {"type": ["null", "string"]},
+        "amortizationenddate": {"type": ["null", "string"]},
+        "cseg_sales_type": {"type": ["null", "string"]},
     }
 
 

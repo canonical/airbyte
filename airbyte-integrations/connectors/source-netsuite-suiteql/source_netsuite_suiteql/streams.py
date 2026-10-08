@@ -1,5 +1,7 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
+import json
+from importlib.resources import files
 from typing import Any, Iterable, Mapping, MutableMapping, Sequence, TypedDict
 
 import requests
@@ -13,7 +15,7 @@ from .errors import MissingCursorFieldError, raise_for_netsuite_status
 SCHEMA_SAMPLE_SIZE = 100
 CURSOR_ALIAS = "cursor_ts"
 CURSOR_FORMAT = "YYYY-MM-DD HH24:MI:SS"
-SchemaProperties = Mapping[str, Mapping[str, list[str]]]
+SchemaProperties = Mapping[str, Mapping[str, Any]]
 SuiteQLJsonSchema = TypedDict(
     "SuiteQLJsonSchema",
     {
@@ -50,10 +52,6 @@ class SchemaProcessor:
             types = self._field_types.setdefault(field, set())
             types.update(self._types_for(value))
 
-    def add_type(self, field: str, field_type: str) -> None:
-        types = self._field_types.setdefault(field, set())
-        types.update({"null", field_type})
-
     @property
     def properties(self) -> SchemaProperties:
         properties = {}
@@ -80,14 +78,12 @@ class SuiteqlStream(HttpStream):
         auth: OAuth1,
         primary_key: Sequence[str] = (),
         cursor_field: str | None = None,
-        schema_override: Mapping[str, str] | None = None,
     ) -> None:
         self.table_name = table_name
         self._url_base = base_url
         self.page_size = page_size
         self._primary_key = [[field] for field in primary_key]
         self.source_cursor_field = cursor_field
-        self.schema_override = schema_override or {}
         self._schema: Mapping[str, Any] | None = None
         super().__init__(authenticator=auth)
 
@@ -210,20 +206,20 @@ class SuiteqlStream(HttpStream):
         )
         raise_for_netsuite_status(response)
         records = response.json().get("items", [])
-        processor = SchemaProcessor()
+        properties = dict(SchemaProcessor.infer(records))
+        schema_hint = self._schema_hint()
+        for field, field_schema in schema_hint.get("properties", {}).items():
+            properties.setdefault(field, field_schema)
 
-        for record in records:
-            processor.add(record)
-
-        discovered_fields = {field for record in records for field in record}
-        for field, field_type in self.schema_override.items():
-            if field not in discovered_fields:
-                processor.add_type(field, field_type)
-
-        properties = processor.properties
         schema: SuiteQLJsonSchema = {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",
             "properties": properties,
         }
         self._schema = schema
+
+    def _schema_hint(self) -> Mapping[str, Any]:
+        schema_path = files("source_netsuite_suiteql").joinpath("schemas", f"{self.table_name}.json")
+        if not schema_path.is_file():
+            return {}
+        return json.loads(schema_path.read_text(encoding="utf-8"))

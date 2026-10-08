@@ -39,41 +39,12 @@ def test_streams_build_named_query_stream() -> None:
     assert stream.request_body_json() == {"q": "SELECT * FROM transaction"}
 
 
-def test_streams_pass_schema_override_to_discovery() -> None:
-    config = {
-        **CONFIG,
-        "tables": [
-            {
-                "table_name": "transactionLine",
-                "schema_override": [
-                    {
-                        "field_name": "custcol_can_percent_complete",
-                        "field_type": "number",
-                    },
-                    {"field_name": "item", "field_type": "string"},
-                ],
-            }
-        ],
-    }
-
-    stream = SourceNetsuiteSuiteql().streams(config)[0]
-
-    assert stream.schema_override == {
-        "custcol_can_percent_complete": "number",
-        "item": "string",
-    }
-
-
 @pytest.mark.parametrize(
     "table",
     [
         {"table_name": "contains spaces"},
         {"table_name": "1_starts_with_number"},
         {"table_name": "contains-hyphen"},
-        {
-            "table_name": "transaction",
-            "schema_override": [{"field_name": "invalid-field", "field_type": "string"}],
-        },
     ],
 )
 def test_streams_reject_invalid_identifiers(table: dict) -> None:

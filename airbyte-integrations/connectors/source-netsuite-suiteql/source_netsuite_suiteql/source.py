@@ -87,6 +87,7 @@ class SourceNetsuiteSuiteql(AbstractSource):
             configured_table = dict(table)
 
             if configured_stream:
+                fields = SuiteQLCatalogStreamValidator(configured_stream).table_fields()
                 configured_table.update(fields)
                 SuiteQLTableValidator(configured_table).validate()
 
@@ -152,7 +153,6 @@ class SourceNetsuiteSuiteql(AbstractSource):
             auth=auth,
             primary_key=table.get("primary_key", []),
             cursor_field=table.get("cursor_field"),
-            schema_override={override["field_name"]: override["field_type"] for override in table.get("schema_override", [])},
         )
 
     def _configured_streams_by_name(

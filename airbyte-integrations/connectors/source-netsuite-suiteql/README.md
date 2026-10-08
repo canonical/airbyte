@@ -31,7 +31,7 @@ records.
 | `consumer_secret` | Yes | Integration consumer secret. |
 | `token_key` | Yes | Access token ID. |
 | `token_secret` | Yes | Access token secret. |
-| `tables` | Yes | One or more table definitions containing `table_name` and an optional `schema_override`. |
+| `tables` | Yes | One or more table definitions containing `table_name`. |
 | `page_size` | No | Rows requested per page, from 1 to 1000. Defaults to 1000. |
 
 Table names must start with a letter or underscore and contain only letters,
@@ -49,16 +49,7 @@ Example configuration using non-production placeholders:
   "token_secret": "<token_secret>",
   "tables": [
     {
-      "table_name": "transactionLine",
-      "schema_override": [
-        {"field_name": "custcol_ns_can_contract", "field_type": "string"},
-        {"field_name": "netamount", "field_type": "number"},
-        {"field_name": "custcol_can_percent_complete", "field_type": "number"},
-        {"field_name": "item", "field_type": "string"},
-        {"field_name": "custcol_ns_can_oli", "field_type": "string"},
-        {"field_name": "cseg_lobs", "field_type": "string"},
-        {"field_name": "cseg_revenue_family", "field_type": "string"}
-      ]
+      "table_name": "transactionLine"
     }
   ],
   "page_size": 1000
@@ -78,11 +69,11 @@ It returns the response `items` as records and follows NetSuite's `hasMore`,
 Discovery runs `SELECT *` for each configured table and infers its stream schema
 from a sample of returned rows. An empty result therefore produces a stream with
 an open, empty object schema until a row is available on a later discovery.
-NetSuite may also omit fields whose values are null. Add known fields to the
-table's `schema_override` list when they must be present in the discovered schema.
-The override is appended to sampled fields: it does not remove inferred fields,
-and conflicting configured and observed types are combined. Supported configured
-types are `string`, `number`, `integer`, `boolean`, `object`, and `array`.
+NetSuite may also omit fields whose values are null. The connector loads optional
+schema hints from `source_netsuite_suiteql/schemas/<table_name>.json` and appends
+properties that were absent from the sampled rows. Sampled fields and their
+inferred types take precedence, so schema hints do not constrain other fields.
+The packaged `transactionLine.json` includes known nullable custom fields.
 NetSuite may normalize field names to lowercase.
 
 Every table supports full refresh and incremental sync. Configure the primary
@@ -154,8 +145,8 @@ abctl local install
 In **Workspace settings** > **Sources**, choose **New connector** > **Add a new
 Docker connector**. Set the image name to `airbyte/source-netsuite-suiteql` and
 the tag to `dev`. Ensure the Airbyte deployment can access that image. You can
-then create a source with table names and optional schema overrides, refresh the
-schema, and choose the primary key and cursor in the connection catalog.
+then create a source with table names, refresh the schema, and choose the primary
+key and cursor in the connection catalog.
 
 Make the rebuilt image available to the deployment after each `make build`
 before starting another sync.

@@ -54,31 +54,6 @@ connectionSpecification:
             type: string
             title: Table Name
             pattern: ^[A-Za-z_][A-Za-z0-9_]*$
-          schema_override:
-            type: array
-            title: Schema Overrides
-            description: Optional fields appended to the schema inferred from sampled rows. Existing inferred fields and types are preserved.
-            items:
-              type: object
-              additionalProperties: false
-              required:
-                - field_name
-                - field_type
-              properties:
-                field_name:
-                  type: string
-                  title: Field Name
-                  pattern: ^[A-Za-z_][A-Za-z0-9_]*$
-                field_type:
-                  type: string
-                  title: Field Type
-                  enum:
-                    - string
-                    - number
-                    - integer
-                    - boolean
-                    - object
-                    - array
     page_size:
       type: integer
       title: Page Size

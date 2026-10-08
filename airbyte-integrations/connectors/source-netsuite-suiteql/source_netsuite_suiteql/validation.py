@@ -20,16 +20,10 @@ class SuiteQLTableFields(TypedDict):
     cursor_field: str | None
 
 
-class SuiteQLSchemaOverride(TypedDict):
-    field_name: str
-    field_type: str
-
-
 class SuiteQLTableConfig(TypedDict):
     table_name: str
     primary_key: NotRequired[list[str]]
     cursor_field: NotRequired[str | None]
-    schema_override: NotRequired[list[SuiteQLSchemaOverride]]
 
 
 class SuiteQLSourceConfig(TypedDict):
@@ -58,7 +52,6 @@ class SuiteQLTableValidator:
         identifiers = [
             self.table["table_name"],
             *self.table.get("primary_key", []),
-            *[override["field_name"] for override in self.table.get("schema_override", [])],
         ]
         if cursor_field := self.table.get("cursor_field"):
             identifiers.append(cursor_field)
