@@ -427,7 +427,7 @@ streams:
         $ref: "#/definitions/linked/SimpleRetriever/paginator"
       requester:
         type: HttpRequester
-        url: "{{ config['api_host'] }}/1.0/courses"
+        url: "{{ config['api_host'] }}/2.0/courses"
         http_method: GET
         authenticator:
           $ref: "#/definitions/linked/HttpRequester/authenticator"
@@ -453,50 +453,11 @@ streams:
             type: [integer, "null"]
           name:
             type: [string, "null"]
-          description:
+          url:
             type: [string, "null"]
-        additionalProperties: true
-
-  - type: DeclarativeStream
-    name: training_completions
-    retriever:
-      type: SimpleRetriever
-      paginator:
-        $ref: "#/definitions/linked/SimpleRetriever/paginator"
-      requester:
-        type: HttpRequester
-        url: "{{ config['api_host'] }}/1.0/trainingcompletions"
-        http_method: GET
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_headers:
-          $ref: "#/definitions/linked/HttpRequester/request_headers"
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - data
-    primary_key:
-      - id
-    schema_loader:
-      type: InlineSchemaLoader
-      schema:
-        type: object
-        $schema: http://json-schema.org/draft-07/schema#
-        properties:
-          id:
-            type: [integer, "null"]
-          person_id:
-            type: [integer, "null"]
-          course_id:
-            type: [integer, "null"]
-          status:
+          last_update:
             type: [string, "null"]
-          completion_date:
-            type: [string, "null"]
+            format: date
         additionalProperties: true
 
   - type: DeclarativeStream
