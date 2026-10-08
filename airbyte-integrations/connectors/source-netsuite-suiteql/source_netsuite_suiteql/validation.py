@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 import re
-from typing import Any, Mapping, NotRequired, TypedDict
+from typing import Any, Iterable, Mapping, NotRequired, TypedDict
 
 from airbyte_cdk.models import ConfiguredAirbyteStream, SyncMode
 
@@ -42,6 +42,14 @@ class SuiteQLSourceConfig(TypedDict):
     page_size: NotRequired[int]
 
 
+class SuiteQLIdentifierValidator:
+    @staticmethod
+    def validate(identifiers: Iterable[str]) -> None:
+        invalid_identifiers = [identifier for identifier in identifiers if not IDENTIFIER_PATTERN.fullmatch(identifier)]
+        if invalid_identifiers:
+            raise InvalidIdentifierError(invalid_identifiers)
+
+
 class SuiteQLTableValidator:
     def __init__(self, table: Mapping[str, Any]):
         self.table = table
@@ -50,21 +58,12 @@ class SuiteQLTableValidator:
         identifiers = [
             self.table["table_name"],
             *self.table.get("primary_key", []),
-            *[
-                override["field_name"]
-                for override in self.table.get("schema_override", [])
-            ],
+            *[override["field_name"] for override in self.table.get("schema_override", [])],
         ]
         if cursor_field := self.table.get("cursor_field"):
             identifiers.append(cursor_field)
 
-        invalid_identifiers = []
-        for identifier in identifiers:
-            if not IDENTIFIER_PATTERN.fullmatch(identifier):
-                invalid_identifiers.append(identifier)
-
-        if invalid_identifiers:
-            raise InvalidIdentifierError(invalid_identifiers)
+        SuiteQLIdentifierValidator.validate(identifiers)
 
 
 class SuiteQLCatalogStreamValidator:
@@ -86,6 +85,12 @@ class SuiteQLCatalogStreamValidator:
 
         primary_key = self._top_level_fields(configured_key, "primary key")
         cursor_field = self._single_top_level_field(configured_cursor, "cursor field")
+
+        identifiers = [*primary_key]
+        if cursor_field is not None:
+            identifiers.append(cursor_field)
+
+        SuiteQLIdentifierValidator.validate(identifiers)
 
         if self.configured_stream.sync_mode == SyncMode.incremental and not cursor_field:
             raise MissingCatalogCursorFieldError(self.configured_stream.stream.name)

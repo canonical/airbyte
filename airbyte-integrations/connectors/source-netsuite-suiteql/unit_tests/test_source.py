@@ -72,9 +72,7 @@ def test_streams_pass_schema_override_to_discovery() -> None:
         {"table_name": "contains-hyphen"},
         {
             "table_name": "transaction",
-            "schema_override": [
-                {"field_name": "invalid-field", "field_type": "string"}
-            ],
+            "schema_override": [{"field_name": "invalid-field", "field_type": "string"}],
         },
     ],
 )
@@ -109,6 +107,30 @@ def test_stream_is_configured_from_the_catalog() -> None:
         "primary_key": ["id"],
         "cursor_field": "lastmodifiedat",
     }
+
+
+@pytest.mark.parametrize(
+    ("primary_key", "cursor_field", "invalid_identifier"),
+    [
+        ([["id; DROP TABLE transaction"]], ["lastmodifiedat"], "id; DROP TABLE transaction"),
+        ([["id"]], ["lastmodifiedat DESC"], "lastmodifiedat DESC"),
+    ],
+)
+def test_catalog_rejects_invalid_identifiers(
+    primary_key: list[list[str]],
+    cursor_field: list[str],
+    invalid_identifier: str,
+) -> None:
+    configured_stream = ConfiguredAirbyteStream(
+        stream=AirbyteStream(name="transaction", json_schema={}, supported_sync_modes=[SyncMode.incremental]),
+        sync_mode=SyncMode.incremental,
+        destination_sync_mode=DestinationSyncMode.append_dedup,
+        primary_key=primary_key,
+        cursor_field=cursor_field,
+    )
+
+    with pytest.raises(InvalidIdentifierError, match=invalid_identifier):
+        SuiteQLCatalogStreamValidator(configured_stream).table_fields()
 
 
 def test_catalog_requires_cursor_for_incremental_streams() -> None:
