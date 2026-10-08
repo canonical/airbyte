@@ -44,10 +44,17 @@ def test_streams_build_named_query_stream() -> None:
 def test_base_url_accepts_documented_realms(realm: str) -> None:
     config = {**CONFIG, "realm": realm}
 
-    assert SourceNetsuiteSuiteql().base_url(config) == f"https://{realm.replace('_', '-').lower()}.suitetalk.api.netsuite.com"
+    expected_subdomain = realm.replace("_", "-").lower()
+    expected_url = (
+        f"https://{expected_subdomain}.suitetalk.api.netsuite.com"
+    )
+    assert SourceNetsuiteSuiteql().base_url(config) == expected_url
 
 
-@pytest.mark.parametrize("realm", ["evil.example/", "evil.example?", "evil.example#"])
+@pytest.mark.parametrize(
+    "realm",
+    ["incorrect.example/", "incorrect.example?", "incorrect.example#"],
+)
 def test_base_url_rejects_invalid_realms(realm: str) -> None:
     config = {**CONFIG, "realm": realm}
 

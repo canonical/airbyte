@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 import re
-from typing import Any, Iterable, Mapping, NotRequired, TypedDict
+from typing import Any, Iterable, Mapping, TypedDict
 
 from airbyte_cdk.models import ConfiguredAirbyteStream, SyncMode
+from typing_extensions import NotRequired
 
 from .errors import (
     InvalidIdentifierError,
