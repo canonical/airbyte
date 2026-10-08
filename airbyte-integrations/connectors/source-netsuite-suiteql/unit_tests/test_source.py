@@ -45,9 +45,7 @@ def test_base_url_accepts_documented_realms(realm: str) -> None:
     config = {**CONFIG, "realm": realm}
 
     expected_subdomain = realm.replace("_", "-").lower()
-    expected_url = (
-        f"https://{expected_subdomain}.suitetalk.api.netsuite.com"
-    )
+    expected_url = f"https://{expected_subdomain}.suitetalk.api.netsuite.com"
     assert SourceNetsuiteSuiteql().base_url(config) == expected_url
 
 

@@ -2,8 +2,9 @@
 import re
 from typing import Any, Iterable, Mapping, TypedDict
 
-from airbyte_cdk.models import ConfiguredAirbyteStream, SyncMode
 from typing_extensions import NotRequired
+
+from airbyte_cdk.models import ConfiguredAirbyteStream, SyncMode
 
 from .errors import (
     InvalidIdentifierError,
