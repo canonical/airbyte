@@ -219,7 +219,7 @@ class SuiteqlStream(HttpStream):
         self._schema = schema
 
     def _schema_hint(self) -> Mapping[str, Any]:
-        schema_path = files("source_netsuite_suiteql").joinpath("schemas", f"{self.table_name}.json")
+        schema_path = files("source_netsuite_suiteql").joinpath("schemas", f"{self.table_name.lower()}.json")
         if not schema_path.is_file():
             return {}
         return json.loads(schema_path.read_text(encoding="utf-8"))

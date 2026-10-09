@@ -132,6 +132,8 @@ def test_discover_appends_packaged_schema_for_empty_objects(
         "amortizstartdate": {"type": ["null", "string"]},
         "amortizationenddate": {"type": ["null", "string"]},
         "cseg_sales_type": {"type": ["null", "string"]},
+        "custcol_ns_can_rev_rec_start_date": {"type": ["null", "string"]},
+        "custcol_ns_can_rev_rec_end_date": {"type": ["null", "string"]},
     }
 
 

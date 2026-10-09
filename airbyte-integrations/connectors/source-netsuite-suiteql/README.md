@@ -70,10 +70,11 @@ Discovery runs `SELECT *` for each configured table and infers its stream schema
 from a sample of returned rows. An empty result therefore produces a stream with
 an open, empty object schema until a row is available on a later discovery.
 NetSuite may also omit fields whose values are null. The connector loads optional
-schema hints from `source_netsuite_suiteql/schemas/<table_name>.json` and appends
+schema hints from `source_netsuite_suiteql/schemas/<table_name>.json`, matching the
+table name case-insensitively (hint files use lowercase names), and appends
 properties that were absent from the sampled rows. Sampled fields and their
 inferred types take precedence, so schema hints do not constrain other fields.
-The packaged `transactionLine.json` includes known nullable custom fields.
+The packaged `transactionline.json` includes known nullable custom fields.
 NetSuite may normalize field names to lowercase.
 
 Every table supports full refresh and incremental sync. Configure the primary

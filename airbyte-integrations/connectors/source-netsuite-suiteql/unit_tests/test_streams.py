@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Airbyte, Inc., all rights reserved.
 
+import pytest
 from requests_oauthlib import OAuth1
 from source_netsuite_suiteql.streams import SuiteqlStream
 
@@ -74,6 +75,13 @@ def test_get_json_schema_appends_only_undiscovered_schema_hints(requests_mock) -
     assert schema["properties"]["custcol_can_percent_complete"] == {"type": ["null", "string"]}
     assert schema["properties"]["item"] == {"type": ["null", "string"]}
     assert schema["properties"]["netamount"] == {"type": ["null", "number"]}
+
+
+@pytest.mark.parametrize("table_name", ["transactionLine", "transactionline", "TRANSACTIONLINE"])
+def test_schema_hint_lookup_ignores_table_name_case(table_name: str) -> None:
+    hint = make_stream(table_name=table_name)._schema_hint()
+
+    assert "custcol_ns_can_contract" in hint["properties"]
 
 
 def test_incremental_stream_uses_state_for_cursor_parameter_and_deduplication() -> None:
