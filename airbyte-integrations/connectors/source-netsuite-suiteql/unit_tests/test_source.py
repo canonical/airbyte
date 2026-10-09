@@ -40,7 +40,7 @@ def test_streams_build_named_query_stream() -> None:
     assert stream.request_body_json() == {"q": "SELECT * FROM transaction"}
 
 
-@pytest.mark.parametrize("realm", ["2344535", "2344535_SB1"])
+@pytest.mark.parametrize("realm", ["2344535", "2344535_SB1", "1184040-sb1"])
 def test_base_url_accepts_documented_realms(realm: str) -> None:
     config = {**CONFIG, "realm": realm}
 

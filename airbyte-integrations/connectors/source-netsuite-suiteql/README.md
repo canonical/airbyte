@@ -26,7 +26,7 @@ records.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `realm` | Yes | NetSuite account ID, such as `2344535` or `2344535_SB1`. |
+| `realm` | Yes | NetSuite account ID, such as `2344535`, `2344535_SB1`, or `2344535-sb1`. |
 | `consumer_key` | Yes | Integration consumer key. |
 | `consumer_secret` | Yes | Integration consumer secret. |
 | `token_key` | Yes | Access token ID. |
