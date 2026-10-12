@@ -12,9 +12,6 @@
     "custcol_can_percent_complete": {
       "type": ["null", "number"]
     },
-    "item": {
-      "type": ["null", "string"]
-    },
     "custcol_ns_can_oli": {
       "type": ["null", "string"]
     },
