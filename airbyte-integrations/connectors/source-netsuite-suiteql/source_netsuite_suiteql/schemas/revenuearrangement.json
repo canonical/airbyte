@@ -3,9 +3,9 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
-    "id": {"type": ["null", "integer"]},
-    "tranid": {"type": ["null", "string"]},
-    "subsidiary": {"type": ["null", "integer"]},
-    "cseg_sales_type": {"type": ["null", "integer"]}
+    "id": { "type": ["null", "integer"] },
+    "tranid": { "type": ["null", "string"] },
+    "subsidiary": { "type": ["null", "integer"] },
+    "cseg_sales_type": { "type": ["null", "integer"] }
   }
 }

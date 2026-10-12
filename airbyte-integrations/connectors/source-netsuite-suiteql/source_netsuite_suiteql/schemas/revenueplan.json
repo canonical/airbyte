@@ -3,18 +3,18 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
-    "item": {"type": ["null", "integer"]},
-    "statusfordisplay": {"type": ["null", "string"]},
-    "recognitionmethod": {"type": ["null", "string"]},
-    "amount": {"type": ["null", "number"]},
-    "recordnumber": {"type": ["null", "string"]},
-    "accountingbook": {"type": ["null", "integer"]},
-    "createdfrom": {"type": ["null", "integer"]},
-    "exchangerate": {"type": ["null", "number"]},
-    "revenueplantype": {"type": ["null", "string"]},
-    "revenueplancurrency": {"type": ["null", "string"]},
-    "revenuerecognitionrule": {"type": ["null", "integer"]},
-    "id": {"type": ["null", "integer"]},
-    "holdrevenuerecognition": {"type": ["null", "boolean"]}
+    "item": { "type": ["null", "integer"] },
+    "statusfordisplay": { "type": ["null", "string"] },
+    "recognitionmethod": { "type": ["null", "string"] },
+    "amount": { "type": ["null", "number"] },
+    "recordnumber": { "type": ["null", "string"] },
+    "accountingbook": { "type": ["null", "integer"] },
+    "createdfrom": { "type": ["null", "integer"] },
+    "exchangerate": { "type": ["null", "number"] },
+    "revenueplantype": { "type": ["null", "string"] },
+    "revenueplancurrency": { "type": ["null", "string"] },
+    "revenuerecognitionrule": { "type": ["null", "integer"] },
+    "id": { "type": ["null", "integer"] },
+    "holdrevenuerecognition": { "type": ["null", "boolean"] }
   }
 }
