@@ -3,6 +3,9 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
+    "lineLastModifiedDate": {
+      "type": ["null", "string"]
+    },
     "custcol_ns_can_contract": {
       "type": ["null", "string"]
     },
