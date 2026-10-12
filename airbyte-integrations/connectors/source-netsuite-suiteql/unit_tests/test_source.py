@@ -90,22 +90,22 @@ def test_stream_is_configured_from_the_catalog() -> None:
                 sync_mode=SyncMode.incremental,
                 destination_sync_mode=DestinationSyncMode.append_dedup,
                 primary_key=[["id"]],
-                cursor_field=["lastmodifiedat"],
+                cursor_field=["lastmodifieddate"],
             )
         ]
     )
 
     assert SuiteQLCatalogStreamValidator(catalog.streams[0]).table_fields() == {
         "primary_key": ["id"],
-        "cursor_field": "lastmodifiedat",
+        "cursor_field": "lastmodifieddate",
     }
 
 
 @pytest.mark.parametrize(
     ("primary_key", "cursor_field", "invalid_identifier"),
     [
-        ([["id; DROP TABLE transaction"]], ["lastmodifiedat"], "id; DROP TABLE transaction"),
-        ([["id"]], ["lastmodifiedat DESC"], "lastmodifiedat DESC"),
+        ([["id; DROP TABLE transaction"]], ["lastmodifieddate"], "id; DROP TABLE transaction"),
+        ([["id"]], ["lastmodifieddate DESC"], "lastmodifieddate DESC"),
     ],
 )
 def test_catalog_rejects_invalid_identifiers(
@@ -142,7 +142,7 @@ def test_catalog_rejects_nested_primary_keys() -> None:
         sync_mode=SyncMode.incremental,
         destination_sync_mode=DestinationSyncMode.append_dedup,
         primary_key=[["metadata", "id"]],
-        cursor_field=["lastmodifiedat"],
+        cursor_field=["lastmodifieddate"],
     )
 
     with pytest.raises(NestedCatalogFieldError, match="primary key"):
@@ -154,7 +154,7 @@ def test_catalog_rejects_multiple_cursor_fields() -> None:
         stream=AirbyteStream(name="transaction", json_schema={}, supported_sync_modes=[SyncMode.incremental]),
         sync_mode=SyncMode.incremental,
         destination_sync_mode=DestinationSyncMode.append,
-        cursor_field=["lastmodifiedat", "createdat"],
+        cursor_field=["lastmodifieddate", "createdat"],
     )
 
     with pytest.raises(MultipleCatalogFieldsError, match="cursor field"):

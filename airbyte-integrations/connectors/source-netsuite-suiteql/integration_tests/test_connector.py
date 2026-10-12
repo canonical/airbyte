@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
 from source_netsuite_suiteql.source import SourceNetsuiteSuiteql
 
 from airbyte_cdk.models import (
@@ -22,7 +23,9 @@ from airbyte_cdk.test.entrypoint_wrapper import discover, read
 
 
 INTEGRATION_TESTS_DIR = Path(__file__).parent
+SCHEMAS_DIR = INTEGRATION_TESTS_DIR.parent / "source_netsuite_suiteql" / "schemas"
 ENDPOINT = "https://12345-sb1.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql"
+PACKAGED_SCHEMA_TABLES = ["transactionLine", "revenuearrangement", "revenueelement", "revenueplan", "revenueplanplannedrevenue"]
 
 
 def load_json(file_name: str):
@@ -31,6 +34,10 @@ def load_json(file_name: str):
 
 def load_expected_records():
     return [json.loads(line) for line in (INTEGRATION_TESTS_DIR / "expected_records.jsonl").read_text().splitlines()]
+
+
+def load_packaged_schema(table_name: str):
+    return json.loads((SCHEMAS_DIR / f"{table_name.lower()}.json").read_text())
 
 
 def configured_catalog() -> ConfiguredAirbyteCatalog:
@@ -56,7 +63,7 @@ def configured_incremental_catalog() -> ConfiguredAirbyteCatalog:
                     source_defined_cursor=False,
                 ),
                 sync_mode=SyncMode.incremental,
-                cursor_field=["lastmodifiedat"],
+                cursor_field=["lastmodifieddate"],
                 primary_key=[["id"]],
                 destination_sync_mode=DestinationSyncMode.append_dedup,
             )
@@ -87,7 +94,7 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     requests_mock.post(
         ENDPOINT,
         json={
-            "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
+            "items": [{"id": "101", "lastmodifieddate": "2024-06-01T12:00:00Z"}],
             "count": 1,
             "offset": 0,
             "hasMore": False,
@@ -103,37 +110,26 @@ def test_discover_infers_a_full_refresh_stream(requests_mock) -> None:
     assert stream.default_cursor_field == []
     assert stream.json_schema["properties"] == {
         "id": {"type": ["null", "string"]},
-        "lastmodifiedat": {"type": ["null", "string"]},
+        "lastmodifieddate": {"type": ["null", "string"]},
     }
     assert requests_mock.last_request.qs == {"limit": ["100"], "offset": ["0"]}
 
 
-def test_discover_appends_packaged_schema_for_empty_objects(
-    requests_mock,
-) -> None:
+@pytest.mark.parametrize("table_name", PACKAGED_SCHEMA_TABLES)
+def test_discover_appends_packaged_schema_for_empty_objects(requests_mock, table_name) -> None:
     requests_mock.post(
         ENDPOINT,
         json={"items": [{}, {}], "count": 2, "offset": 0, "hasMore": False},
     )
     config = load_json("sample_config.json")
-    config["tables"][0]["table_name"] = "transactionLine"
+    config["tables"][0]["table_name"] = table_name
 
     output = discover(SourceNetsuiteSuiteql(), config)
 
-    assert output.catalog.catalog.streams[0].json_schema["properties"] == {
-        "custcol_ns_can_contract": {"type": ["null", "string"]},
-        "netamount": {"type": ["null", "number"]},
-        "custcol_can_percent_complete": {"type": ["null", "number"]},
-        "custcol_ns_can_oli": {"type": ["null", "string"]},
-        "cseg_lobs": {"type": ["null", "string"]},
-        "cseg_revenue_family": {"type": ["null", "string"]},
-        "expenseaccount": {"type": ["null", "string"]},
-        "amortizstartdate": {"type": ["null", "string"]},
-        "amortizationenddate": {"type": ["null", "string"]},
-        "cseg_sales_type": {"type": ["null", "string"]},
-        "custcol_ns_can_rev_rec_start_date": {"type": ["null", "string"]},
-        "custcol_ns_can_rev_rec_end_date": {"type": ["null", "string"]},
-    }
+    expected_properties = load_packaged_schema(table_name)["properties"]
+    assert output.catalog.catalog.streams[0].json_schema["properties"] == expected_properties
+    if table_name.startswith("revenue"):
+        assert expected_properties["lastmodifieddate"] == {"type": ["null", "string"]}
 
 
 def test_read_emits_records_across_pages(requests_mock) -> None:
@@ -142,7 +138,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
         [
             {
                 "json": {
-                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
+                    "items": [{"id": "101", "lastmodifieddate": "2024-06-01T12:00:00Z"}],
                     "count": 1,
                     "offset": 0,
                     "hasMore": False,
@@ -150,7 +146,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
             },
             {
                 "json": {
-                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
+                    "items": [{"id": "101", "lastmodifieddate": "2024-06-01T12:00:00Z"}],
                     "count": 1,
                     "offset": 0,
                     "hasMore": True,
@@ -158,7 +154,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
             },
             {
                 "json": {
-                    "items": [{"id": "101", "lastmodifiedat": "2024-06-01T12:00:00Z"}],
+                    "items": [{"id": "101", "lastmodifieddate": "2024-06-01T12:00:00Z"}],
                     "count": 1,
                     "offset": 0,
                     "hasMore": False,
@@ -166,7 +162,7 @@ def test_read_emits_records_across_pages(requests_mock) -> None:
             },
             {
                 "json": {
-                    "items": [{"id": "102", "lastmodifiedat": "2024-06-02T12:00:00Z"}],
+                    "items": [{"id": "102", "lastmodifieddate": "2024-06-02T12:00:00Z"}],
                     "count": 1,
                     "offset": 1,
                     "hasMore": False,
@@ -192,14 +188,14 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
             type=AirbyteStateType.STREAM,
             stream=AirbyteStreamState(
                 stream_descriptor=StreamDescriptor(name="transaction", namespace=None),
-                stream_state=AirbyteStateBlob(lastmodifiedat="2024-06-02 00:00:00"),
+                stream_state=AirbyteStateBlob(lastmodifieddate="2024-06-02 00:00:00"),
             ),
         )
     ]
     requests_mock.post(
         ENDPOINT,
         json={
-            "items": [{"id": "103", "lastmodifiedat": "2024-06-03T00:00:00Z", "cursor_ts": "2024-06-03 00:00:00"}],
+            "items": [{"id": "103", "lastmodifieddate": "2024-06-03T00:00:00Z", "cursor_ts": "2024-06-03 00:00:00"}],
             "count": 1,
             "offset": 0,
             "hasMore": False,
@@ -208,6 +204,6 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
 
     output = read(SourceNetsuiteSuiteql(), config, configured_incremental_catalog(), state=state)
 
-    assert [message.record.data for message in output.records] == [{"id": "103", "lastmodifiedat": "2024-06-03 00:00:00"}]
+    assert [message.record.data for message in output.records] == [{"id": "103", "lastmodifieddate": "2024-06-03 00:00:00"}]
     assert any(request.json().get("params") == ["2024-06-02 00:00:00"] for request in requests_mock.request_history)
-    assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(lastmodifiedat="2024-06-03 00:00:00")
+    assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(lastmodifieddate="2024-06-03 00:00:00")

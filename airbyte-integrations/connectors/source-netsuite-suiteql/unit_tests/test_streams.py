@@ -57,12 +57,12 @@ def test_get_json_schema_merges_types_across_sampled_records(requests_mock) -> N
     endpoint = "https://12345.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql"
     requests_mock.post(
         endpoint,
-        json={"items": [{"id": "101", "lastmodifiedat": None}, {"id": "102", "lastmodifiedat": "2024-06-01T12:00:00Z"}]},
+        json={"items": [{"id": "101", "lastmodifieddate": None}, {"id": "102", "lastmodifieddate": "2024-06-01T12:00:00Z"}]},
     )
 
     schema = make_stream().get_json_schema()
 
-    assert schema["properties"]["lastmodifiedat"] == {"type": ["null", "string"]}
+    assert schema["properties"]["lastmodifieddate"] == {"type": ["null", "string"]}
 
 
 def test_get_json_schema_appends_only_undiscovered_schema_hints(requests_mock) -> None:

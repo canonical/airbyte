@@ -3,6 +3,7 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
+    "lastmodifieddate": { "type": ["null", "string"] },
     "cseg_revenue_family": { "type": ["null", "integer"] },
     "cseg_sales_type": { "type": ["null", "integer"] },
     "recordnumber": { "type": ["null", "string"] },

@@ -3,6 +3,7 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
+    "lastmodifieddate": { "type": ["null", "string"] },
     "item": { "type": ["null", "integer"] },
     "statusfordisplay": { "type": ["null", "string"] },
     "recognitionmethod": { "type": ["null", "string"] },

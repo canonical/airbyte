@@ -79,7 +79,7 @@ class SuiteQLCatalogStreamValidator:
 
         Examples:
         - `primary_key=[["id"]]` -> `primary_key=["id"]`.
-        - `cursor_field=["lastmodifiedat"]` -> `cursor_field="lastmodifiedat"`.
+        - `cursor_field=["lastmodifieddate"]` -> `cursor_field="lastmodifieddate"`.
         - A full-refresh stream without a cursor returns `cursor_field=None`.
 
         Nested field paths and multiple cursor fields are unsupported by SuiteQL.

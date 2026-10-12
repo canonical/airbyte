@@ -10,7 +10,7 @@
             "id": {
               "type": ["null", "string"]
             },
-            "lastmodifiedat": {
+            "lastmodifieddate": {
               "type": ["null", "string"]
             }
           }
@@ -19,7 +19,7 @@
         "source_defined_cursor": false
       },
       "sync_mode": "incremental",
-      "cursor_field": ["lastmodifiedat"],
+      "cursor_field": ["lastmodifieddate"],
       "primary_key": [["id"]],
       "destination_sync_mode": "append_dedup"
     }
