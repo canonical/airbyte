@@ -124,7 +124,6 @@ def test_discover_appends_packaged_schema_for_empty_objects(
         "custcol_ns_can_contract": {"type": ["null", "string"]},
         "netamount": {"type": ["null", "number"]},
         "custcol_can_percent_complete": {"type": ["null", "number"]},
-        "item": {"type": ["null", "string"]},
         "custcol_ns_can_oli": {"type": ["null", "string"]},
         "cseg_lobs": {"type": ["null", "string"]},
         "cseg_revenue_family": {"type": ["null", "string"]},

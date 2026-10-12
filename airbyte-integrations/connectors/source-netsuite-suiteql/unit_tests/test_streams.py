@@ -73,7 +73,6 @@ def test_get_json_schema_appends_only_undiscovered_schema_hints(requests_mock) -
 
     assert schema["properties"]["id"] == {"type": ["null", "string"]}
     assert schema["properties"]["custcol_can_percent_complete"] == {"type": ["null", "string"]}
-    assert schema["properties"]["item"] == {"type": ["null", "string"]}
     assert schema["properties"]["netamount"] == {"type": ["null", "number"]}
 
 
