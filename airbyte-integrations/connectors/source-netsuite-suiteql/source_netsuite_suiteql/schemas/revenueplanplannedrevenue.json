@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "dateexecuted": {"type": ["null", "string"]},
+    "plannedrevenuetype": {"type": ["null", "string"]},
+    "amount": {"type": ["null", "number"]},
+    "revenueplan": {"type": ["null", "integer"]},
+    "plannedperiod": {"type": ["null", "integer"]},
+    "journal": {"type": ["null", "integer"]},
+    "postingperiod": {"type": ["null", "integer"]},
+    "id": {"type": ["null", "integer"]}
+  }
+}
