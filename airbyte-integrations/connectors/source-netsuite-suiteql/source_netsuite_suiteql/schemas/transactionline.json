@@ -6,6 +6,12 @@
     "lineLastModifiedDate": {
       "type": ["null", "string"]
     },
+    "id": {
+      "type": ["null", "string"]
+    },
+    "uniquekey": {
+      "type": ["null", "string"]
+    },
     "custcol_ns_can_contract": {
       "type": ["null", "string"]
     },
