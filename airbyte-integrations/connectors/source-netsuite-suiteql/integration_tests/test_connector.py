@@ -130,8 +130,6 @@ def test_discover_appends_packaged_schema_for_empty_objects(requests_mock, table
     assert output.catalog.catalog.streams[0].json_schema["properties"] == expected_properties
     if table_name.startswith("revenue"):
         assert expected_properties["lastmodifieddate"] == {"type": ["null", "string"]}
-    if table_name == "transactionLine":
-        assert expected_properties["lineLastModifiedDate"] == {"type": ["null", "string"]}
 
 
 def test_read_emits_records_across_pages(requests_mock) -> None:

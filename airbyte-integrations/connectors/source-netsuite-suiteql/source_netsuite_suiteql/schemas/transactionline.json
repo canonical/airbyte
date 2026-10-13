@@ -3,9 +3,6 @@
   "type": "object",
   "additionalProperties": true,
   "properties": {
-    "lineLastModifiedDate": {
-      "type": ["null", "string"]
-    },
     "id": {
       "type": ["null", "string"]
     },
