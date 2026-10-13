@@ -63,7 +63,7 @@ def configured_incremental_catalog() -> ConfiguredAirbyteCatalog:
                     source_defined_cursor=False,
                 ),
                 sync_mode=SyncMode.incremental,
-                cursor_field=["lineLastModifiedDate"],
+                cursor_field=["linelastmodifieddate"],
                 primary_key=[["id"]],
                 destination_sync_mode=DestinationSyncMode.append_dedup,
             )
@@ -189,14 +189,14 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
             type=AirbyteStateType.STREAM,
             stream=AirbyteStreamState(
                 stream_descriptor=StreamDescriptor(name="transactionLine", namespace=None),
-                stream_state=AirbyteStateBlob(lineLastModifiedDate="2024-06-02 00:00:00"),
+                stream_state=AirbyteStateBlob(linelastmodifieddate="2024-06-02 00:00:00"),
             ),
         )
     ]
     requests_mock.post(
         ENDPOINT,
         json={
-            "items": [{"id": "103", "lineLastModifiedDate": "2024-06-03T00:00:00Z", "cursor_ts": "2024-06-03 00:00:00"}],
+            "items": [{"id": "103", "linelastmodifieddate": "2024-06-03T00:00:00Z", "cursor_ts": "2024-06-03 00:00:00"}],
             "count": 1,
             "offset": 0,
             "hasMore": False,
@@ -205,6 +205,6 @@ def test_incremental_read_uses_state_and_emits_updated_state(requests_mock) -> N
 
     output = read(SourceNetsuiteSuiteql(), config, configured_incremental_catalog(), state=state)
 
-    assert [message.record.data for message in output.records] == [{"id": "103", "lineLastModifiedDate": "2024-06-03 00:00:00"}]
+    assert [message.record.data for message in output.records] == [{"id": "103", "linelastmodifieddate": "2024-06-03 00:00:00"}]
     assert any(request.json().get("params") == ["2024-06-02 00:00:00"] for request in requests_mock.request_history)
-    assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(lineLastModifiedDate="2024-06-03 00:00:00")
+    assert output.state_messages[-1].state.stream.stream_state == AirbyteStateBlob(linelastmodifieddate="2024-06-03 00:00:00")
