@@ -8,7 +8,7 @@ data:
   connectorType: source
   definitionId: 52daad28-f6c0-418c-b2ea-52858dc75ed0
   dockerImageTag: 1.0.0
-  canonicalImageTag: 1.0.0-canonical-1.0.0
+  canonicalImageTag: 1.0.0-canonical-1.0.1
   dockerRepository: airbyte/source-netsuite-suiteql
   documentationUrl: https://docs.airbyte.com/integrations/sources/netsuite-suiteql
   githubIssueLabel: source-netsuite-suiteql
