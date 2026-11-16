@@ -530,8 +530,9 @@ streams:
         additionalProperties: true
 
   - type: DeclarativeStream
-    name: competencies
+    name: person_competencies
     # Competency is a computed measure (skill level vs target) on the Skill Query `person skills` collection.
+    # This stream pulls person-level competencies when person-level targets are configured.
     retriever:
       type: SimpleRetriever
       requester:
@@ -594,6 +595,64 @@ streams:
           competency_self:
             type: [number, "null"]
           competency_supervisor:
+            type: [number, "null"]
+        additionalProperties: true
+
+  - type: DeclarativeStream
+    name: role_competencies
+    # Role-level competency: aggregate of the role's members' ratings vs the role's targets.
+    # Not a per-person value; `0` can mean no member has rated the skill.
+    retriever:
+      type: SimpleRetriever
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/2.0/skillquery"
+        http_method: POST
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+        request_body_json:
+          query: "find role skills show role.id, skill.id, competency sorted by role.id"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+            - rows
+    transformations:
+      # Extract role_id, skill_id, and competency from API response
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path: ["role_id"]
+            value: "{{ (record['values'][0]['data'] | int) if record['values'][0]['data'] is not none else none }}"
+          - type: AddedFieldDefinition
+            path: ["skill_id"]
+            value: "{{ (record['values'][1]['data'] | int) if record['values'][1]['data'] is not none else none }}"
+          - type: AddedFieldDefinition
+            path: ["competency"]
+            value: "{{ record['values'][2]['data'] }}"
+      - type: RemoveFields
+        field_pointers:
+          - ["values"]
+    primary_key:
+      - role_id
+      - skill_id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/draft-07/schema#
+        properties:
+          role_id:
+            type: [integer, "null"]
+          skill_id:
+            type: [integer, "null"]
+          competency:
             type: [number, "null"]
         additionalProperties: true
 

@@ -11,6 +11,8 @@ concurrent-token-cap OAuth flow.
 | `people`                     | `GET /1.0/people`                                         | full refresh, incremental | `id`                    | Cursor: `id` (IncrementingCountCursor). Paginated via `start_index`. |
 | `skill_ratings`              | `GET /1.0/skillratings/person/{person_id}`                | full refresh              | (`person_id`, `skill_id`) | Substream of `people` — one HTTP call per person. `person_id` and `synced_at` are added via record transformations. |
 | `qualifications_assignments` | `GET /2.0/qualificationassignments`                       | full refresh, incremental | `id`                    | Cursor: `id` (IncrementingCountCursor). Paginated via `start_index`. |
+| `person_competencies`        | `POST /2.0/skillquery`                                    | full refresh              | (`person_id`, `skill_id`) | Skill Query API (`find person skills`). Per-person competency, self and supervisor scores. `competency` is null until person-level targets are set. Renamed from `competencies` in 2.0.0. |
+| `role_competencies`          | `POST /2.0/skillquery`                                    | full refresh              | (`role_id`, `skill_id`)   | Skill Query API (`find role skills`). Aggregate competency of a role's members against the role's targets. This is a role-level figure, not a per-person value. `0` can mean no member has rated the skill. |
 
 All streams extract records from the `data` field of the API response.
 
@@ -239,6 +241,7 @@ with `connectors=source-skillsbase`.
 
 | Version | Date       | Summary                                                                                     |
 | ------- | ---------- | ------------------------------------------------------------------------------------------- |
+| 2.0.0   | 2026-11-16 | **Breaking:** rename `competencies` to `person_competencies`; add `role_competencies` stream (role-level competency via the Skill Query API). |
 | 1.3.0   | 2026-10-21 | Add `competencies` stream (person-linked competency via the Skill Query API).               |
 | 1.2.0   | 2026-10-08 | Update `courses` to the `/2.0/courses` schema; migrate `training_completions` to Skill Query. |
 | 1.1.0   |            | Add `hire_date` field to the `people` stream.                                               |
