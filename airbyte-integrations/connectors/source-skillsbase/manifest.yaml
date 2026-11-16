@@ -73,6 +73,41 @@ definitions:
           page_size: 500
           start_from_page: 0
           inject_on_first_request: true
+    # Shared retriever for POST /2.0/skillquery. Streams override only `requester.request_body_json`.
+    # Responses are capped at `limit` rows (default 500) and paged by row offset via `start_index`.
+    SkillQueryRetriever:
+      type: SimpleRetriever
+      requester:
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/2.0/skillquery"
+        http_method: POST
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
+      paginator:
+        type: DefaultPaginator
+        page_token_option:
+          type: RequestOption
+          field_name: start_index
+          inject_into: request_parameter
+        page_size_option:
+          type: RequestOption
+          field_name: limit
+          inject_into: request_parameter
+        pagination_strategy:
+          type: OffsetIncrement
+          page_size: 500
+          inject_on_first_request: true
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+            - rows
 
 streams:
   - type: DeclarativeStream
@@ -464,26 +499,12 @@ streams:
     name: training_completions
     # No REST GET endpoint exists; read via the Skill Query API which returns a table of rows and columns.
     retriever:
-      type: SimpleRetriever
+      $ref: "#/definitions/linked/SkillQueryRetriever"
       requester:
-        type: HttpRequester
-        url: "{{ config['api_host'] }}/2.0/skillquery"
-        http_method: POST
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_headers:
-          $ref: "#/definitions/linked/HttpRequester/request_headers"
+        $ref: "#/definitions/linked/SkillQueryRetriever/requester"
         request_body_json:
-          query: "find training where status = 'completed' show person.id, person.email, course.id, course.name, completionDate sorted by completionDate"
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - data
-            - rows
+          # Sort is unique per row so offset pagination is stable.
+          query: "find training where status = 'completed' show person.id, person.email, course.id, course.name, completionDate sorted by completionDate, person.id, course.id"
     transformations:
       # values[] is positional; indexes must match the `show` clause order.
       - type: AddFields
@@ -534,26 +555,17 @@ streams:
     # Competency is a computed measure (skill level vs target) on the Skill Query `person skills` collection.
     # This stream pulls person-level competencies when person-level targets are configured.
     retriever:
-      type: SimpleRetriever
+      $ref: "#/definitions/linked/SkillQueryRetriever"
       requester:
-        type: HttpRequester
-        url: "{{ config['api_host'] }}/2.0/skillquery"
-        http_method: POST
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_headers:
-          $ref: "#/definitions/linked/HttpRequester/request_headers"
+        $ref: "#/definitions/linked/SkillQueryRetriever/requester"
         request_body_json:
-          query: "find person skills show person.id, skill.id, competency, competency.self, competency.supervisor sorted by person.id"
+          query: "find person skills show person.id, skill.id, competency, competency.self, competency.supervisor sorted by person.id, skill.id"
       record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - data
-            - rows
+        $ref: "#/definitions/linked/SkillQueryRetriever/record_selector"
+        # Drop rows without a primary key rather than emitting null-PK records.
+        record_filter:
+          type: RecordFilter
+          condition: "{{ record['values'][0]['data'] is not none and record['values'][1]['data'] is not none }}"
     transformations:
       # values[] is positional; indexes must match the `show` clause order.
       - type: AddFields
@@ -561,10 +573,10 @@ streams:
           # id values arrive as strings; cast to int. Competency percentages are already numeric (or null).
           - type: AddedFieldDefinition
             path: ["person_id"]
-            value: "{{ (record['values'][0]['data'] | int) if record['values'][0]['data'] is not none else none }}"
+            value: "{{ record['values'][0]['data'] | int }}"
           - type: AddedFieldDefinition
             path: ["skill_id"]
-            value: "{{ (record['values'][1]['data'] | int) if record['values'][1]['data'] is not none else none }}"
+            value: "{{ record['values'][1]['data'] | int }}"
           - type: AddedFieldDefinition
             path: ["competency"]
             value: "{{ record['values'][2]['data'] }}"
@@ -587,9 +599,9 @@ streams:
         $schema: http://json-schema.org/draft-07/schema#
         properties:
           person_id:
-            type: [integer, "null"]
+            type: integer
           skill_id:
-            type: [integer, "null"]
+            type: integer
           competency:
             type: [number, "null"]
           competency_self:
@@ -601,38 +613,31 @@ streams:
   - type: DeclarativeStream
     name: role_competencies
     # Role-level competency: aggregate of the role's members' ratings vs the role's targets.
-    # Not a per-person value; `0` can mean no member has rated the skill.
+    # Not a per-person value. Skill Query reports `0` both for a real 0% and for "no member has
+    # rated the skill"; the response carries no field that distinguishes the two.
     retriever:
-      type: SimpleRetriever
+      $ref: "#/definitions/linked/SkillQueryRetriever"
       requester:
-        type: HttpRequester
-        url: "{{ config['api_host'] }}/2.0/skillquery"
-        http_method: POST
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_headers:
-          $ref: "#/definitions/linked/HttpRequester/request_headers"
+        $ref: "#/definitions/linked/SkillQueryRetriever/requester"
         request_body_json:
-          query: "find role skills show role.id, skill.id, competency sorted by role.id"
+          query: "find role skills show role.id, skill.id, competency sorted by role.id, skill.id"
       record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - data
-            - rows
+        $ref: "#/definitions/linked/SkillQueryRetriever/record_selector"
+        # Drop rows without a primary key rather than emitting null-PK records.
+        record_filter:
+          type: RecordFilter
+          condition: "{{ record['values'][0]['data'] is not none and record['values'][1]['data'] is not none }}"
     transformations:
-      # Extract role_id, skill_id, and competency from API response
+      # values[] is positional; indexes must match the `show` clause order.
       - type: AddFields
         fields:
+          # id values arrive as strings; cast to int. Competency is already numeric.
           - type: AddedFieldDefinition
             path: ["role_id"]
-            value: "{{ (record['values'][0]['data'] | int) if record['values'][0]['data'] is not none else none }}"
+            value: "{{ record['values'][0]['data'] | int }}"
           - type: AddedFieldDefinition
             path: ["skill_id"]
-            value: "{{ (record['values'][1]['data'] | int) if record['values'][1]['data'] is not none else none }}"
+            value: "{{ record['values'][1]['data'] | int }}"
           - type: AddedFieldDefinition
             path: ["competency"]
             value: "{{ record['values'][2]['data'] }}"
@@ -649,9 +654,9 @@ streams:
         $schema: http://json-schema.org/draft-07/schema#
         properties:
           role_id:
-            type: [integer, "null"]
+            type: integer
           skill_id:
-            type: [integer, "null"]
+            type: integer
           competency:
             type: [number, "null"]
         additionalProperties: true

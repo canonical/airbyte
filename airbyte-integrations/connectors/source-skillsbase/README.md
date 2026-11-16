@@ -14,7 +14,16 @@ concurrent-token-cap OAuth flow.
 | `person_competencies`        | `POST /2.0/skillquery`                                    | full refresh              | (`person_id`, `skill_id`) | Skill Query API (`find person skills`). Per-person competency, self and supervisor scores. `competency` is null until person-level targets are set. Renamed from `competencies` in 2.0.0. |
 | `role_competencies`          | `POST /2.0/skillquery`                                    | full refresh              | (`role_id`, `skill_id`)   | Skill Query API (`find role skills`). Aggregate competency of a role's members against the role's targets. This is a role-level figure, not a per-person value. `0` can mean no member has rated the skill. |
 
-All streams extract records from the `data` field of the API response.
+REST streams extract records from the `data` field of the API response. Skill Query streams
+(`training_completions`, `person_competencies`, `role_competencies`) extract from `data.rows`,
+map each row's positional `values[]` to fields, and page by row offset (`start_index`, `limit=500`).
+
+### Upgrading to 2.0.0
+
+`competencies` was renamed to `person_competencies`. After upgrading, refresh the source
+schema, enable `person_competencies`, and reset it. The old `competencies` destination table
+is no longer written to: drop it, or repoint any downstream models (dbt, BI) to
+`person_competencies`.
 
 ## Configuration
 
@@ -122,6 +131,8 @@ what Skills Base considers active.
 | `make discover`       | Discover available streams using `secrets/config.json`.                      |
 | `make read`           | Read all streams using `integration_tests/configured_catalog.json`.          |
 | `make read-qualifications` | Read only `qualifications_assignments` (smallest stream — useful for quick end-to-end checks). |
+| `make read-people`    | Read only `people` using `integration_tests/people_catalog.json`.            |
+| `make read-competencies` | Read only `person_competencies` and `role_competencies` using `integration_tests/competencies_catalog.json`. |
 | `make test-acceptance` | Run Connector Acceptance Tests (rebuilds the image and pre-warms the token first). |
 | `make unit-test`      | Run pure-Python unit tests for `components.py` (no Docker, no Skills Base). First run sets up `unit_tests/.venv` automatically. |
 | `make clean`          | Remove the local dev Docker image.                                            |
@@ -182,6 +193,15 @@ Skills Base, no manifest parsing. Each test runs in milliseconds and covers:
   fallback retry; persistent rate limit → `transient_error`; other 4xx →
   `config_error`; network exception → `transient_error`).
 
+`unit_tests/test_skill_query_streams.py` loads `manifest.yaml` and reads the
+Skill Query streams against a mocked `POST /2.0/skillquery`:
+
+- Positional `values[]` → field mapping and string → integer id casts for
+  `role_competencies` and `person_competencies`.
+- Rows with a null id are dropped instead of emitted with a null primary key.
+- `role_competencies`, `person_competencies`, and `training_completions` page
+  by row offset (`start_index`, `limit=500`) until a short page is returned.
+
 Run with:
 
 ```bash
@@ -241,7 +261,7 @@ with `connectors=source-skillsbase`.
 
 | Version | Date       | Summary                                                                                     |
 | ------- | ---------- | ------------------------------------------------------------------------------------------- |
-| 2.0.0   | 2026-11-16 | **Breaking:** rename `competencies` to `person_competencies`; add `role_competencies` stream (role-level competency via the Skill Query API). |
+| 2.0.0   | 2026-11-16 | **Breaking:** rename `competencies` to `person_competencies`; add `role_competencies` stream (role-level competency via the Skill Query API). Paginate Skill Query streams by row offset (previously capped at 500 rows) and drop rows with null primary keys. |
 | 1.3.0   | 2026-10-21 | Add `competencies` stream (person-linked competency via the Skill Query API).               |
 | 1.2.0   | 2026-10-08 | Update `courses` to the `/2.0/courses` schema; migrate `training_completions` to Skill Query. |
 | 1.1.0   |            | Add `hire_date` field to the `people` stream.                                               |

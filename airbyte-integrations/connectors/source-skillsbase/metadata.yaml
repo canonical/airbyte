@@ -29,7 +29,7 @@ data:
   releases:
     breakingChanges:
       2.0.0:
-        message: The `competencies` stream has been renamed to `person_competencies`, and a new `role_competencies` stream has been added. Users syncing `competencies` should refresh the source schema, select `person_competencies`, and reset it after upgrading.
+        message: The `competencies` stream has been renamed to `person_competencies`, and a new `role_competencies` stream has been added. After upgrading, refresh the source schema, enable `person_competencies`, and reset it. The old `competencies` destination table is no longer written to; drop it or repoint downstream models (dbt, BI) to `person_competencies`.
         upgradeDeadline: "2026-12-16"
         scopedImpact:
           - scopeType: stream
