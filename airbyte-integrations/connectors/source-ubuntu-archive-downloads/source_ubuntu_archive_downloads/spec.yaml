@@ -1,0 +1,158 @@
+documentationUrl: https://github.com/canonical/airbyte/tree/master/airbyte-integrations/connectors/source-ubuntu-archive-downloads
+connectionSpecification:
+  $schema: http://json-schema.org/draft-07/schema#
+  title: Ubuntu Archive Downloads Spec
+  type: object
+  required:
+    - storage
+    - containers
+    - start_date
+    - package_sets
+  additionalProperties: true
+  properties:
+    storage:
+      type: object
+      title: Log Storage
+      description: Where the access log containers are read from.
+      order: 0
+      oneOf:
+        - title: Swift
+          description: One Keystone v3 endpoint and its credentials per Prodstack, since each Prodstack has its own radosgw.
+          required: [type, endpoints]
+          properties:
+            type:
+              type: string
+              const: swift
+              order: 0
+            endpoints:
+              type: array
+              title: Prodstack Endpoints
+              description: Every Prodstack named by a container needs one endpoint here.
+              minItems: 1
+              order: 1
+              items:
+                type: object
+                required: [prodstack, auth_url, username, password, project_name]
+                properties:
+                  prodstack:
+                    type: string
+                    title: Prodstack
+                    description: Matches the prodstack of the containers read through this endpoint.
+                    examples:
+                      - ps5
+                    order: 0
+                  auth_url:
+                    type: string
+                    title: Keystone Auth URL
+                    description: The Keystone v3 auth URL of this Prodstack.
+                    order: 1
+                  username:
+                    type: string
+                    title: Username
+                    order: 2
+                  password:
+                    type: string
+                    title: Password
+                    airbyte_secret: true
+                    order: 3
+                  project_name:
+                    type: string
+                    title: Project Name
+                    description: The OpenStack project (tenant) that owns the log containers.
+                    examples:
+                      - archive_logs_project
+                    order: 4
+                  user_domain_name:
+                    type: string
+                    title: User Domain Name
+                    default: Default
+                    order: 5
+                  project_domain_name:
+                    type: string
+                    title: Project Domain Name
+                    default: Default
+                    order: 6
+        - title: Local Directory
+          description: For testing only. Reads <path>/<container>/<object name> from the connector's filesystem.
+          required: [type, path]
+          properties:
+            type:
+              type: string
+              const: local
+              order: 0
+            path:
+              type: string
+              title: Path
+              order: 1
+    containers:
+      type: array
+      title: Containers
+      description: The Swift containers holding the access logs. Every container is read in each sync.
+      items:
+        type: object
+        required: [name, source, prodstack]
+        properties:
+          name:
+            type: string
+            title: Name
+            examples:
+              - archive-server-logs
+          source:
+            type: string
+            title: Source
+            description: The kind of server these logs come from, stored on every record.
+            enum:
+              - archive_server
+              - ports_server
+              - cloud_mirror
+          prodstack:
+            type: string
+            title: Prodstack
+            description: The Prodstack cloud these logs come from, stored on every record. Swift storage needs an endpoint for it.
+            examples:
+              - ps5
+      minItems: 1
+      order: 1
+    start_date:
+      type: string
+      title: Start Date
+      description: >-
+        The earliest log date to read, in the format YYYY-MM-DD, taken from the date in each log
+        object's name. Changing it on an existing connection needs a state reset to take effect.
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      examples:
+        - "2026-04-01"
+      order: 2
+    lookback_days:
+      type: integer
+      title: Lookback Days
+      description: >-
+        Each sync rechecks this many days back and reads any log object it hasn't read yet, so
+        objects that land late or out of order are not skipped. Set it above the longest upload lag.
+      minimum: 0
+      default: 2
+      order: 3
+    package_sets:
+      type: array
+      title: Package Sets
+      description: Each package set becomes one stream with one record per matching download.
+      minItems: 1
+      order: 4
+      items:
+        type: object
+        required: [name, match]
+        properties:
+          name:
+            type: string
+            title: Name
+            description: The stream name, in lowercase letters, digits and underscores.
+            pattern: "^[a-z][a-z0-9_]*$"
+            examples:
+              - cuda
+          match:
+            type: array
+            title: Match
+            description: Glob patterns on the whole package name, for example cuda-*-13-*.
+            minItems: 1
+            items:
+              type: string

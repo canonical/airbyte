@@ -1,0 +1,71 @@
+{
+  "storage": {
+    "type": "swift",
+    "endpoints": [
+      {
+        "prodstack": "ps5",
+        "auth_url": "<ps5 keystone v3 url>",
+        "username": "<service account>",
+        "password": "<secret>",
+        "project_name": "<project name>"
+      },
+      {
+        "prodstack": "ps6",
+        "auth_url": "<ps6 keystone v3 url>",
+        "username": "<service account>",
+        "password": "<secret>",
+        "project_name": "<project name>"
+      }
+    ]
+  },
+  "containers": [
+    {
+      "name": "<archive servers log container on ps5>",
+      "source": "archive_server",
+      "prodstack": "ps5"
+    },
+    {
+      "name": "<archive servers log container on ps6>",
+      "source": "archive_server",
+      "prodstack": "ps6"
+    },
+    {
+      "name": "<ports servers log container on ps6>",
+      "source": "ports_server",
+      "prodstack": "ps6"
+    }
+  ],
+  "start_date": "2026-04-01",
+  "lookback_days": 2,
+  "package_sets": [
+    {
+      "name": "cuda",
+      "match": [
+        "cuda-*-[0-9]*-*",
+        "cuda-toolkit",
+        "cuda-toolkit-[0-9]*",
+        "cuda-toolkit-config-common",
+        "nvidia-cuda-*",
+        "libcublas*",
+        "libcudart*",
+        "libcufft*",
+        "libcufile*",
+        "libcuinj*",
+        "libcupti*",
+        "libcurand*",
+        "libcusolver*",
+        "libcusparse*",
+        "libnvjpeg*",
+        "libnvjitlink*",
+        "libnvrtc*",
+        "libnvfatbin*",
+        "libnvptxcompiler*",
+        "libnvvm*",
+        "libnpp*",
+        "nsight-compute*",
+        "nsight-systems*",
+        "gds-tools*"
+      ]
+    }
+  ]
+}

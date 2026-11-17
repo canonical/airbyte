@@ -1,0 +1,33 @@
+data:
+  allowedHosts:
+    hosts:
+      - "*" # Keystone and Swift endpoints depend on the deployment
+  registryOverrides:
+    oss:
+      enabled: true
+    cloud:
+      enabled: false
+  remoteRegistries:
+    pypi:
+      enabled: false
+      packageName: airbyte-source-ubuntu-archive-downloads
+  connectorBuildOptions:
+    baseImage: docker.io/airbyte/python-connector-base:4.1.1@sha256:a268b44c733ae699a60f5fbc06a324945dba98945c6e2ab7f8609f2f895b0d28
+  connectorSubtype: file
+  connectorType: source
+  definitionId: 2d16f10e-2537-44e5-8621-cef7182fe17e
+  dockerImageTag: 0.1.0
+  canonicalImageTag: 0.1.0-canonical-1.0.0
+  dockerRepository: airbyte/source-ubuntu-archive-downloads
+  githubIssueLabel: source-ubuntu-archive-downloads
+  license: ELv2
+  name: Ubuntu Archive Downloads
+  releaseDate: 2026-10-28
+  releaseStage: alpha
+  supportLevel: community
+  documentationUrl: https://github.com/canonical/airbyte/tree/master/airbyte-integrations/connectors/source-ubuntu-archive-downloads
+  tags:
+    - language:python
+  connectorTestSuitesOptions:
+    - suite: unitTests
+metadataSpecVersion: "1.0"
