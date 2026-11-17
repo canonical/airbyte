@@ -58,10 +58,7 @@
     },
     {
       "name": "rocm",
-      "match": [
-        "rocm*",
-        "hip*"
-      ]
+      "match": ["rocm*", "hip*"]
     }
   ]
 }

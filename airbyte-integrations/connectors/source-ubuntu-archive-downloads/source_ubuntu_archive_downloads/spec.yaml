@@ -32,7 +32,8 @@ connectionSpecification:
               order: 1
               items:
                 type: object
-                required: [prodstack, auth_url, username, password, project_name]
+                required:
+                  [prodstack, auth_url, username, password, project_name]
                 properties:
                   prodstack:
                     type: string

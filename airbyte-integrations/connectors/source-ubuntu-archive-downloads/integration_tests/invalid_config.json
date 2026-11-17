@@ -14,9 +14,7 @@
   "package_sets": [
     {
       "name": "cuda",
-      "match": [
-        "cuda-*-13-*"
-      ]
+      "match": ["cuda-*-13-*"]
     }
   ]
 }

@@ -4,83 +4,37 @@
       "stream": {
         "name": "cuda",
         "json_schema": {},
-        "supported_sync_modes": [
-          "full_refresh",
-          "incremental"
-        ],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
-        "default_cursor_field": [
-          "log_object"
-        ],
+        "default_cursor_field": ["log_object"],
         "source_defined_primary_key": [
-          [
-            "container"
-          ],
-          [
-            "log_object"
-          ],
-          [
-            "line_number"
-          ]
+          ["container"],
+          ["log_object"],
+          ["line_number"]
         ]
       },
       "sync_mode": "incremental",
-      "cursor_field": [
-        "log_object"
-      ],
+      "cursor_field": ["log_object"],
       "destination_sync_mode": "append_dedup",
-      "primary_key": [
-        [
-          "container"
-        ],
-        [
-          "log_object"
-        ],
-        [
-          "line_number"
-        ]
-      ]
+      "primary_key": [["container"], ["log_object"], ["line_number"]]
     },
     {
       "stream": {
         "name": "rocm",
         "json_schema": {},
-        "supported_sync_modes": [
-          "full_refresh",
-          "incremental"
-        ],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
-        "default_cursor_field": [
-          "log_object"
-        ],
+        "default_cursor_field": ["log_object"],
         "source_defined_primary_key": [
-          [
-            "container"
-          ],
-          [
-            "log_object"
-          ],
-          [
-            "line_number"
-          ]
+          ["container"],
+          ["log_object"],
+          ["line_number"]
         ]
       },
       "sync_mode": "incremental",
-      "cursor_field": [
-        "log_object"
-      ],
+      "cursor_field": ["log_object"],
       "destination_sync_mode": "append_dedup",
-      "primary_key": [
-        [
-          "container"
-        ],
-        [
-          "log_object"
-        ],
-        [
-          "line_number"
-        ]
-      ]
+      "primary_key": [["container"], ["log_object"], ["line_number"]]
     }
   ]
 }
