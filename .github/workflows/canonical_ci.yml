@@ -35,7 +35,9 @@ jobs:
     name: Run connectors full CI on fork
     if: github.event.pull_request.head.repo.fork == true && needs.get_changed_directories_list.outputs.connectors_list_json != '[]'
     needs: [fail_on_protected_path_changes, get_changed_directories_list]
-    runs-on: ubuntu-latest
+    # Pinned: the Dagger 0.13.3 engine used by airbyte-ci fails to start on ubuntu-26.04,
+    # which ubuntu-latest now points to. Unpin once airbyte-ci's Dagger supports 26.04.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
