@@ -192,6 +192,12 @@ Skills Base, no manifest parsing. Each test runs in milliseconds and covers:
   fallback retry; persistent rate limit → `transient_error`; other 4xx →
   `config_error`; network exception → `transient_error`).
 
+`unit_tests/test_people_custom_fields.py` reads the `people` stream from
+`manifest.yaml` against a mocked `GET /1.0/people` and checks the
+`custom_field_{id}` → `hire_date` / `competency` mapping: configured ids map
+values as strings, missing values stay null/empty, and unset or unknown ids
+leave both fields null.
+
 Run with:
 
 ```bash
