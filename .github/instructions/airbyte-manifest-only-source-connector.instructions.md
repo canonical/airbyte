@@ -173,15 +173,17 @@ Ensure all artifacts below are present and coherent:
 #### CI test expectations
 
 1. Assume CI will run all available connector tests for the connector, including Connector QA checks and tests in `unit_tests/` and `integration_tests/`
-2. For local Connector Acceptance runs, use `airbyte-ci` for Airbyte version 1.7 and prepare the environment with non-interactive commands:
+2. For local Connector Acceptance runs, use the `airbyte-cdk` CLI (the upstream replacement for the removed `airbyte-ci`) and prepare the environment with non-interactive commands. These use [Poe the Poet](https://poethepoet.natn.io/) (`poethepoet`), the task runner upstream Airbyte uses to run the shared connector tasks in `poe-tasks/` (for manifest-only connectors, `poe install` installs the `airbyte-cdk` CLI, and uses Poetry to install `unit_tests/pyproject.toml` when present):
    ```bash
-   cd airbyte-ci/connectors/pipelines/
-   poetry install
+   uv tool install poetry==1.8.5   # same version as Canonical CI
+   uv tool install poethepoet
+   cd airbyte-integrations/connectors/source-<connector>
+   poe install
    ```
 3. Provide connector config as `.secrets/config.json` in the connector root before running acceptance commands
-4. Run connector acceptance using the exact connector slug from `metadata.yaml`; replace `<connector>` in the command below with that slug:
+4. Run connector acceptance from the connector directory, using the exact connector slug from `metadata.yaml` in place of `<connector>` above:
    ```bash
-   poetry run airbyte-ci connectors --name source-<connector> test
+   poe test-integration-tests   # runs `airbyte-cdk connector test`
    ```
 5. If `.secrets/config.json` is unavailable, explicitly document the blocker and do not claim local acceptance execution succeeded
 
@@ -243,7 +245,7 @@ Ensure all artifacts below are present and coherent:
       - Creating credentials
       - Local development
       - Running as a docker container (`spec`, `check`, `discover`, `read`)
-      - Running the CI test suite (`airbyte-ci`)
+      - Running the CI test suite (`poe test-unit-tests`, `poe test-integration-tests`)
       - Publishing/versioning notes when applicable
 2. Update user-facing connector docs in integrations sources
 3. Follow Airbyte environment-aware documentation conventions where needed
@@ -302,13 +304,11 @@ Create or update a connector-root `Makefile` with common commands.
    - `CONFIG`
    - `CATALOG`
    - `PYTHON`
-   - `DAGGER`
-   - `AIRBYTE_CI`
 3. Ensure `help` output documents available targets and expected input files
 4. Execute required workflow targets and verify they work as expected: `build`, `spec`, `check`, `discover`, `read`, `unit-test`, and `test`
 5. Ensure `read` mounts config and integration artifacts correctly
 6. Ensure `unit-test` runs pytest from `unit_tests/`
-7. Ensure `test` runs connector acceptance through `airbyte-ci`
+7. Ensure `test` runs connector acceptance through `airbyte-cdk connector test` (or `poe test-integration-tests`)
 
 ### 8. Metadata canonical image tagging
 
