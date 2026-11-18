@@ -47,6 +47,18 @@
         "title": "Token Expiry (auto-managed)",
         "airbyte_hidden": true,
         "default": ""
+      },
+      "hire_date_custom_field_id": {
+        "type": "integer",
+        "description": "Internal id of the People custom field holding the hire date (shown when editing the field under Admin → Custom Fields). Its value is synced to `people.hire_date`. Leave empty to keep `hire_date` null.",
+        "order": 5,
+        "title": "Hire Date Custom Field ID"
+      },
+      "competency_custom_field_id": {
+        "type": "integer",
+        "description": "Internal id of the People custom field holding the competency (shown when editing the field under Admin → Custom Fields). Its value is synced to `people.competency`. Leave empty to keep `competency` null.",
+        "order": 6,
+        "title": "Competency Custom Field ID"
       }
     },
     "additionalProperties": true

@@ -25,6 +25,18 @@ Required fields:
 | `client_secret` | OAuth client secret for the same API key.                                            |
 | `start_date`    | `YYYY-MM-DD`. Reserved for future incremental fixtures; required by spec.            |
 
+Optional fields:
+
+| Field                        | Description                                                              |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `hire_date_custom_field_id`  | Id of the People custom field holding the hire date. Synced to `people.hire_date`. |
+| `competency_custom_field_id` | Id of the People custom field holding the competency. Synced to `people.competency`. |
+
+Skills Base returns People custom fields as `custom_field_{id}`, where `{id}` is the
+field's internal id (shown when editing the field under **Admin → Custom Fields**).
+Ids differ between instances, so they are configured per deployment. If a field id is
+unset, the matching column is null. The raw `custom_field_{id}` keys are still emitted.
+
 Auto-managed fields (do not set manually):
 
 | Field                | Description                                                              |
@@ -180,6 +192,12 @@ Skills Base, no manifest parsing. Each test runs in milliseconds and covers:
   fallback retry; persistent rate limit → `transient_error`; other 4xx →
   `config_error`; network exception → `transient_error`).
 
+`unit_tests/test_people_custom_fields.py` reads the `people` stream from
+`manifest.yaml` against a mocked `GET /1.0/people` and checks the
+`custom_field_{id}` → `hire_date` / `competency` mapping: configured ids map
+values as strings, missing values stay null/empty, and unset or unknown ids
+leave both fields null.
+
 Run with:
 
 ```bash
@@ -239,6 +257,7 @@ with `connectors=source-skillsbase`.
 
 | Version | Date       | Summary                                                                                     |
 | ------- | ---------- | ------------------------------------------------------------------------------------------- |
+| 1.3.1   | 2026-11-18 | Populate `people.hire_date` and new `people.competency` from Skills Base custom fields, via optional `hire_date_custom_field_id` / `competency_custom_field_id` config. |
 | 1.3.0   | 2026-10-21 | Add `competencies` stream (person-linked competency via the Skill Query API).               |
 | 1.2.0   | 2026-10-08 | Update `courses` to the `/2.0/courses` schema; migrate `training_completions` to Skill Query. |
 | 1.1.0   |            | Add `hire_date` field to the `people` stream.                                               |

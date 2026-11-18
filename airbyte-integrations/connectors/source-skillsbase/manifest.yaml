@@ -97,6 +97,17 @@ streams:
           type: DpathExtractor
           field_path:
             - data
+    transformations:
+      # Skills Base returns People custom fields as `custom_field_{id}`; ids differ per instance, so they come from config.
+      # `tojson` keeps values as strings (the CDK would otherwise parse "4" as an int) while unset/missing stays null.
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path: ["hire_date"]
+            value: "{% set v = record.get('custom_field_' ~ config['hire_date_custom_field_id']) if config.get('hire_date_custom_field_id') else none %}{{ v | tojson if v is not none else none }}"
+          - type: AddedFieldDefinition
+            path: ["competency"]
+            value: "{% set v = record.get('custom_field_' ~ config['competency_custom_field_id']) if config.get('competency_custom_field_id') else none %}{{ v | tojson if v is not none else none }}"
     primary_key:
       - id
     schema_loader:
@@ -128,6 +139,8 @@ streams:
           full_name:
             type: [string, "null"]
           first_name:
+            type: [string, "null"]
+          competency:
             type: [string, "null"]
           hire_date:
             type: [string, "null"]
@@ -692,6 +705,22 @@ spec:
         title: Token Expiry (auto-managed)
         airbyte_hidden: true
         default: ""
+      hire_date_custom_field_id:
+        type: integer
+        description: >-
+          Internal id of the People custom field holding the hire date (shown when
+          editing the field under Admin → Custom Fields). Its value is synced to
+          `people.hire_date`. Leave empty to keep `hire_date` null.
+        order: 5
+        title: Hire Date Custom Field ID
+      competency_custom_field_id:
+        type: integer
+        description: >-
+          Internal id of the People custom field holding the competency (shown when
+          editing the field under Admin → Custom Fields). Its value is synced to
+          `people.competency`. Leave empty to keep `competency` null.
+        order: 6
+        title: Competency Custom Field ID
     additionalProperties: true
 
 metadata:
