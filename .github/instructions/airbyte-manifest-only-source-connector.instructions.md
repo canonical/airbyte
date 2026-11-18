@@ -173,8 +173,9 @@ Ensure all artifacts below are present and coherent:
 #### CI test expectations
 
 1. Assume CI will run all available connector tests for the connector, including Connector QA checks and tests in `unit_tests/` and `integration_tests/`
-2. For local Connector Acceptance runs, use the `airbyte-cdk` CLI (the upstream replacement for the removed `airbyte-ci`) and prepare the environment with non-interactive commands. These use [Poe the Poet](https://poethepoet.natn.io/) (`poethepoet`), the task runner upstream Airbyte uses to run the shared connector tasks in `poe-tasks/` (for manifest-only connectors, `poe install` installs the `airbyte-cdk` CLI):
+2. For local Connector Acceptance runs, use the `airbyte-cdk` CLI (the upstream replacement for the removed `airbyte-ci`) and prepare the environment with non-interactive commands. These use [Poe the Poet](https://poethepoet.natn.io/) (`poethepoet`), the task runner upstream Airbyte uses to run the shared connector tasks in `poe-tasks/` (for manifest-only connectors, `poe install` installs the `airbyte-cdk` CLI, and uses Poetry to install `unit_tests/pyproject.toml` when present):
    ```bash
+   uv tool install poetry==1.8.5   # same version as Canonical CI
    uv tool install poethepoet
    cd airbyte-integrations/connectors/source-<connector>
    poe install
