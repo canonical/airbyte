@@ -17,8 +17,8 @@ data:
   connectorSubtype: api
   connectorType: source
   definitionId: e63482c9-b017-425b-9d18-f08410d5db32
-  dockerImageTag: 2.0.0
-  canonicalImageTag: 2.0.0-canonical-1.0.0
+  dockerImageTag: 1.3.1
+  canonicalImageTag: 1.3.1-canonical-1.0.0
   dockerRepository: airbyte/source-skillsbase
   githubIssueLabel: source-skillsbase
   icon: icon.svg
@@ -26,15 +26,6 @@ data:
   name: Skills Base
   releaseDate: "2026-05-12"
   releaseStage: alpha
-  releases:
-    breakingChanges:
-      2.0.0:
-        message: The `competencies` stream has been renamed to `person_competencies`, and a new `role_competencies` stream has been added. After upgrading, refresh the source schema, enable `person_competencies`, and reset it. The old `competencies` destination table is no longer written to; drop it or repoint downstream models (dbt, BI) to `person_competencies`.
-        upgradeDeadline: "2026-12-16"
-        scopedImpact:
-          - scopeType: stream
-            impactedScopes:
-              - competencies
   supportLevel: community
   documentationUrl: https://github.com/canonical/airbyte/blob/master/airbyte-integrations/connectors/source-skillsbase/README.md
   tags:

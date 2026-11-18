@@ -73,41 +73,6 @@ definitions:
           page_size: 500
           start_from_page: 0
           inject_on_first_request: true
-    # Shared retriever for POST /2.0/skillquery. Streams override only `requester.request_body_json`.
-    # Responses are capped at `limit` rows (default 500) and paged by row offset via `start_index`.
-    SkillQueryRetriever:
-      type: SimpleRetriever
-      requester:
-        type: HttpRequester
-        url: "{{ config['api_host'] }}/2.0/skillquery"
-        http_method: POST
-        authenticator:
-          $ref: "#/definitions/linked/HttpRequester/authenticator"
-        error_handler:
-          $ref: "#/definitions/linked/HttpRequester/error_handler"
-        request_headers:
-          $ref: "#/definitions/linked/HttpRequester/request_headers"
-      paginator:
-        type: DefaultPaginator
-        page_token_option:
-          type: RequestOption
-          field_name: start_index
-          inject_into: request_parameter
-        page_size_option:
-          type: RequestOption
-          field_name: limit
-          inject_into: request_parameter
-        pagination_strategy:
-          type: OffsetIncrement
-          page_size: 500
-          inject_on_first_request: true
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - data
-            - rows
 
 streams:
   - type: DeclarativeStream
@@ -132,6 +97,17 @@ streams:
           type: DpathExtractor
           field_path:
             - data
+    transformations:
+      # Skills Base returns People custom fields as `custom_field_{id}`; ids differ per instance, so they come from config.
+      # `tojson` keeps values as strings (the CDK would otherwise parse "4" as an int) while unset/missing stays null.
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path: ["hire_date"]
+            value: "{% set v = record.get('custom_field_' ~ config['hire_date_custom_field_id']) if config.get('hire_date_custom_field_id') else none %}{{ v | tojson if v is not none else none }}"
+          - type: AddedFieldDefinition
+            path: ["competency"]
+            value: "{% set v = record.get('custom_field_' ~ config['competency_custom_field_id']) if config.get('competency_custom_field_id') else none %}{{ v | tojson if v is not none else none }}"
     primary_key:
       - id
     schema_loader:
@@ -163,6 +139,8 @@ streams:
           full_name:
             type: [string, "null"]
           first_name:
+            type: [string, "null"]
+          competency:
             type: [string, "null"]
           hire_date:
             type: [string, "null"]
@@ -499,12 +477,26 @@ streams:
     name: training_completions
     # No REST GET endpoint exists; read via the Skill Query API which returns a table of rows and columns.
     retriever:
-      $ref: "#/definitions/linked/SkillQueryRetriever"
+      type: SimpleRetriever
       requester:
-        $ref: "#/definitions/linked/SkillQueryRetriever/requester"
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/2.0/skillquery"
+        http_method: POST
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
         request_body_json:
-          # Sort is unique per row so offset pagination is stable.
-          query: "find training where status = 'completed' show person.id, person.email, course.id, course.name, completionDate sorted by completionDate, person.id, course.id"
+          query: "find training where status = 'completed' show person.id, person.email, course.id, course.name, completionDate sorted by completionDate"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+            - rows
     transformations:
       # values[] is positional; indexes must match the `show` clause order.
       - type: AddFields
@@ -551,21 +543,29 @@ streams:
         additionalProperties: true
 
   - type: DeclarativeStream
-    name: person_competencies
+    name: competencies
     # Competency is a computed measure (skill level vs target) on the Skill Query `person skills` collection.
-    # This stream pulls person-level competencies when person-level targets are configured.
     retriever:
-      $ref: "#/definitions/linked/SkillQueryRetriever"
+      type: SimpleRetriever
       requester:
-        $ref: "#/definitions/linked/SkillQueryRetriever/requester"
+        type: HttpRequester
+        url: "{{ config['api_host'] }}/2.0/skillquery"
+        http_method: POST
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+        request_headers:
+          $ref: "#/definitions/linked/HttpRequester/request_headers"
         request_body_json:
-          query: "find person skills show person.id, skill.id, competency, competency.self, competency.supervisor sorted by person.id, skill.id"
+          query: "find person skills show person.id, skill.id, competency, competency.self, competency.supervisor sorted by person.id"
       record_selector:
-        $ref: "#/definitions/linked/SkillQueryRetriever/record_selector"
-        # Drop rows without a primary key rather than emitting null-PK records.
-        record_filter:
-          type: RecordFilter
-          condition: "{{ record['values'][0]['data'] is not none and record['values'][1]['data'] is not none }}"
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+            - rows
     transformations:
       # values[] is positional; indexes must match the `show` clause order.
       - type: AddFields
@@ -573,10 +573,10 @@ streams:
           # id values arrive as strings; cast to int. Competency percentages are already numeric (or null).
           - type: AddedFieldDefinition
             path: ["person_id"]
-            value: "{{ record['values'][0]['data'] | int }}"
+            value: "{{ (record['values'][0]['data'] | int) if record['values'][0]['data'] is not none else none }}"
           - type: AddedFieldDefinition
             path: ["skill_id"]
-            value: "{{ record['values'][1]['data'] | int }}"
+            value: "{{ (record['values'][1]['data'] | int) if record['values'][1]['data'] is not none else none }}"
           - type: AddedFieldDefinition
             path: ["competency"]
             value: "{{ record['values'][2]['data'] }}"
@@ -599,65 +599,14 @@ streams:
         $schema: http://json-schema.org/draft-07/schema#
         properties:
           person_id:
-            type: integer
+            type: [integer, "null"]
           skill_id:
-            type: integer
+            type: [integer, "null"]
           competency:
             type: [number, "null"]
           competency_self:
             type: [number, "null"]
           competency_supervisor:
-            type: [number, "null"]
-        additionalProperties: true
-
-  - type: DeclarativeStream
-    name: role_competencies
-    # Role-level competency: aggregate of the role's members' ratings vs the role's targets.
-    # Not a per-person value. Skill Query reports `0` both for a real 0% and for "no member has
-    # rated the skill"; the response carries no field that distinguishes the two.
-    retriever:
-      $ref: "#/definitions/linked/SkillQueryRetriever"
-      requester:
-        $ref: "#/definitions/linked/SkillQueryRetriever/requester"
-        request_body_json:
-          query: "find role skills show role.id, skill.id, competency sorted by role.id, skill.id"
-      record_selector:
-        $ref: "#/definitions/linked/SkillQueryRetriever/record_selector"
-        # Drop rows without a primary key rather than emitting null-PK records.
-        record_filter:
-          type: RecordFilter
-          condition: "{{ record['values'][0]['data'] is not none and record['values'][1]['data'] is not none }}"
-    transformations:
-      # values[] is positional; indexes must match the `show` clause order.
-      - type: AddFields
-        fields:
-          # id values arrive as strings; cast to int. Competency is already numeric.
-          - type: AddedFieldDefinition
-            path: ["role_id"]
-            value: "{{ record['values'][0]['data'] | int }}"
-          - type: AddedFieldDefinition
-            path: ["skill_id"]
-            value: "{{ record['values'][1]['data'] | int }}"
-          - type: AddedFieldDefinition
-            path: ["competency"]
-            value: "{{ record['values'][2]['data'] }}"
-      - type: RemoveFields
-        field_pointers:
-          - ["values"]
-    primary_key:
-      - role_id
-      - skill_id
-    schema_loader:
-      type: InlineSchemaLoader
-      schema:
-        type: object
-        $schema: http://json-schema.org/draft-07/schema#
-        properties:
-          role_id:
-            type: integer
-          skill_id:
-            type: integer
-          competency:
             type: [number, "null"]
         additionalProperties: true
 
@@ -756,6 +705,22 @@ spec:
         title: Token Expiry (auto-managed)
         airbyte_hidden: true
         default: ""
+      hire_date_custom_field_id:
+        type: integer
+        description: >-
+          Internal id of the People custom field holding the hire date (shown when
+          editing the field under Admin → Custom Fields). Its value is synced to
+          `people.hire_date`. Leave empty to keep `hire_date` null.
+        order: 5
+        title: Hire Date Custom Field ID
+      competency_custom_field_id:
+        type: integer
+        description: >-
+          Internal id of the People custom field holding the competency (shown when
+          editing the field under Admin → Custom Fields). Its value is synced to
+          `people.competency`. Leave empty to keep `competency` null.
+        order: 6
+        title: Competency Custom Field ID
     additionalProperties: true
 
 metadata:
