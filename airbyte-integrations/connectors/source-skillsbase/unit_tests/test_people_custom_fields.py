@@ -58,6 +58,7 @@ def _read_people(config: Dict[str, Any]) -> Dict[int, Dict[str, Any]]:
         records: List[Dict[str, Any]] = [
             message.record.data for message in source.read(source.logger, config, catalog, None) if message.type == Type.RECORD
         ]
+    assert sorted(record["id"] for record in records) == [person["id"] for person in PEOPLE]
     return {record["id"]: record for record in records}
 
 
