@@ -19,7 +19,7 @@ There is one stream per configured package set, named after the set.
 | `log_object`  | string      | the log object name                                           |
 | `line_number` | integer     | the line in the decompressed log object                       |
 
-The primary key is `container`, `log_object`, `line_number`. Use **Incremental | Append + Deduped** so that reading a log object again replaces its rows instead of adding them.
+The primary key is `prodstack`, `container`, `log_object`, `line_number`, since the same container name can exist on more than one Prodstack. Use **Incremental | Append + Deduped** so that reading a log object again replaces its rows instead of adding them.
 
 A line becomes a record when it is a `GET` with status `200` for a `.deb` path, and the package name matches one of the set's glob patterns. The client IP is never read out of the line.
 
@@ -35,10 +35,10 @@ GROUP BY date, package, version, arch;
 ## How a sync works
 
 1. List the objects in each configured container and keep the access logs (`...access.log-YYYYMMDD.gz`) dated on or after `start_date`.
-2. Skip the objects already read, per container.
+2. Skip the objects already read, per Prodstack and container.
 3. For each remaining object, in date order: stream it from Swift, gunzip it, filter its lines (a fast byte check on the raw line, then the full parse), emit the matches, then save state.
 
-The state for each container has two parts:
+The state for each container is saved under `<prodstack>/<container>`, for example `ps5/archive-server-logs`, and has two parts:
 
 - `completed_through`: a date. Every object dated on or before it has been read.
 - `read`: the objects dated after `completed_through` that have already been read, each with its last-modified time when it was read.

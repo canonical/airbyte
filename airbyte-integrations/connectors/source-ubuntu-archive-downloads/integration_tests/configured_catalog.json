@@ -8,6 +8,7 @@
         "source_defined_cursor": true,
         "default_cursor_field": ["log_object"],
         "source_defined_primary_key": [
+          ["prodstack"],
           ["container"],
           ["log_object"],
           ["line_number"]
@@ -16,7 +17,12 @@
       "sync_mode": "incremental",
       "cursor_field": ["log_object"],
       "destination_sync_mode": "append_dedup",
-      "primary_key": [["container"], ["log_object"], ["line_number"]]
+      "primary_key": [
+        ["prodstack"],
+        ["container"],
+        ["log_object"],
+        ["line_number"]
+      ]
     },
     {
       "stream": {
@@ -26,6 +32,7 @@
         "source_defined_cursor": true,
         "default_cursor_field": ["log_object"],
         "source_defined_primary_key": [
+          ["prodstack"],
           ["container"],
           ["log_object"],
           ["line_number"]
@@ -34,7 +41,12 @@
       "sync_mode": "incremental",
       "cursor_field": ["log_object"],
       "destination_sync_mode": "append_dedup",
-      "primary_key": [["container"], ["log_object"], ["line_number"]]
+      "primary_key": [
+        ["prodstack"],
+        ["container"],
+        ["log_object"],
+        ["line_number"]
+      ]
     }
   ]
 }

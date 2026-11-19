@@ -83,7 +83,7 @@ def test_discover_has_one_stream_per_package_set(config):
     assert catalog is not None
     streams = catalog.streams
     assert [s.name for s in streams] == ["cuda", "rocm"]
-    assert streams[0].source_defined_primary_key == [["container"], ["log_object"], ["line_number"]]
+    assert streams[0].source_defined_primary_key == [["prodstack"], ["container"], ["log_object"], ["line_number"]]
 
 
 def test_read_emits_one_record_per_matching_download(config, catalog):
@@ -93,7 +93,7 @@ def test_read_emits_one_record_per_matching_download(config, catalog):
     assert len(by_stream["rocm"]) == FILES_FROM_START_DATE * sum(case[6] for case in CASES)
     assert {r["arch"] for r in by_stream["cuda"] if r["container"] == "mock-ports-servers"} == {"arm64"}
     assert min(r["timestamp"] for r in by_stream["cuda"]).startswith("2026-05-02")
-    keys = Counter((r["container"], r["log_object"], r["line_number"]) for r in by_stream["cuda"])
+    keys = Counter((r["prodstack"], r["container"], r["log_object"], r["line_number"]) for r in by_stream["cuda"])
     assert max(keys.values()) == 1
 
 

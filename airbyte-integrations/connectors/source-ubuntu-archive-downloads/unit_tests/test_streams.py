@@ -4,6 +4,7 @@ import gzip
 import io
 import os
 from datetime import date
+from typing import List, Mapping
 
 import pytest
 from source_ubuntu_archive_downloads.store import LocalStore, _ChunkReader
@@ -13,6 +14,7 @@ from airbyte_cdk.models.airbyte_protocol import SyncMode
 
 
 CONTAINER = "mock-archive-servers-a"
+KEY = f"ps5/{CONTAINER}"
 MATCH = '203.0.113.10 51234 - [{day}/May/2026:07:15:30 +0000] "GET /ubuntu/pool/multiverse/c/cuda-toolkit/cuda-toolkit_13.0.2-1_amd64.deb HTTP/1.1" 200 2890 "-" "apt"'
 NOISE = '198.51.100.1 51234 - [{day}/May/2026:07:15:31 +0000] "GET /ubuntu/pool/main/v/vim/vim_9.1-1_amd64.deb HTTP/1.1" 200 1234 "-" "apt"'
 
@@ -82,14 +84,14 @@ def test_state_keeps_the_lookback_window_and_next_sync_reads_only_new_objects(ro
     stream = make_stream(root)
     read_all(stream)
     # today 2026-05-04, lookback 1 day: 05-03 onwards is in the window, so `completed_through` stops at 05-02
-    assert stream.state[CONTAINER]["completed_through"] == "20260501"
-    assert set(stream.state[CONTAINER]["read"]) == {M0.format("20260502"), M1.format("20260502")}
+    assert stream.state[KEY]["completed_through"] == "20260501"
+    assert set(stream.state[KEY]["read"]) == {M0.format("20260502"), M1.format("20260502")}
 
     write_log(root, M0.format("20260503"), [MATCH.format(day="03")])
     next_sync = make_stream(root, state=stream.state)
     assert [r["log_object"] for r in read_all(next_sync)] == [M0.format("20260503")]
-    assert next_sync.state[CONTAINER]["completed_through"] == "20260502"
-    assert set(next_sync.state[CONTAINER]["read"]) == {M0.format("20260503")}
+    assert next_sync.state[KEY]["completed_through"] == "20260502"
+    assert set(next_sync.state[KEY]["read"]) == {M0.format("20260503")}
 
 
 def test_late_object_inside_the_window_is_still_read(root):
@@ -107,7 +109,7 @@ def test_late_object_older_than_the_window_is_skipped(root):
     write_log(root, M0.format("20260510"), [MATCH.format(day="10")])
     first = make_stream(root, today=date(2026, 5, 12))
     read_all(first)
-    assert first.state[CONTAINER]["completed_through"] == "20260509"
+    assert first.state[KEY]["completed_through"] == "20260509"
 
     write_log(root, M1.format("20260505"), [MATCH.format(day="05")])
     assert read_all(make_stream(root, today=date(2026, 5, 12), state=first.state)) == []
@@ -115,7 +117,7 @@ def test_late_object_older_than_the_window_is_skipped(root):
 
 def test_full_refresh_ignores_state(root):
     stream = make_stream(root)
-    stream.state = {CONTAINER: {"completed_through": "20260509", "read": {}}}
+    stream.state = {KEY: {"completed_through": "20260509", "read": {}}}
     assert len(read_all(stream, SyncMode.full_refresh)) == 2
 
 
@@ -126,8 +128,8 @@ def test_failed_object_does_not_advance_state_and_is_read_again(root):
     stream = make_stream(root, start_date="2026-05-03", today=date(2026, 5, 20))
     with pytest.raises(EOFError):
         read_all(stream)
-    assert stream.state[CONTAINER]["completed_through"] == "20260502"
-    assert set(stream.state[CONTAINER]["read"]) == {M0.format("20260503")}
+    assert stream.state[KEY]["completed_through"] == "20260502"
+    assert set(stream.state[KEY]["read"]) == {M0.format("20260503")}
 
     retry = make_stream(root, start_date="2026-05-03", today=date(2026, 5, 20), state=stream.state)
     assert [s["date"] for s in retry.stream_slices(sync_mode=SyncMode.incremental) if s] == ["20260504"]
@@ -182,3 +184,34 @@ def test_chunk_reader_streams_gzip_across_chunk_boundaries():
     chunks = iter([data[i : i + 7] for i in range(0, len(data), 7)])
     with gzip.open(io.BufferedReader(_ChunkReader(chunks)), "rt") as lines:
         assert sum(1 for _ in lines) == 1000
+
+
+class StorePerProdstack:
+    """A `LocalStore` per Prodstack, like `SwiftStores` with one endpoint each."""
+
+    def __init__(self, roots):
+        self._stores = {prodstack: LocalStore(str(root)) for prodstack, root in roots.items()}
+
+    def for_prodstack(self, prodstack):
+        return self._stores[prodstack]
+
+
+def test_same_container_name_on_two_prodstacks_is_tracked_separately(tmp_path):
+    for prodstack in ("ps5", "ps6"):
+        for day in ("02", "03"):
+            write_log(tmp_path / prodstack, f"{prodstack}-mirror-0/archive.ubuntu.com-access.log-202605{day}.gz", [MATCH.format(day=day)])
+    containers: List[Mapping[str, str]] = [
+        {"name": CONTAINER, "source": "cloud_mirror", "prodstack": prodstack} for prodstack in ("ps5", "ps6")
+    ]
+    store = StorePerProdstack({"ps5": tmp_path / "ps5", "ps6": tmp_path / "ps6"})
+    stream = PackageSetStream("cuda", ["cuda-toolkit"], containers, "2026-05-02", store, lookback_days=1, today=date(2026, 5, 20))
+
+    # reading ps5 first must not mark ps6's 05-02 log as done
+    records = read_all(stream)
+    assert sorted((r["prodstack"], r["log_object"][-11:-3]) for r in records) == [
+        ("ps5", "20260502"),
+        ("ps5", "20260503"),
+        ("ps6", "20260502"),
+        ("ps6", "20260503"),
+    ]
+    assert set(stream.state) == {f"ps5/{CONTAINER}", f"ps6/{CONTAINER}"}

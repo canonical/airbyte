@@ -4,10 +4,10 @@
 One stream per configured package set.
 
 Each sync lists the log objects in every configured container and reads the ones it hasn't read
-yet, oldest first. Each matching line becomes one record, keyed by container, log object and line
-number, so reading an object again replaces its rows instead of duplicating them.
+yet, oldest first. Each matching line becomes one record, keyed by Prodstack, container, log object
+and line number, so reading an object again replaces its rows instead of duplicating them.
 
-State is saved per container after each object is fully read:
+State is saved per container after each object is fully read, under `<prodstack>/<container>`:
 - `completed_through`: the date up to which every object has been read.
 - `read`: the objects dated after `completed_through` that have been read, with their versions.
 
@@ -40,7 +40,7 @@ class PackageSetStream(Stream, CheckpointMixin):
     @property
     def primary_key(self) -> List[List[str]]:
         """One record per log line, so reading an object again replaces its rows."""
-        return [["container"], ["log_object"], ["line_number"]]
+        return [["prodstack"], ["container"], ["log_object"], ["line_number"]]
 
     @property
     def cursor_field(self) -> str:
@@ -110,9 +110,14 @@ class PackageSetStream(Stream, CheckpointMixin):
             },
         }
 
-    def _container_state(self, container: str, sync_mode: SyncMode) -> Mapping[str, Any]:
+    @staticmethod
+    def _state_key(prodstack: str, container: str) -> str:
+        """The state key of a container. Swift container names can't contain `/`, so it's unambiguous."""
+        return f"{prodstack}/{container}"
+
+    def _container_state(self, key: str, sync_mode: SyncMode) -> Mapping[str, Any]:
         """Return a container's saved state, or an empty one for a full refresh or a container not read yet."""
-        state = self._state.get(container) if sync_mode == SyncMode.incremental else None
+        state = self._state.get(key) if sync_mode == SyncMode.incremental else None
         return state or {"completed_through": "", "read": {}}
 
     def stream_slices(
@@ -130,9 +135,9 @@ class PackageSetStream(Stream, CheckpointMixin):
         """
         self._matched = Counter()
         for container_config in self._containers:
-            container = container_config["name"]
-            state = self._container_state(container, sync_mode)
-            listed = self._store.for_prodstack(container_config["prodstack"]).list_objects(container)
+            container, prodstack = container_config["name"], container_config["prodstack"]
+            state = self._container_state(self._state_key(prodstack, container), sync_mode)
+            listed = self._store.for_prodstack(prodstack).list_objects(container)
             if listed and not any(log_object_date(name) for name in listed):
                 self.logger.warning(f"Container {container} has {len(listed)} objects, but none are named like dated access logs.")
             objects = []
@@ -177,15 +182,16 @@ class PackageSetStream(Stream, CheckpointMixin):
             self.logger.warning(f"{unparsed} candidate lines in {container}/{name} are not in the expected log format.")
         self.logger.info(f"Read {container}/{name}: {line_number} lines, {matched} matched rows, {unparsed} lines failed to parse.")
         # Only reached once the whole object has been read.
-        self._mark_read(container, stream_slice["date"], name, stream_slice["version"])
+        key = self._state_key(stream_slice["prodstack"], container)
+        self._mark_read(key, stream_slice["date"], name, stream_slice["version"])
 
-    def _mark_read(self, container: str, object_date: str, name: str, version: str) -> None:
+    def _mark_read(self, key: str, object_date: str, name: str, version: str) -> None:
         """Mark an object as read, move `completed_through` forward as far as allowed, and drop the `read` entries it now covers."""
-        state = self._state.get(container) or {"completed_through": "", "read": {}}
+        state = self._state.get(key) or {"completed_through": "", "read": {}}
         # Objects are read in date order, so everything dated before this one is done, but
         # `completed_through` never enters the lookback window, where late objects may still land.
         day_before = (datetime.strptime(object_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
         completed_through = max(state["completed_through"], min(day_before, self._completed_through_limit))
         read = {n: v for n, v in state["read"].items() if (log_object_date(n) or "") > completed_through}
         read[name] = version
-        self._state[container] = {"completed_through": completed_through, "read": read}
+        self._state[key] = {"completed_through": completed_through, "read": read}
