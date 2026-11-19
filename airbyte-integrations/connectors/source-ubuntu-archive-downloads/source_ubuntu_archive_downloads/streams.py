@@ -9,7 +9,7 @@ and line number, so reading an object again replaces its rows instead of duplica
 
 State is saved per container after each object is fully read, under `<prodstack>/<container>`:
 - `completed_through`: the date up to which every object has been read.
-- `read`: the objects dated after `completed_through` that have been read, with their versions.
+- `read`: the objects dated after `completed_through` that have been read, with their last-modified times.
 
 `completed_through` stops short of the last `lookback_days` days. Objects in that window are
 checked again on every sync, so one that arrives late or changes after it was read is still
@@ -131,7 +131,7 @@ class PackageSetStream(Stream, CheckpointMixin):
         Yield the log objects still to read, oldest first within each container.
 
         An object is read if it's dated on or after `start_date` and after `completed_through`, and
-        hasn't already been read at its current version.
+        hasn't already been read at its current last-modified time.
         """
         self._matched = Counter()
         for container_config in self._containers:
@@ -141,13 +141,13 @@ class PackageSetStream(Stream, CheckpointMixin):
             if listed and not any(log_object_date(name) for name in listed):
                 self.logger.warning(f"Container {container} has {len(listed)} objects, but none are named like dated access logs.")
             objects = []
-            for name, version in listed.items():
+            for name, last_modified in listed.items():
                 object_date = log_object_date(name)
                 is_new = object_date and object_date >= self._start and object_date > state["completed_through"]
-                if is_new and state["read"].get(name) != version:
-                    objects.append((object_date, name, version))
-            for object_date, name, version in sorted(objects):
-                yield {**container_config, "date": object_date, "object": name, "version": version}
+                if is_new and state["read"].get(name) != last_modified:
+                    objects.append((object_date, name, last_modified))
+            for object_date, name, last_modified in sorted(objects):
+                yield {**container_config, "date": object_date, "object": name, "last_modified": last_modified}
         # Slices are read lazily, so this runs once the last slice's records have been read.
         self.logger.info(f"Stream {self.name} matched packages: {dict(sorted(self._matched.items()))}")
 
@@ -183,9 +183,9 @@ class PackageSetStream(Stream, CheckpointMixin):
         self.logger.info(f"Read {container}/{name}: {line_number} lines, {matched} matched rows, {unparsed} lines failed to parse.")
         # Only reached once the whole object has been read.
         key = self._state_key(stream_slice["prodstack"], container)
-        self._mark_read(key, stream_slice["date"], name, stream_slice["version"])
+        self._mark_read(key, stream_slice["date"], name, stream_slice["last_modified"])
 
-    def _mark_read(self, key: str, object_date: str, name: str, version: str) -> None:
+    def _mark_read(self, key: str, object_date: str, name: str, last_modified: str) -> None:
         """Mark an object as read, move `completed_through` forward as far as allowed, and drop the `read` entries it now covers."""
         state = self._state.get(key) or {"completed_through": "", "read": {}}
         # Objects are read in date order, so everything dated before this one is done, but
@@ -193,5 +193,5 @@ class PackageSetStream(Stream, CheckpointMixin):
         day_before = (datetime.strptime(object_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
         completed_through = max(state["completed_through"], min(day_before, self._completed_through_limit))
         read = {n: v for n, v in state["read"].items() if (log_object_date(n) or "") > completed_through}
-        read[name] = version
+        read[name] = last_modified
         self._state[key] = {"completed_through": completed_through, "read": read}
