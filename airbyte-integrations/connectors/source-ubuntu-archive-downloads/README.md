@@ -36,7 +36,7 @@ GROUP BY date, package, version, arch;
 
 1. List the objects in each configured container and keep the access logs (`...access.log-YYYYMMDD.gz`) dated on or after `start_date`.
 2. Skip the objects already read, per Prodstack and container.
-3. For each remaining object, in date order: stream it from Swift, gunzip it, filter its lines (a fast byte check on the raw line, then the full parse), emit the matches, then save state.
+3. For each remaining object, in date order: stream it from Swift, gunzip it, filter its lines (a fast byte check on the raw line, then the full parse), then emit the matches and save state once the whole object has been read.
 
 The state for each container is saved under `<prodstack>/<container>`, for example `ps5/archive-server-logs`, and has two parts:
 
@@ -45,7 +45,7 @@ The state for each container is saved under `<prodstack>/<container>`, for examp
 
 `completed_through` never moves into the last `lookback_days` days. Each sync checks the objects in that window against `read`. It reads any object that is missing from `read` because it arrived late, and any object whose last-modified time has changed because it was rewritten. So `read` only ever holds a few days of objects.
 
-State is saved only after a whole object has been read, so a failed sync reads that object again on the next run, and the primary key keeps that from duplicating rows. Each stream reads the logs separately, so two package sets download each log object twice.
+An object's records are sent, and its state saved, only after the whole object has been read. Until then its matches are held in a temporary file, so memory stays flat. If an object can't be read, for example a truncated gzip, it sends no records: the stream logs an error naming it and reads the rest. It keeps that container's `completed_through` below the object's date, then fails the stream at the end, so the sync shows as failed and the next one retries the object. A corrupt object fails every sync until it's uploaded again or removed. Each stream reads the logs separately, so two package sets download each log object twice.
 
 Raw lines hold client IPs, so they are never logged. Each object logs one info line with the lines read, matched rows and lines that failed to parse, and each stream logs one info line at the end of a sync with the package names it matched and a count for each. Candidate lines in an unexpected format and containers with no objects named like dated access logs are logged as warnings.
 

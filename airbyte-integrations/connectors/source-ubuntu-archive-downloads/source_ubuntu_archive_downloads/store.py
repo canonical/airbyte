@@ -17,7 +17,7 @@ so the connector can be run end to end against mock archives. It serves every Pr
 
 import io
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Iterator, List, Mapping
+from typing import Any, BinaryIO, Dict, Iterable, Iterator, List, Mapping
 
 from swiftclient.client import Connection
 from swiftclient.exceptions import ClientException
@@ -29,9 +29,23 @@ CHUNK_SIZE = 1024 * 1024
 class _ChunkReader(io.RawIOBase):
     """A read-only file object that streams a download from an iterator of byte chunks."""
 
-    def __init__(self, chunks: Iterator[bytes]):
-        self._chunks = chunks
+    def __init__(self, chunks: Iterable[bytes]):
+        self._body = chunks
+        self._chunks: Iterator[bytes] = iter(chunks)
         self._buffer = b""
+
+    def close(self) -> None:
+        """
+        Close the download.
+
+        swiftclient only closes a chunked response once it's fully read, and the connection can't
+        make another request while one is still open.
+        """
+        if not self.closed:
+            close_body = getattr(self._body, "close", None)
+            if close_body:
+                close_body()
+        super().close()
 
     def readable(self) -> bool:
         """Always true: this file object only supports reading."""
@@ -88,13 +102,17 @@ class SwiftStore:
     def open_object(self, container: str, name: str) -> BinaryIO:
         """Open an object for streaming in 1 MiB chunks, without holding it in memory."""
         _, chunks = self._connection.get_object(container, name, resp_chunk_size=CHUNK_SIZE)
-        return io.BufferedReader(_ChunkReader(iter(chunks)), buffer_size=CHUNK_SIZE)
+        return io.BufferedReader(_ChunkReader(chunks), buffer_size=CHUNK_SIZE)
 
 
 class SwiftStores:
     """Holds one `SwiftStore` per Prodstack endpoint."""
 
     def __init__(self, endpoints: List[Mapping[str, str]]):
+        prodstacks = [endpoint["prodstack"] for endpoint in endpoints]
+        repeated = sorted({p for p in prodstacks if prodstacks.count(p) > 1})
+        if repeated:
+            raise ValueError(f"Each Prodstack needs exactly one endpoint, but these have more than one: {', '.join(repeated)}")
         self._stores = {endpoint["prodstack"]: SwiftStore(endpoint) for endpoint in endpoints}
 
     def for_prodstack(self, prodstack: str) -> SwiftStore:

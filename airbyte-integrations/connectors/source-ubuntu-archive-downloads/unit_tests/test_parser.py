@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Canonical, all rights reserved.
 
 import pytest
-from source_ubuntu_archive_downloads.parser import line_prefilter, log_object_date, matches_any, parse_line
+from source_ubuntu_archive_downloads.parser import is_access_line, line_prefilter, log_object_date, matches_any, parse_line
 
 
 CUDA = ["cuda-*-13-*", "libcu*-13-*", "libnv*-13-*", "nsight-compute-*", "cuda-toolkit", "cuda-toolkit-13"]
@@ -90,3 +90,20 @@ def test_prefilter_keeps_every_candidate_and_drops_other_lines():
 
 def test_prefilter_is_off_when_a_pattern_has_no_literal_start():
     assert line_prefilter(["*-cuda"]) is None
+
+
+def test_prefilter_keeps_percent_encoded_names():
+    # apt sends + as %2b, so the raw line never contains "libstdc++"
+    encoded = line("/ubuntu/pool/main/g/gcc-14/libstdc%2b%2b6_14.2.0-4ubuntu2_amd64.deb")
+    prefilter = line_prefilter(["libstdc++*"])
+    assert prefilter is not None
+    assert prefilter.search(encoded.encode())
+    record = parse_line(encoded, ["libstdc++*"])
+    assert record is not None and record["package"] == "libstdc++6"
+
+
+def test_line_with_an_unexpected_time_format_is_not_an_access_line():
+    bad_time = line(f"{POOL}/c/cuda-toolkit/cuda-toolkit_13.0.2-1_amd64.deb").replace("02/May/2026:07:15:30 +0000", "2026-05-02T07:15:30Z")
+    assert parse_line(bad_time, CUDA) is None
+    assert not is_access_line(bad_time)
+    assert is_access_line(line(f"{POOL}/c/cuda-toolkit/cuda-toolkit_13.0.2-1_amd64.deb"))

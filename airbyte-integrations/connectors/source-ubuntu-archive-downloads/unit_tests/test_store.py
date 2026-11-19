@@ -3,7 +3,7 @@
 from typing import cast
 
 import pytest
-from source_ubuntu_archive_downloads.store import SwiftStore
+from source_ubuntu_archive_downloads.store import CHUNK_SIZE, SwiftStore, SwiftStores
 from swiftclient.client import Connection
 from swiftclient.exceptions import ClientException
 
@@ -21,6 +21,27 @@ class FakeConnection:
         if status >= 400:
             raise ClientException("Container HEAD failed", http_status=status)
         return {}
+
+    def get_object(self, container, name, resp_chunk_size=None):
+        self.body = FakeBody([b"x" * CHUNK_SIZE] * 3)
+        return {}, self.body
+
+
+class FakeBody:
+    """Like swiftclient's chunked object body, which only closes its response once fully read."""
+
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+        self.closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._chunks)
+
+    def close(self):
+        self.closed = True
 
 
 def swift_store(connection: FakeConnection) -> SwiftStore:
@@ -50,3 +71,16 @@ def test_check_fails_for_a_missing_container():
     with pytest.raises(ClientException):
         swift_store(connection).assert_readable("mock-ports-servers")
     assert connection.heads == ["mock-ports-servers"]
+
+
+def test_download_is_closed_when_reading_stops_early():
+    connection = FakeConnection({})
+    with swift_store(connection).open_object("mock-ports-servers", "ports-0/ports.ubuntu.com-access.log-20260502.gz") as f:
+        f.read(10)
+    assert connection.body.closed
+
+
+def test_a_prodstack_with_two_endpoints_is_rejected():
+    endpoint = {"prodstack": "ps5", "auth_url": "http://keystone:5000/v3", "username": "u", "password": "p", "project_name": "logs"}
+    with pytest.raises(ValueError, match="ps5"):
+        SwiftStores([endpoint, endpoint])

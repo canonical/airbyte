@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Canonical, all rights reserved.
 
 import re
+from datetime import datetime
 from typing import Any, List, Mapping, Tuple
 
 from airbyte_cdk.sources import AbstractSource
@@ -26,6 +27,16 @@ class SourceUbuntuArchiveDownloads(AbstractSource):
                 return False, f"Package set name {package_set['name']!r} must be lowercase letters, digits and underscores."
             if not package_set["match"]:
                 return False, f"Package set {package_set['name']!r} has no match patterns."
+
+        try:
+            datetime.strptime(config["start_date"], "%Y-%m-%d")
+        except ValueError:
+            return False, f"Start date {config['start_date']!r} is not a valid date in the format YYYY-MM-DD."
+
+        containers = [(container["prodstack"], container["name"]) for container in config["containers"]]
+        repeated = sorted({f"{p}/{n}" for p, n in containers if containers.count((p, n)) > 1})
+        if repeated:
+            return False, f"Containers are listed more than once: {', '.join(repeated)}."
 
         try:
             store = make_store(config["storage"])

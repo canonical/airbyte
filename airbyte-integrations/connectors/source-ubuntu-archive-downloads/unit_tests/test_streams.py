@@ -11,6 +11,7 @@ from source_ubuntu_archive_downloads.store import LocalStore, _ChunkReader
 from source_ubuntu_archive_downloads.streams import PackageSetStream
 
 from airbyte_cdk.models.airbyte_protocol import SyncMode
+from airbyte_cdk.utils.traced_exception import AirbyteTracedException
 
 
 CONTAINER = "mock-archive-servers-a"
@@ -121,18 +122,29 @@ def test_full_refresh_ignores_state(root):
     assert len(read_all(stream, SyncMode.full_refresh)) == 2
 
 
-def test_failed_object_does_not_advance_state_and_is_read_again(root):
-    good = write_log(root, "ubuntu-mirror-0/archive.ubuntu.com-access.log-20260503.gz", [MATCH.format(day="03")] * 50)
-    (root / CONTAINER / "ubuntu-mirror-0/archive.ubuntu.com-access.log-20260504.gz").write_bytes(good.read_bytes()[:-20])
+def test_failed_object_is_skipped_held_back_and_fails_the_stream_at_the_end(root, caplog):
+    good = write_log(root, M0.format("20260503"), [MATCH.format(day="03")] * 50)
+    (root / CONTAINER / M0.format("20260504")).write_bytes(good.read_bytes()[:-20])  # truncated gzip
+    write_log(root, M0.format("20260505"), [MATCH.format(day="05")])
 
     stream = make_stream(root, start_date="2026-05-03", today=date(2026, 5, 20))
-    with pytest.raises(EOFError):
-        read_all(stream)
-    assert stream.state[KEY]["completed_through"] == "20260502"
-    assert set(stream.state[KEY]["read"]) == {M0.format("20260503")}
+    read = []
+    with pytest.raises(AirbyteTracedException) as failure:
+        for stream_slice in stream.stream_slices(sync_mode=SyncMode.incremental):
+            read.extend(r["log_object"] for r in stream.read_records(sync_mode=SyncMode.incremental, stream_slice=stream_slice))
+    assert f"ps5/{CONTAINER}/{M0.format('20260504')}" in str(failure.value.internal_message)
+    assert f"Failed to read ps5/{CONTAINER}/{M0.format('20260504')}" in caplog.text
+
+    # the bad object sends nothing, though most of it decompressed before it broke off
+    assert M0.format("20260504") not in read
+    # the objects after it are still read
+    assert M0.format("20260505") in read
+    # but `completed_through` stays below the bad one, and it isn't marked as read
+    assert stream.state[KEY]["completed_through"] == "20260503"
+    assert set(stream.state[KEY]["read"]) == {M0.format("20260505")}
 
     retry = make_stream(root, start_date="2026-05-03", today=date(2026, 5, 20), state=stream.state)
-    assert [s["date"] for s in retry.stream_slices(sync_mode=SyncMode.incremental) if s] == ["20260504"]
+    assert [s["object"] for s in retry.stream_slices(sync_mode=SyncMode.incremental) if s] == [M0.format("20260504")]
 
 
 def test_reading_an_object_twice_gives_the_same_keys(root):

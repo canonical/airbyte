@@ -53,17 +53,27 @@ def line_prefilter(patterns: Iterable[str]) -> Optional[Pattern[bytes]]:
 
     A line can only match if its path contains `/` followed by the fixed start of a pattern, such
     as `/cuda-` for `cuda-*`. Most lines fail this check, so they skip decoding and full parsing.
-    Returns None if a pattern starts with a wildcard, since then every line has to be parsed.
+    Returns None if a pattern starts with a wildcard or an encodable character, since then every
+    line has to be parsed.
     """
-    prefixes = {re.split(r"[*?\[]", pattern, maxsplit=1)[0] for pattern in patterns}
+    prefixes = {re.split(r"[^A-Za-z0-9._-]", pattern, maxsplit=1)[0] for pattern in patterns}
     if "" in prefixes:
         return None
     return re.compile(b"/(?:" + b"|".join(re.escape(prefix.encode()) for prefix in sorted(prefixes)) + b")")
 
 
+def parse_time(raw_time: str) -> Optional[datetime]:
+    """Parse an Apache log time, or return None if it's not in the expected format."""
+    try:
+        return datetime.strptime(raw_time, APACHE_TIME_FORMAT)
+    except ValueError:
+        return None
+
+
 def is_access_line(line: str) -> bool:
-    """Whether a line is in the expected log format, so a change in format gets noticed."""
-    return bool(LOG_RE.match(line))
+    """Whether a line is in the expected log format, time included, so a change in format gets noticed."""
+    match = LOG_RE.match(line)
+    return bool(match) and parse_time(match.group(1)) is not None
 
 
 def parse_line(line: str, patterns: Iterable[str]) -> Optional[Mapping[str, object]]:
@@ -80,9 +90,8 @@ def parse_line(line: str, patterns: Iterable[str]) -> Optional[Mapping[str, obje
     package, version, arch = deb.groups()
     if not matches_any(package, patterns):
         return None
-    try:
-        timestamp = datetime.strptime(raw_time, APACHE_TIME_FORMAT)
-    except ValueError:
+    timestamp = parse_time(raw_time)
+    if timestamp is None:
         return None
     return {
         "timestamp": timestamp.isoformat(),

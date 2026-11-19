@@ -11,6 +11,11 @@ State is saved per container after each object is fully read, under `<prodstack>
 - `completed_through`: the date up to which every object has been read.
 - `read`: the objects dated after `completed_through` that have been read, with their last-modified times.
 
+An object's records are only sent once the whole object has been read. An object that fails to
+read, for example a truncated gzip, sends no records, is not marked as read, and holds its
+container's `completed_through` below its date. The stream reads everything else, then fails, naming
+the objects, so the next sync retries them and the failure shows in Airbyte.
+
 `completed_through` stops short of the last `lookback_days` days. Objects in that window are
 checked again on every sync, so one that arrives late or changes after it was read is still
 picked up.
@@ -20,14 +25,36 @@ and one line per stream per sync with the packages it matched.
 """
 
 import gzip
+import json
+import tempfile
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from functools import cached_property, lru_cache
-from typing import Any, Iterable, List, Mapping, MutableMapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional
 
-from airbyte_cdk.models.airbyte_protocol import SyncMode
+from airbyte_cdk.models.airbyte_protocol import FailureType, SyncMode
 from airbyte_cdk.sources.streams import CheckpointMixin, Stream
+from airbyte_cdk.utils.traced_exception import AirbyteTracedException
 from source_ubuntu_archive_downloads.parser import is_access_line, line_prefilter, log_object_date, parse_line
+
+
+RECORD_SCHEMA: Mapping[str, Any] = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "additionalProperties": True,
+    "properties": {
+        "timestamp": {"type": "string", "format": "date-time", "airbyte_type": "timestamp_with_timezone"},
+        "package": {"type": "string"},
+        "version": {"type": "string"},
+        "arch": {"type": "string"},
+        "bytes": {"type": ["null", "integer"]},
+        "source": {"type": "string"},
+        "prodstack": {"type": "string"},
+        "container": {"type": "string"},
+        "log_object": {"type": "string"},
+        "line_number": {"type": "integer"},
+    },
+}
 
 
 class PackageSetStream(Stream, CheckpointMixin):
@@ -73,6 +100,9 @@ class PackageSetStream(Stream, CheckpointMixin):
         self._completed_through_limit = (today - timedelta(days=lookback_days + 1)).strftime("%Y%m%d")
         self._state: MutableMapping[str, Any] = {}
         self._matched: Counter = Counter()
+        # Objects that failed to read in this sync, and the latest `completed_through` each container may reach.
+        self._failed: List[str] = []
+        self._held: Dict[str, str] = {}
 
     @cached_property
     def name(self) -> str:
@@ -92,23 +122,7 @@ class PackageSetStream(Stream, CheckpointMixin):
     @lru_cache(maxsize=None)
     def get_json_schema(self) -> Mapping[str, Any]:
         """The record schema, the same for every package set."""
-        return {
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "object",
-            "additionalProperties": True,
-            "properties": {
-                "timestamp": {"type": "string", "format": "date-time", "airbyte_type": "timestamp_with_timezone"},
-                "package": {"type": "string"},
-                "version": {"type": "string"},
-                "arch": {"type": "string"},
-                "bytes": {"type": ["null", "integer"]},
-                "source": {"type": "string"},
-                "prodstack": {"type": "string"},
-                "container": {"type": "string"},
-                "log_object": {"type": "string"},
-                "line_number": {"type": "integer"},
-            },
-        }
+        return RECORD_SCHEMA
 
     @staticmethod
     def _state_key(prodstack: str, container: str) -> str:
@@ -134,6 +148,7 @@ class PackageSetStream(Stream, CheckpointMixin):
         hasn't already been read at its current last-modified time.
         """
         self._matched = Counter()
+        self._failed, self._held = [], {}
         for container_config in self._containers:
             container, prodstack = container_config["name"], container_config["prodstack"]
             state = self._container_state(self._state_key(prodstack, container), sync_mode)
@@ -150,6 +165,12 @@ class PackageSetStream(Stream, CheckpointMixin):
                 yield {**container_config, "date": object_date, "object": name, "last_modified": last_modified}
         # Slices are read lazily, so this runs once the last slice's records have been read.
         self.logger.info(f"Stream {self.name} matched packages: {dict(sorted(self._matched.items()))}")
+        if self._failed:
+            raise AirbyteTracedException(
+                message=f"Stream {self.name} could not read {len(self._failed)} log objects. They will be retried on the next sync.",
+                internal_message=f"Failed objects: {', '.join(self._failed)}",
+                failure_type=FailureType.system_error,
+            )
 
     def read_records(
         self,
@@ -158,40 +179,74 @@ class PackageSetStream(Stream, CheckpointMixin):
         stream_slice: Optional[Mapping[str, Any]] = None,
         stream_state: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Mapping[str, Any]]:
-        """Download and decompress one log object, yield a record per matching line, then mark the object as read."""
+        """
+        Download and decompress one log object, then yield a record per matching line and mark the object as read.
+
+        Matches are held in a temporary file until the whole object has been read, so an object that
+        fails partway yields nothing, and memory stays flat however many lines match.
+        """
         if not stream_slice:
             return
         container, name = stream_slice["name"], stream_slice["object"]
         location = {"source": stream_slice["source"], "prodstack": stream_slice["prodstack"], "container": container, "log_object": name}
         store = self._store.for_prodstack(stream_slice["prodstack"])
-        line_number = matched = unparsed = 0
-        with store.open_object(container, name) as raw, gzip.GzipFile(fileobj=raw) as lines:
-            for line_number, line in enumerate(lines, start=1):
-                if self._prefilter and not self._prefilter.search(line):
-                    continue
-                text = line.decode("utf-8", errors="replace")
-                fields = parse_line(text, self._patterns)
-                if fields:
-                    matched += 1
-                    self._matched[fields["package"]] += 1
-                    yield {**fields, **location, "line_number": line_number}
-                elif not is_access_line(text):
-                    unparsed += 1
+        line_number = unparsed = 0
+        packages: Counter = Counter()
+        with tempfile.TemporaryFile() as matches:
+            try:
+                with store.open_object(container, name) as raw, gzip.GzipFile(fileobj=raw) as lines:
+                    for line_number, line in enumerate(lines, start=1):
+                        if self._prefilter and not self._prefilter.search(line):
+                            continue
+                        text = line.decode("utf-8", errors="replace")
+                        fields = parse_line(text, self._patterns)
+                        if fields:
+                            packages[fields["package"]] += 1
+                            matches.write(json.dumps({**fields, "line_number": line_number}).encode() + b"\n")
+                        elif not is_access_line(text):
+                            unparsed += 1
+            except Exception as e:
+                self._fail(stream_slice, line_number, e)
+                return
+
+            matches.seek(0)
+            for match in matches:
+                yield {**json.loads(match), **location}
+
+        self._matched.update(packages)
         if unparsed:
             # The lines themselves hold client IPs, so only the count is logged.
             self.logger.warning(f"{unparsed} candidate lines in {container}/{name} are not in the expected log format.")
+        matched = sum(packages.values())
         self.logger.info(f"Read {container}/{name}: {line_number} lines, {matched} matched rows, {unparsed} lines failed to parse.")
-        # Only reached once the whole object has been read.
-        key = self._state_key(stream_slice["prodstack"], container)
-        self._mark_read(key, stream_slice["date"], name, stream_slice["last_modified"])
+        self._mark_read(self._state_key(stream_slice["prodstack"], container), stream_slice["date"], name, stream_slice["last_modified"])
+
+    def _fail(self, stream_slice: Mapping[str, Any], line_number: int, error: Exception) -> None:
+        """
+        Record an object that failed to read. It sent no records and isn't marked as read, and its
+        container's `completed_through` is held below it, so the next sync retries it.
+        """
+        failed = f"{stream_slice['prodstack']}/{stream_slice['name']}/{stream_slice['object']}"
+        self.logger.error(f"Failed to read {failed} after {line_number} lines: {type(error).__name__}: {error}")
+        self._failed.append(failed)
+        key = self._state_key(stream_slice["prodstack"], stream_slice["name"])
+        held = _day_before(stream_slice["date"])
+        self._held[key] = min(self._held.get(key, held), held)
 
     def _mark_read(self, key: str, object_date: str, name: str, last_modified: str) -> None:
         """Mark an object as read, move `completed_through` forward as far as allowed, and drop the `read` entries it now covers."""
         state = self._state.get(key) or {"completed_through": "", "read": {}}
         # Objects are read in date order, so everything dated before this one is done, but
         # `completed_through` never enters the lookback window, where late objects may still land.
-        day_before = (datetime.strptime(object_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
-        completed_through = max(state["completed_through"], min(day_before, self._completed_through_limit))
+        # It also stays below any object of this container that failed in this sync.
+        day_before = _day_before(object_date)
+        limit = min(self._completed_through_limit, self._held.get(key, self._completed_through_limit))
+        completed_through = max(state["completed_through"], min(day_before, limit))
         read = {n: v for n, v in state["read"].items() if (log_object_date(n) or "") > completed_through}
         read[name] = last_modified
         self._state[key] = {"completed_through": completed_through, "read": read}
+
+
+def _day_before(yyyymmdd: str) -> str:
+    """The day before a YYYYMMDD date, in the same format."""
+    return (datetime.strptime(yyyymmdd, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
