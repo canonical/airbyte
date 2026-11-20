@@ -5,7 +5,9 @@ One stream per configured package set.
 
 Each sync lists the log objects in every configured container and reads the ones it hasn't read
 yet, oldest first. Each matching line becomes one record, keyed by Prodstack, container, log object
-and line number, so reading an object again replaces its rows instead of duplicating them.
+and line number, so reading an object again overwrites rows with the same line numbers instead of
+duplicating them. Rows for lines that no longer match aren't removed, so a regenerated object needs a
+Clear data in Airbyte.
 
 State is saved per container after each object is fully read, under `<prodstack>/<container>`:
 - `completed_through`: the date up to which every object has been read.
@@ -66,7 +68,7 @@ class PackageSetStream(Stream, CheckpointMixin):
 
     @property
     def primary_key(self) -> List[List[str]]:
-        """One record per log line, so reading an object again replaces its rows."""
+        """One record per log line, so reading an object again overwrites rows with the same line numbers."""
         return [["prodstack"], ["container"], ["log_object"], ["line_number"]]
 
     @property

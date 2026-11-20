@@ -19,7 +19,7 @@ There is one stream per configured package set, named after the set.
 | `log_object`  | string      | the log object name                                           |
 | `line_number` | integer     | the line in the decompressed log object                       |
 
-The primary key is `prodstack`, `container`, `log_object`, `line_number`, since the same container name can exist on more than one Prodstack. Use **Incremental | Append + Deduped** so that reading a log object again replaces its rows instead of adding them.
+The primary key is `prodstack`, `container`, `log_object`, `line_number`, since the same container name can exist on more than one Prodstack. Use **Incremental | Append + Deduped** so that reading a log object again overwrites the rows with the same line numbers instead of adding them (see the note on regenerated logs below).
 
 A line becomes a record when it is a `GET` with status `200` for a `.deb` path, and the package name matches one of the set's glob patterns. The client IP is never read out of the line.
 
