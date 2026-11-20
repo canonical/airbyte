@@ -87,7 +87,8 @@ jobs:
       # -------------------- Python / manifest connectors --------------------
       # Uses the same `poe` tasks as upstream's Connector CI (poe-tasks/*.toml), which replaced the
       # removed airbyte-ci/Dagger pipeline: https://github.com/airbytehq/airbyte/pull/75935
-      # Integration/acceptance tests need connector secrets and stay skipped.
+      # Integration/acceptance tests usually need connector secrets, so they only run for connectors
+      # that opt in (see "Run integration tests" below).
       - name: Set up Python
         if: steps.vars.outputs.run == 'true' && steps.vars.outputs.language != 'java'
         uses: actions/setup-python@v5
@@ -127,6 +128,26 @@ jobs:
             "$RUNNER_TEMP/unit-tests-venv/bin/python" -m pytest unit_tests
           else
             echo "No unit_tests/requirements.txt-based unit tests; skipping."
+          fi
+
+      # Runs a Poetry connector's integration tests when its metadata lists the `integrationTests`
+      # suite without `testSecrets`, i.e. tests that run offline (e.g. against mock data). Connectors
+      # whose integration tests need secrets, and manifest-only connectors, stay skipped.
+      - name: Run integration tests
+        if: steps.vars.outputs.run == 'true' && steps.vars.outputs.language != 'java'
+        working-directory: airbyte-integrations/connectors/${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          OPTED_IN=$(uv run --no-project --with pyyaml python - <<'PY'
+          import yaml
+          suites = yaml.safe_load(open("metadata.yaml"))["data"].get("connectorTestSuitesOptions") or []
+          print(any(s.get("suite") == "integrationTests" and not s.get("testSecrets") for s in suites))
+          PY
+          )
+          if [ "$OPTED_IN" = "True" ] && [ -f pyproject.toml ]; then
+            poe test-integration-tests
+          else
+            echo "No secret-free integrationTests suite in metadata.yaml; skipping integration tests."
           fi
 
       - name: Build connector image ${{ matrix.dir }}
