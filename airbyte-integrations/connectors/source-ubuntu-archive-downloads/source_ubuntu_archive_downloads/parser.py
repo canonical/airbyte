@@ -4,6 +4,8 @@
 Parse and filter Ubuntu archive Apache access log lines.
 
 A line is kept if it's a GET request that returned HTTP 200 for a `name_version_arch.deb` file.
+206 (partial content) responses are left out: they're mostly resumes of a download whose first
+request was already logged as a 200, so counting them would count one download more than once.
 Only the fields we store are captured, never the client IP.
 
 Expected log format:

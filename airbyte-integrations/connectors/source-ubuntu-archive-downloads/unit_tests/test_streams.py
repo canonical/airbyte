@@ -118,8 +118,18 @@ def test_late_object_older_than_the_window_is_skipped(root):
 
 def test_full_refresh_ignores_state(root):
     stream = make_stream(root)
-    stream.state = {KEY: {"completed_through": "20260509", "read": {}}}
+    stream.state = {KEY: {"completed_through": "20260509", "read": {}}, "ps9/gone": {"completed_through": "20260509", "read": {}}}
     assert len(read_all(stream, SyncMode.full_refresh)) == 2
+    # the state it leaves comes only from this read, with nothing left over from before
+    assert stream.state == {
+        KEY: {
+            "completed_through": "20260501",
+            "read": {
+                M0.format("20260502"): stream.state[KEY]["read"][M0.format("20260502")],
+                M1.format("20260502"): stream.state[KEY]["read"][M1.format("20260502")],
+            },
+        }
+    }
 
 
 def test_failed_object_is_skipped_held_back_and_fails_the_stream_at_the_end(root, caplog):

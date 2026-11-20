@@ -17,7 +17,7 @@ help:  ## Show this help.
 install:  ## Install project dependencies via Poetry.
 	poetry install
 
-fmt:  ## Format source code with ruff and add missing Apache license headers.
+fmt:  ## Format and auto-fix source code with ruff.
 	poetry run ruff format .
 	poetry run ruff check . --fix
 

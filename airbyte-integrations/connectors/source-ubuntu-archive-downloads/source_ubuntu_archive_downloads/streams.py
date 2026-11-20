@@ -129,10 +129,9 @@ class PackageSetStream(Stream, CheckpointMixin):
         """The state key of a container. Swift container names can't contain `/`, so it's unambiguous."""
         return f"{prodstack}/{container}"
 
-    def _container_state(self, key: str, sync_mode: SyncMode) -> Mapping[str, Any]:
-        """Return a container's saved state, or an empty one for a full refresh or a container not read yet."""
-        state = self._state.get(key) if sync_mode == SyncMode.incremental else None
-        return state or {"completed_through": "", "read": {}}
+    def _container_state(self, key: str) -> Mapping[str, Any]:
+        """Return a container's saved state, or an empty one for a container not read yet."""
+        return self._state.get(key) or {"completed_through": "", "read": {}}
 
     def stream_slices(
         self,
@@ -149,9 +148,12 @@ class PackageSetStream(Stream, CheckpointMixin):
         """
         self._matched = Counter()
         self._failed, self._held = [], {}
+        if sync_mode == SyncMode.full_refresh:
+            # A full refresh reads everything and starts its state from scratch.
+            self._state = {}
         for container_config in self._containers:
             container, prodstack = container_config["name"], container_config["prodstack"]
-            state = self._container_state(self._state_key(prodstack, container), sync_mode)
+            state = self._container_state(self._state_key(prodstack, container))
             listed = self._store.for_prodstack(prodstack).list_objects(container)
             if listed and not any(log_object_date(name) for name in listed):
                 self.logger.warning(f"Container {container} has {len(listed)} objects, but none are named like dated access logs.")

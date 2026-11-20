@@ -9,6 +9,7 @@ Expected values come from the CASES table in generate_mock_archives.py.
 import gzip
 import json
 import logging
+import shutil
 from collections import Counter
 from pathlib import Path
 
@@ -169,3 +170,20 @@ def test_incremental_sync_resumes_after_the_last_object(config, catalog):
     assert len(state) == 2
     second = read(SourceUbuntuArchiveDownloads(), config, catalog, state=state)
     assert second.records == []
+
+
+def test_unreadable_object_fails_the_sync_after_the_rest_is_read(config, catalog, tmp_path):
+    """Through the CDK's own read loop: the failure raised once a stream's slices run out must reach Airbyte."""
+    shutil.copytree(HERE / "mock_archives", tmp_path / "mock_archives")
+    config["storage"]["path"] = str(tmp_path / "mock_archives")
+    bad = tmp_path / "mock_archives/mock-ports-servers/ports-0/ports.ubuntu.com-access.log-20260502.gz"
+    bad.write_bytes(bad.read_bytes()[:-20])
+
+    output = read(SourceUbuntuArchiveDownloads(), config, catalog, expecting_exception=True)
+
+    by_stream = records_by_stream(output)
+    per_file = sum(case[5] for case in CASES)
+    assert len(by_stream["cuda"]) == (FILES_FROM_START_DATE - 1) * per_file
+    assert not any(r["log_object"] == "ports-0/ports.ubuntu.com-access.log-20260502.gz" for r in by_stream["cuda"])
+    errors = [m.trace.error for m in output.errors if m.trace and m.trace.error]
+    assert any("could not read 1 log objects" in e.message for e in errors)

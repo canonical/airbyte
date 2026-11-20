@@ -17,7 +17,7 @@ include = "source_ubuntu_archive_downloads"
 python = ">=3.11,<3.14"
 airbyte-cdk = ">=7.28.3,<8.0.0"
 python-swiftclient = "^4.6.0"
-python-keystoneclient = "^5.5.0"
+python-keystoneclient = "^5.5.0"  # not imported here, but swiftclient needs it for Keystone v3 auth
 
 [tool.poetry.scripts]
 source-ubuntu-archive-downloads = "source_ubuntu_archive_downloads.run:run"
