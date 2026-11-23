@@ -1,0 +1,64 @@
+{
+  "storage": {
+    "type": "local",
+    "path": "integration_tests/mock_archives"
+  },
+  "containers": [
+    {
+      "name": "mock-archive-servers-a",
+      "source": "archive_server",
+      "prodstack": "ps5"
+    },
+    {
+      "name": "mock-archive-servers-b",
+      "source": "archive_server",
+      "prodstack": "ps6"
+    },
+    {
+      "name": "mock-ports-servers",
+      "source": "ports_server",
+      "prodstack": "ps6"
+    },
+    {
+      "name": "mock-cloud-mirrors",
+      "source": "cloud_mirror",
+      "prodstack": "ps5"
+    }
+  ],
+  "start_date": "2026-05-02",
+  "package_sets": [
+    {
+      "name": "cuda",
+      "match": [
+        "cuda-*-[0-9]*-*",
+        "cuda-toolkit",
+        "cuda-toolkit-[0-9]*",
+        "cuda-toolkit-config-common",
+        "nvidia-cuda-*",
+        "libcublas*",
+        "libcudart*",
+        "libcufft*",
+        "libcufile*",
+        "libcuinj*",
+        "libcupti*",
+        "libcurand*",
+        "libcusolver*",
+        "libcusparse*",
+        "libnvjpeg*",
+        "libnvjitlink*",
+        "libnvrtc*",
+        "libnvfatbin*",
+        "libnvptxcompiler*",
+        "libnvvm*",
+        "libnpp*",
+        "nsight-compute*",
+        "nsight-systems*",
+        "gds-tools*"
+      ]
+    },
+    {
+      "name": "rocm",
+      "match": ["rocm*", "hip*"]
+    }
+  ]
+}
