@@ -32,7 +32,7 @@ import tempfile
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from functools import cached_property, lru_cache
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional
+from typing import IO, Any, Dict, Iterable, List, Mapping, MutableMapping, Optional
 
 from airbyte_cdk.models.airbyte_protocol import FailureType, SyncMode
 from airbyte_cdk.sources.streams import CheckpointMixin, Stream
@@ -194,23 +194,14 @@ class PackageSetStream(Stream, CheckpointMixin):
         container, name = stream_slice["name"], stream_slice["object"]
         location = {"source": stream_slice["source"], "prodstack": stream_slice["prodstack"], "container": container, "log_object": name}
         store = self._store.for_prodstack(stream_slice["prodstack"])
-        line_number = unparsed = 0
         packages: Counter = Counter()
+        counts: Counter = Counter()
         with tempfile.TemporaryFile() as matches:
             try:
                 with store.open_object(container, name) as raw, gzip.GzipFile(fileobj=raw) as lines:
-                    for line_number, line in enumerate(lines, start=1):
-                        if self._prefilter and not self._prefilter.search(line):
-                            continue
-                        text = line.decode("utf-8", errors="replace")
-                        fields = parse_line(text, self._patterns)
-                        if fields:
-                            packages[fields["package"]] += 1
-                            matches.write(json.dumps({**fields, "line_number": line_number}).encode() + b"\n")
-                        elif not is_access_line(text):
-                            unparsed += 1
+                    self._write_matches(lines, matches, packages, counts)
             except Exception as e:
-                self._fail(stream_slice, line_number, e)
+                self._fail(stream_slice, counts["lines"], e)
                 return
 
             matches.seek(0)
@@ -218,12 +209,31 @@ class PackageSetStream(Stream, CheckpointMixin):
                 yield {**json.loads(match), **location}
 
         self._matched.update(packages)
-        if unparsed:
+        if counts["unparsed"]:
             # The lines themselves hold client IPs, so only the count is logged.
-            self.logger.warning(f"{unparsed} candidate lines in {container}/{name} are not in the expected log format.")
+            self.logger.warning(f"{counts['unparsed']} candidate lines in {container}/{name} are not in the expected log format.")
         matched = sum(packages.values())
-        self.logger.info(f"Read {container}/{name}: {line_number} lines, {matched} matched rows, {unparsed} lines failed to parse.")
+        self.logger.info(
+            f"Read {container}/{name}: {counts['lines']} lines, {matched} matched rows, {counts['unparsed']} lines failed to parse."
+        )
         self._mark_read(self._state_key(stream_slice["prodstack"], container), stream_slice["date"], name, stream_slice["last_modified"])
+
+    def _write_matches(self, lines: Iterable[bytes], matches: IO[bytes], packages: Counter, counts: Counter) -> None:
+        """
+        Write the fields of each matching line to `matches`, one JSON line each, and count the matches
+        per package. `counts` holds the lines read so far and the candidate lines that failed to parse.
+        """
+        for line_number, line in enumerate(lines, start=1):
+            counts["lines"] = line_number
+            if self._prefilter and not self._prefilter.search(line):
+                continue
+            text = line.decode("utf-8", errors="replace")
+            fields = parse_line(text, self._patterns)
+            if fields:
+                packages[fields["package"]] += 1
+                matches.write(json.dumps({**fields, "line_number": line_number}).encode() + b"\n")
+            elif not is_access_line(text):
+                counts["unparsed"] += 1
 
     def _fail(self, stream_slice: Mapping[str, Any], line_number: int, error: Exception) -> None:
         """

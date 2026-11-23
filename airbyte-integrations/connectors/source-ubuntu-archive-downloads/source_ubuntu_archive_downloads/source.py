@@ -18,31 +18,38 @@ class SourceUbuntuArchiveDownloads(AbstractSource):
 
     def check_connection(self, logger, config) -> Tuple[bool, Any]:
         """Check that the package sets are valid and that every container can be read through its Prodstack's store."""
+        # Each package set becomes a stream and a destination table, so names must be unique.
         names = [package_set["name"] for package_set in config["package_sets"]]
         if len(names) != len(set(names)):
             return False, "Package set names must be unique."
 
+        # Names are used as table names, so keep them to characters every destination accepts.
+        # A set with no patterns would match nothing.
         for package_set in config["package_sets"]:
             if not STREAM_NAME_RE.match(package_set["name"]):
                 return False, f"Package set name {package_set['name']!r} must be lowercase letters, digits and underscores."
             if not package_set["match"]:
                 return False, f"Package set {package_set['name']!r} has no match patterns."
 
+        # The spec only checks the pattern of `start_date`, so a date such as 2026-02-30 gets through.
         try:
             datetime.strptime(config["start_date"], "%Y-%m-%d")
         except ValueError:
             return False, f"Start date {config['start_date']!r} is not a valid date in the format YYYY-MM-DD."
 
+        # State is kept per Prodstack and container, so the same container listed twice would be read twice.
         containers = [(container["prodstack"], container["name"]) for container in config["containers"]]
         repeated = sorted({f"{p}/{n}" for p, n in containers if containers.count((p, n)) > 1})
         if repeated:
             return False, f"Containers are listed more than once: {', '.join(repeated)}."
 
+        # Build the stores, which fails for example when a Prodstack has more than one endpoint.
         try:
             store = make_store(config["storage"])
         except Exception as e:
             return False, f"Invalid storage config: {e}"
 
+        # Log in to each Prodstack and check that each container, and its `_segments` container if any, can be read.
         for container in config["containers"]:
             try:
                 store.for_prodstack(container["prodstack"]).assert_readable(container["name"])

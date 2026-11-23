@@ -8,8 +8,13 @@ A line is kept if it's a GET request that returned HTTP 200 for a `name_version_
 request was already logged as a 200, so counting them would count one download more than once.
 Only the fields we store are captured, never the client IP.
 
-Expected log format:
+Expected log format, as observed in the real archive logs:
   IP PORT - [DD/Mon/YYYY:HH:MM:SS +ZZZZ] "GET /path HTTP/x.x" STATUS BYTES "referer" "ua" ...
+
+This is Apache's Combined Log Format (https://httpd.apache.org/docs/2.4/logs.html#combined) with
+the client port in the second field, where Combined has the ident `-`. The second and third fields
+are matched loosely, so plain Combined lines parse too. For example:
+  203.0.113.10 51234 - [02/May/2026:07:15:30 +0000] "GET /ubuntu/pool/multiverse/c/cuda-toolkit/cuda-toolkit_13.0.2-1_amd64.deb HTTP/1.1" 200 2890 "-" "Debian APT-HTTP/1.3 (2.7.14build2)"
 """
 
 import re
@@ -29,7 +34,10 @@ LOG_RE = re.compile(
     r" (\d+|-)"  # bytes or - -> group 5
 )
 
-# Debian package filename: name_version_arch.deb. unquote() first handles %7e -> ~.
+# Debian package filename at the end of the path: name_version_arch.deb. Each part is one or more
+# characters other than `/` and `_`, since Debian names, versions and arches never contain `_`.
+# For example `/ubuntu/pool/.../libnvjpeg-13-0_13.0.1.9-1~ubuntu24.04_amd64.deb` gives
+# ("libnvjpeg-13-0", "13.0.1.9-1~ubuntu24.04", "amd64"). unquote() runs first, so `%7e` becomes `~`.
 DEB_RE = re.compile(r"/([^/]+)_([^_]+)_([^_]+)\.deb$", re.IGNORECASE)
 
 # Dated access log objects, e.g. ubuntu-mirror-0/archive.ubuntu.com-access.log-20250223.gz

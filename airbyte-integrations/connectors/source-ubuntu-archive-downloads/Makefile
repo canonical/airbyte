@@ -30,13 +30,13 @@ build:  ## Build the connector docker image (tagged airbyte/source-ubuntu-archiv
 spec:  ## Print the connector's connection specification.
 	$(SCRIPT) spec
 
-check:  ## Check the containers in CONFIG are readable (defaults to the mock config).
+check: integration_tests/mock_archives  ## Check the containers in CONFIG are readable (defaults to the mock config).
 	$(SCRIPT) check $(CONFIG)
 
-discover:  ## Discover one stream per package set in CONFIG.
+discover: integration_tests/mock_archives  ## Discover one stream per package set in CONFIG.
 	$(SCRIPT) discover $(CONFIG)
 
-read:  ## Read records for the configured catalog (override CATALOG to use another file).
+read: integration_tests/mock_archives  ## Read records for the configured catalog (override CATALOG to use another file).
 	$(SCRIPT) read $(CONFIG) $(CATALOG)
 
 unit-test:  ## Run unit tests with pytest.
@@ -48,4 +48,8 @@ integration-test:  ## Run integration tests (real check/discover/read entrypoint
 test: lint unit-test integration-test  ## Run lint checks, unit tests and integration tests against the mock archives.
 
 mock-archives:  ## Regenerate the mock log containers in integration_tests/mock_archives.
+	poetry run python integration_tests/generate_mock_archives.py
+
+# Generated on first use by check, discover and read.
+integration_tests/mock_archives:
 	poetry run python integration_tests/generate_mock_archives.py

@@ -11,7 +11,11 @@ The mocks assume the following about every container:
 
 Every access log has the same hand-written cases (see CASES), plus random noise lines that never
 match a package set, so the expected records can be worked out from CASES alone. The output is
-the same on every run. Rerun the script after changing it:
+the same on every run.
+
+The integration tests call `generate()` to write them to a temporary
+directory. To write them under integration_tests/mock_archives/, for `make read` or to load into a
+local Swift, run:
 
     python integration_tests/generate_mock_archives.py
 """
@@ -124,11 +128,12 @@ def write_gzip(path, text):
         f.write(text.encode())
 
 
-def main():
-    shutil.rmtree(ROOT, ignore_errors=True)
+def generate(root: Path) -> None:
+    """Write the mock containers under `root`, replacing anything already there."""
+    shutil.rmtree(root, ignore_errors=True)
     rng = random.Random(2026)
     for container, directory, site, arch in SOURCES:
-        base = ROOT / container / directory
+        base = root / container / directory
         for date in DATES:
             write_gzip(base / f"{site}-access.log-{date}.gz", access_log(rng, date, arch))
             write_gzip(base / f"{site}-error.log-{date}.gz", "[error] mock error log\n")
@@ -136,8 +141,8 @@ def main():
         (base / f"{site}-access.log").write_text(
             access_line("203.0.113.30", "GET", CASES[0][2].format(arch=arch), 200, 1, "04/May/2026:00:00:01") + "\n"
         )
-    print(f"wrote {sum(1 for p in ROOT.rglob('*') if p.is_file())} objects under {ROOT}")
 
 
 if __name__ == "__main__":
-    main()
+    generate(ROOT)
+    print(f"wrote {sum(1 for p in ROOT.rglob('*') if p.is_file())} objects under {ROOT}")

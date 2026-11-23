@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Canonical, all rights reserved.
 
 """
-Run check, discover and read against the generated mock archives.
+Run check, discover and read against the mock archives, generated once per test session.
 
 Expected values come from the CASES table in generate_mock_archives.py.
 """
@@ -9,12 +9,11 @@ Expected values come from the CASES table in generate_mock_archives.py.
 import gzip
 import json
 import logging
-import shutil
 from collections import Counter
 from pathlib import Path
 
 import pytest
-from generate_mock_archives import CASES, SOURCES
+from generate_mock_archives import CASES, SOURCES, generate
 from source_ubuntu_archive_downloads.parser import line_prefilter, matches_any, parse_line
 from source_ubuntu_archive_downloads.source import SourceUbuntuArchiveDownloads
 
@@ -27,10 +26,17 @@ FILES_FROM_START_DATE = len(SOURCES) * 2  # 20260502 and 20260503
 LOGGER = logging.getLogger("airbyte")
 
 
+@pytest.fixture(scope="session")
+def mock_archives(tmp_path_factory):
+    root = tmp_path_factory.mktemp("mock") / "mock_archives"
+    generate(root)
+    return root
+
+
 @pytest.fixture
-def config():
+def config(mock_archives):
     config = json.loads((HERE / "mock_config.json").read_text())
-    config["storage"]["path"] = str(HERE / "mock_archives")
+    config["storage"]["path"] = str(mock_archives)
     return config
 
 
@@ -98,12 +104,12 @@ def test_read_emits_one_record_per_matching_download(config, catalog):
     assert max(keys.values()) == 1
 
 
-def test_prefilter_never_drops_a_matching_line(config):
+def test_prefilter_never_drops_a_matching_line(config, mock_archives):
     for package_set in config["package_sets"]:
         patterns = package_set["match"]
         prefilter = line_prefilter(patterns)
         assert prefilter is not None
-        for path in (HERE / "mock_archives").rglob("*access.log-*.gz"):
+        for path in mock_archives.rglob("*access.log-*.gz"):
             for line in gzip.open(path, "rb"):
                 if parse_line(line.decode(), patterns):
                     assert prefilter.search(line)
@@ -174,7 +180,7 @@ def test_incremental_sync_resumes_after_the_last_object(config, catalog):
 
 def test_unreadable_object_fails_the_sync_after_the_rest_is_read(config, catalog, tmp_path):
     """Through the CDK's own read loop: the failure raised once a stream's slices run out must reach Airbyte."""
-    shutil.copytree(HERE / "mock_archives", tmp_path / "mock_archives")
+    generate(tmp_path / "mock_archives")
     config["storage"]["path"] = str(tmp_path / "mock_archives")
     bad = tmp_path / "mock_archives/mock-ports-servers/ports-0/ports.ubuntu.com-access.log-20260502.gz"
     bad.write_bytes(bad.read_bytes()[:-20])
