@@ -46,6 +46,12 @@ This connector outputs the following streams:
 - Uploads
 - Users
 - Commission Plans
+- Data Worksheet Records Export
+- Transformation Worksheet Records Export
+
+The two `*-records-export` streams use CaptivateIQ's asynchronous export endpoints. Exports are generated in full on every sync, so large workspaces can take a long time to sync these streams. Each record holds the exported row's columns in a `data` object. All values arrive as text.
+
+`data-worksheet-records-export` and `transformation-worksheet-records-export` return every column of each worksheet, including derived and transformed columns, unlike `data-worksheet-records`, which only returns raw values. Each record also has `parent_id`, the worksheet ID. Join it to the `id` of the `data-worksheets-list` or `transformation-worksheets` stream to get the worksheet's name.
 
 If there are more endpoints you'd like Airbyte to support, please [create an issue.](https://github.com/airbytehq/airbyte/issues/new/choose)
 
@@ -56,6 +62,7 @@ If there are more endpoints you'd like Airbyte to support, please [create an iss
 
 | Version | Date       | Pull Request                                       | Subject                                              |
 | :------ | :--------- | :------------------------------------------------- | :--------------------------------------------------- |
-| 0.1.0   | 2026-02-06 | [TBA](https://github.com/airbytehq/airbyte/pull/#) | Initial release of CaptivateIQ connector for Airbyte |
+| 0.6.0   | 2026-11-24 | [TBA](https://github.com/canonical/airbyte/pull/#)  | Add export streams for data worksheet and transformation worksheet records |
+| 0.1.0   | 2026-02-06 | [#47](https://github.com/airbytehq/airbyte/pull/#) | Initial release of CaptivateIQ connector for Airbyte |
 
 </details>

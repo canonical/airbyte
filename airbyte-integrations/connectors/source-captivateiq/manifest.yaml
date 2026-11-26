@@ -59,6 +59,105 @@ definitions:
           cursor_value: "{{ response['next'] }}"
           stop_condition: "{{ 'next' not in response }}"
 
+  # Bulk export of worksheet records, including derived/transformed columns
+  # that the List Records endpoints do not return. The export is asynchronous:
+  # POST .../records/export/ creates a job, GET /jobs/{id}/ is polled until it
+  # finishes, then details.download_url (a pre-signed S3 URL) is downloaded.
+  # CSV is used because the CDK streams it, unlike JSON exports whichare loaded 
+  # into memory in one go. A single worksheet can be hundreds of MB.
+  worksheet_export:
+    AsyncRetriever:
+      type: AsyncRetriever
+      creation_requester:
+        type: HttpRequester
+        http_method: POST
+        request_parameters:
+          export_format: csv
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+      polling_requester:
+        type: HttpRequester
+        url: https://api.captivateiq.com/ciq/v1/jobs/{{ creation_response['id'] }}/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+      # The download link is a pre-signed S3 URL that expires ~10 minutes after
+      # it is issued, and the CDK may finish several jobs before downloading
+      # any of them. Re-reading the job right before the download gets a
+      # freshly signed link.
+      download_target_requester:
+        type: HttpRequester
+        url: https://api.captivateiq.com/ciq/v1/jobs/{{ polling_response['id'] }}/
+        http_method: GET
+        authenticator:
+          $ref: "#/definitions/linked/HttpRequester/authenticator"
+        error_handler:
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
+      # Pre-signed S3 URL: must be fetched WITHOUT the CaptivateIQ auth header.
+      download_requester:
+        type: HttpRequester
+        url: "{{ download_target }}"
+        http_method: GET
+      download_decoder:
+        type: CsvDecoder
+      status_extractor:
+        type: DpathExtractor
+        field_path:
+          - status
+      download_target_extractor:
+        type: DpathExtractor
+        field_path:
+          - details
+          - download_url
+      status_mapping:
+        type: AsyncJobStatusMap
+        running:
+          - PENDING
+          - RECEIVED
+          - STARTED
+          - RETRY
+        completed:
+          - SUCCESS
+        failed:
+          - FAILURE
+          - REVOKED
+          - REJECTED
+          - IGNORED
+        timeout: []
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: []
+    # Worksheet columns differ per worksheet, so every column is nested under a
+    # declared `data` object (see components.py).
+    transformations:
+      - type: CustomTransformation
+        class_name: source_declarative_manifest.components.NestRecordUnderData
+      - type: AddFields
+        fields:
+          - type: AddedFieldDefinition
+            path:
+              - parent_id
+            value: "{{ stream_partition['id'] }}"
+            value_type: string
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          parent_id:
+            type: string
+          data:
+            type: object
+            additionalProperties: true
+        additionalProperties: true
+
 streams:
   - type: DeclarativeStream
     name: employees
@@ -2986,14 +3085,6 @@ streams:
                 type:
                   - string
                   - "null"
-              Contract Total:
-                type:
-                  - string
-                  - "null"
-                type:
-                type:
-                  - string
-                  - "null"
               ContractId__r.Id:
                 type:
                   - string
@@ -3118,6 +3209,50 @@ streams:
               - parent_id
             value: "{{ stream_partition['id'] }}"
             value_type: string
+  - type: DeclarativeStream
+    name: data-worksheet-records-export
+    primary_key: []
+    retriever:
+      $ref: "#/definitions/worksheet_export/AsyncRetriever"
+      creation_requester:
+        $ref: "#/definitions/worksheet_export/AsyncRetriever/creation_requester"
+        url: >-
+          https://api.captivateiq.com/ciq/v1/data-worksheets/{{
+          stream_partition['id'] }}/records/export/
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/5"
+            parent_key: id
+            partition_field: id
+    transformations:
+      $ref: "#/definitions/worksheet_export/transformations"
+    schema_loader:
+      $ref: "#/definitions/worksheet_export/schema_loader"
+  - type: DeclarativeStream
+    name: transformation-worksheet-records-export
+    primary_key: []
+    retriever:
+      $ref: "#/definitions/worksheet_export/AsyncRetriever"
+      creation_requester:
+        $ref: "#/definitions/worksheet_export/AsyncRetriever/creation_requester"
+        url: >-
+          https://api.captivateiq.com/ciq/v1/transformation-worksheets/{{
+          stream_partition['id'] }}/records/export/
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/8"
+            parent_key: id
+            partition_field: id
+    transformations:
+      $ref: "#/definitions/worksheet_export/transformations"
+    schema_loader:
+      $ref: "#/definitions/worksheet_export/schema_loader"
 
 spec:
   type: Spec

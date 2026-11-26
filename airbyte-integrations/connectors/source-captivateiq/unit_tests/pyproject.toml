@@ -1,0 +1,25 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "source-captivateiq-tests"
+version = "0.1.0"
+description = "Unit tests for source-captivateiq"
+authors = ["Canonical <business-data-integration@groups.canonical.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+# Pinned to the CDK version of the connector's base image
+# (metadata.yaml connectorBuildOptions.baseImage), so the tests run the
+# manifest exactly as the connector does.
+airbyte-cdk = "6.60.16"
+pyyaml = "^6.0"
+requests-mock = "^1.12.1"
+pytest = "^8.0.0"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:This class is experimental*",
+    "ignore:`cache_name` cannot be set after backend initialization*:DeprecationWarning",
+]
