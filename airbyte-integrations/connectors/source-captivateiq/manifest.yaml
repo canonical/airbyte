@@ -63,7 +63,7 @@ definitions:
   # that the List Records endpoints do not return. The export is asynchronous:
   # POST .../records/export/ creates a job, GET /jobs/{id}/ is polled until it
   # finishes, then details.download_url (a pre-signed S3 URL) is downloaded.
-  # CSV is used because the CDK streams it, unlike JSON exports whichare loaded 
+  # CSV is used because the CDK streams it, unlike JSON exports which are loaded
   # into memory in one go. A single worksheet can be hundreds of MB.
   worksheet_export:
     AsyncRetriever:

@@ -2,7 +2,9 @@ metadataSpecVersion: "1.0"
 data:
   allowedHosts:
     hosts:
-      - ${api_base_url}
+      - api.captivateiq.com
+      # Export files are downloaded from pre-signed S3 links.
+      - ciq-captivateiq-prd-app-downloads.s3.amazonaws.com
   registryOverrides:
     oss:
       enabled: true

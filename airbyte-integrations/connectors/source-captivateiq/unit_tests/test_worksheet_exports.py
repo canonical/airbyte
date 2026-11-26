@@ -23,7 +23,7 @@ from airbyte_cdk.test.entrypoint_wrapper import read
 MANIFEST = yaml.safe_load((Path(__file__).resolve().parent.parent / "manifest.yaml").read_text())
 CONFIG = {"api_token": "test-token", "start_date": "2024-01-01"}
 API = "https://api.captivateiq.com/ciq/v1"
-DOWNLOAD_URL = "https://ciq-downloads.s3.amazonaws.com/downloads/v1/abc/export.csv?Signature=sig&Expires=1"
+DOWNLOAD_URL = "https://ciq-captivateiq-prd-app-downloads.s3.amazonaws.com/downloads/v1/abc/export.csv?Signature=sig&Expires=1"
 CSV_BODY = "Unique ID,Amount,Renewal/Growth\nu-1,10.5,Growth\nu-2,,Renewal\n"
 
 
@@ -93,7 +93,7 @@ def test_export_stream_reads_all_columns(stream: str, list_path: str, export_pat
 def test_download_uses_link_fetched_right_before_download() -> None:
     """Links expire ~10 minutes after they are issued, and jobs can finish well
     before they are downloaded, so the link seen while polling must not be used."""
-    expired_url = "https://ciq-downloads.s3.amazonaws.com/downloads/v1/abc/export.csv?Signature=old&Expires=0"
+    expired_url = "https://ciq-captivateiq-prd-app-downloads.s3.amazonaws.com/downloads/v1/abc/export.csv?Signature=old&Expires=0"
     with requests_mock.Mocker() as m:
         _mock_export(m, "data-worksheets", "data-worksheets/ws-1/records/export/")
         m.get(
