@@ -125,4 +125,3 @@ def test_nest_record_under_data_moves_every_column() -> None:
     record = {"Unique ID": "u-1", "data": "a column literally named data", "Amount": None}
     NestRecordUnderData().transform(record)
     assert record == {"data": {"Unique ID": "u-1", "data": "a column literally named data", "Amount": None}}
-
