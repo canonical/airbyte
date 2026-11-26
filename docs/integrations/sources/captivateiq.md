@@ -62,7 +62,7 @@ If there are more endpoints you'd like Airbyte to support, please [create an iss
 
 | Version | Date       | Pull Request                                       | Subject                                              |
 | :------ | :--------- | :------------------------------------------------- | :--------------------------------------------------- |
-| 0.6.0   | 2026-11-24 | [TBA](https://github.com/canonical/airbyte/pull/#)  | Add export streams for data worksheet and transformation worksheet records |
+| 0.6.0   | 2026-11-24 | [#114](https://github.com/canonical/airbyte/pull/114) | Add export streams for data worksheet and transformation worksheet records |
 | 0.1.0   | 2026-02-06 | [#47](https://github.com/airbytehq/airbyte/pull/#) | Initial release of CaptivateIQ connector for Airbyte |
 
 </details>
