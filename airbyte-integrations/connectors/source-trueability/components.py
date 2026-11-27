@@ -1,8 +1,11 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import requests
+
 from airbyte_cdk.sources.declarative.extractors.record_extractor import RecordExtractor
 
 
@@ -37,11 +40,7 @@ class TrueAbilityResultsExtractor(RecordExtractor):
         if page == 1 and not results and meta is None:
             return
 
-        if (
-            not isinstance(meta, dict)
-            or type(meta.get("current_page")) is not int
-            or type(meta.get("total_pages")) is not int
-        ):
+        if not isinstance(meta, dict) or type(meta.get("current_page")) is not int or type(meta.get("total_pages")) is not int:
             raise ValueError("TrueAbility /results did not return valid pagination metadata")
 
         current_page, total_pages = meta["current_page"], meta["total_pages"]

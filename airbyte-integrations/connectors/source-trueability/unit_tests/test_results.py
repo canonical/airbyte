@@ -1,12 +1,14 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 import json
 import logging
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from airbyte_cdk.models import Status, SyncMode
+from conftest import CONNECTOR_PATH, RESULTS_URL, build_source, load_response, read_results
 from jsonschema import Draft7Validator
 
-from conftest import CONNECTOR_PATH, RESULTS_URL, build_source, load_response, read_results
+from airbyte_cdk.models import Status, SyncMode
 
 
 LOGGER = logging.getLogger("source-trueability")

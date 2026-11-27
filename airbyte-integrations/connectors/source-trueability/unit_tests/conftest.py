@@ -1,7 +1,10 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 import json
 from pathlib import Path
 
 import pytest
+
 from airbyte_cdk.models import SyncMode
 from airbyte_cdk.sources.declarative.yaml_declarative_source import YamlDeclarativeSource
 from airbyte_cdk.test.catalog_builder import CatalogBuilder

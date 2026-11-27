@@ -10,11 +10,22 @@ DOCKER_REPO := $(shell awk '/dockerRepository:/ {print $$2; exit}' metadata.yaml
 IMAGE_VERSION := $(shell awk '/dockerImageTag:/ {print $$2; exit}' metadata.yaml)
 DOCKERFILE := ../../../docker-images/Dockerfile.manifest-only-connector
 
-.PHONY: help build spec check discover read unit-test test
+.PHONY: help fmt lint build spec check discover read unit-test test
 
 help: ## Show targets and input defaults.
 	@printf 'Inputs: IMAGE=%s CONFIG=%s CATALOG=%s\n\n' "$(IMAGE)" "$(CONFIG)" "$(CATALOG)"
 	@awk -F ':.*## ' '/^[a-z-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+fmt: ## Format Python, JSON, and YAML files to match repo pre-commit hooks.
+	$(UV) tool run --python $(PYTHON) ruff@0.8.3 check --config ../../../ruff.toml --fix --select=I .
+	$(UV) tool run --python $(PYTHON) ruff@0.8.3 format --config ../../../ruff.toml .
+	npx --yes prettier@3.0.3 --ignore-path ../../../.prettierignore --write metadata.yaml acceptance-test-config.yml integration_tests/*.json unit_tests/responses/*.json
+
+lint: ## Check license headers, Ruff formatting/imports, and Prettier formatting.
+	@for f in $$(find . -name '*.py'); do head -n 1 "$$f" | grep -q 'Copyright (c).*Airbyte, Inc\.' || { echo "Missing license header: $$f"; exit 1; }; done
+	$(UV) tool run --python $(PYTHON) ruff@0.8.3 check --config ../../../ruff.toml --select=I .
+	$(UV) tool run --python $(PYTHON) ruff@0.8.3 format --config ../../../ruff.toml --check .
+	npx --yes prettier@3.0.3 --ignore-path ../../../.prettierignore --check metadata.yaml acceptance-test-config.yml integration_tests/*.json unit_tests/responses/*.json
 
 build: ## Build the local development Docker image.
 	docker buildx build --load -f $(DOCKERFILE) -t "$(IMAGE)" \

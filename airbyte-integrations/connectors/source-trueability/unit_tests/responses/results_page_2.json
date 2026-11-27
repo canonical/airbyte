@@ -10,7 +10,9 @@
       "ability_screen": { "id": 42 },
       "ability_screen_variant": null,
       "user_transcript": null,
-      "scenario_tasks": [{ "id": 303, "vendor_id": "example-lab-v1", "commands": null }]
+      "scenario_tasks": [
+        { "id": 303, "vendor_id": "example-lab-v1", "commands": null }
+      ]
     }
   ],
   "meta": { "current_page": 2, "total_pages": 2, "total_count": 2 }

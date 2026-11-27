@@ -6,7 +6,11 @@
       "user_uuid": "99999999-9999-4999-8999-999999999999",
       "user_email": "example-user@example.test",
       "user_full_name": "Example User",
-      "user": { "uuid": "99999999-9999-4999-8999-999999999999", "email": "example-user@example.test", "full_name": "Example User" },
+      "user": {
+        "uuid": "99999999-9999-4999-8999-999999999999",
+        "email": "example-user@example.test",
+        "full_name": "Example User"
+      },
       "address": { "city": "Example City" },
       "assessment_files": [{ "url": "https://example.test/attachment" }],
       "unknown_vendor_field": { "enabled": true, "values": [1, null, "extra"] },
@@ -20,17 +24,33 @@
       "points_awarded": 3,
       "points_available": 5,
       "corrected_points_awarded": "3.0",
-      "ability_screen": { "id": 42, "display_name": "Example Exam", "cutoff_score": 0.7, "duration": 3600 },
-      "ability_screen_variant": { "id": 8, "ability_screen_id": 42, "name": "A", "active": true },
+      "ability_screen": {
+        "id": 42,
+        "display_name": "Example Exam",
+        "cutoff_score": 0.7,
+        "duration": 3600
+      },
+      "ability_screen_variant": {
+        "id": 8,
+        "ability_screen_id": 42,
+        "name": "A",
+        "active": true
+      },
       "user_transcript": {
         "id": 51,
         "assessment_id": 101,
         "attempt": 1,
         "status": "failed",
         "final_score": 0.6,
-        "summary": { "user": "example-user@example.test", "ability_screen_name": "Example Exam" },
+        "summary": {
+          "user": "example-user@example.test",
+          "ability_screen_name": "Example Exam"
+        },
         "user_id": 90,
-        "user": { "uuid": "99999999-9999-4999-8999-999999999999", "email": "example-user@example.test" }
+        "user": {
+          "uuid": "99999999-9999-4999-8999-999999999999",
+          "email": "example-user@example.test"
+        }
       },
       "scenario_tasks": [
         {
@@ -45,8 +65,21 @@
           "candidate_notes": "Example note",
           "meta": { "commands": [{ "command": "example-meta-check" }] },
           "commands": [
-            { "command": "example-check-1", "code": 0, "status": true, "stdout": "PASS\n", "stderr": "", "unknown_log": "Example log" },
-            { "command": "example-check-2", "code": 1, "status": false, "stdout": "", "stderr": "FAIL\n" }
+            {
+              "command": "example-check-1",
+              "code": 0,
+              "status": true,
+              "stdout": "PASS\n",
+              "stderr": "",
+              "unknown_log": "Example log"
+            },
+            {
+              "command": "example-check-2",
+              "code": 1,
+              "status": false,
+              "stdout": "",
+              "stderr": "FAIL\n"
+            }
           ]
         },
         {

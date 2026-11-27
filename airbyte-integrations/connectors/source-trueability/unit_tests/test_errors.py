@@ -1,9 +1,11 @@
+# Copyright (c) 2026 Airbyte, Inc., all rights reserved.
+
 import logging
 
 import pytest
-from airbyte_cdk.models import Status
-
 from conftest import RESULTS_URL, build_source, load_response, read_results
+
+from airbyte_cdk.models import Status
 
 
 def test_authentication_error_fails_check_without_retries(config, requests_mock):
