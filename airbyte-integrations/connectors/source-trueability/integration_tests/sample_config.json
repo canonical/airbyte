@@ -1,0 +1,7 @@
+{
+  "api_key": "test-api-key",
+  "ability_screen_ids": [42, 43],
+  "assessment_ids": [101, 102],
+  "finalized_after": "2026-01-01T00:00:00Z",
+  "finalized_before": "2026-01-05T00:00:00Z"
+}

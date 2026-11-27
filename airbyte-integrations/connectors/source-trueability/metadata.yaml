@@ -1,0 +1,33 @@
+metadataSpecVersion: "1.0"
+
+data:
+  allowedHosts:
+    hosts:
+      - app.trueability.com
+  registryOverrides:
+    oss:
+      enabled: true
+    cloud:
+      enabled: false
+  connectorBuildOptions:
+    baseImage: docker.io/airbyte/source-declarative-manifest:7.21.1@sha256:0e55d8593249f5b9d84272cd5786884bffa46eeac691162de1217807930c5e70
+  connectorSubtype: api
+  connectorType: source
+  definitionId: b278bf79-4fea-4d25-bbfc-d250f51267db
+  dockerImageTag: 0.1.0
+  canonicalImageTag: 0.1.0-canonical-1.0.0
+  dockerRepository: airbyte/source-trueability
+  githubIssueLabel: source-trueability
+  license: ELv2
+  name: TrueAbility
+  releaseDate: 2026-11-26
+  releaseStage: alpha
+  supportLevel: community
+  documentationUrl: https://github.com/canonical/airbyte/blob/master/airbyte-integrations/connectors/source-trueability/README.md
+  tags:
+    - language:manifest-only
+    - cdk:low-code
+  externalDocumentationUrls:
+    - title: TrueAbility AbilityScreen API
+      url: https://app.trueability.com/api/v1/docs
+      type: api_reference

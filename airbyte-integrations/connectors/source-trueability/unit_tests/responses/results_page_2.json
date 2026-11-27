@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "id": 102,
+      "uuid": "22222222-2222-4222-8222-222222222222",
+      "user_uuid": "99999999-9999-4999-8999-999999999999",
+      "attempt": 2,
+      "finalized_at": "2026-01-04T10:00:00Z",
+      "score": 0.8,
+      "ability_screen": { "id": 42 },
+      "ability_screen_variant": null,
+      "user_transcript": null,
+      "scenario_tasks": [{ "id": 303, "vendor_id": "example-lab-v1", "commands": null }]
+    }
+  ],
+  "meta": { "current_page": 2, "total_pages": 2, "total_count": 2 }
+}

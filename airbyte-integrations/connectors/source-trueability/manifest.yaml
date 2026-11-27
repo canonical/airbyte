@@ -1,0 +1,132 @@
+version: 7.21.1
+
+type: DeclarativeSource
+
+description: Read TrueAbility assessment results and their nested grading details.
+
+check:
+  type: CheckStream
+  stream_names:
+    - results
+
+streams:
+  - type: DeclarativeStream
+    name: results
+    primary_key:
+      - id
+    retriever:
+      type: SimpleRetriever
+      requester:
+        type: HttpRequester
+        url: https://app.trueability.com/api/v1/results
+        http_method: GET
+        authenticator:
+          type: ApiKeyAuthenticator
+          api_token: "{{ config['api_key'] }}"
+          inject_into:
+            type: RequestOption
+            inject_into: header
+            field_name: X-API-KEY
+        request_parameters:
+          page: "{{ (next_page_token or {}).get('next_page_token', 1) }}"
+          per_page: "{{ config.get('page_size', 50) }}"
+          ability_screen_id[]: "{{ config.get('ability_screen_ids', []) }}"
+          id[]: "{{ config.get('assessment_ids', []) }}"
+          finalized_after: "{{ config.get('finalized_after', '') }}"
+          finalized_before: "{{ config.get('finalized_before', '') }}"
+        error_handler:
+          type: DefaultErrorHandler
+          max_retries: 3
+          response_filters:
+            - type: HttpResponseFilter
+              action: FAIL
+              failure_type: config_error
+              http_codes: [400, 401, 403, 404, 422]
+              error_message: Check the TrueAbility API key, account permissions, and result filters.
+          backoff_strategies:
+            - type: WaitTimeFromHeader
+              header: Retry-After
+            - type: ExponentialBackoffStrategy
+      paginator:
+        type: DefaultPaginator
+        pagination_strategy:
+          type: CursorPagination
+          # Paginate via meta.current_page and meta.total_pages rather than page record count.
+          cursor_value: "{{ response['meta']['current_page'] + 1 }}"
+          stop_condition: >-
+            {{ response.get('meta') is none or response['meta']['current_page'] >= response['meta']['total_pages'] }}
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: CustomRecordExtractor
+          class_name: components.TrueAbilityResultsExtractor
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        $schema: http://json-schema.org/draft-07/schema#
+        type: object
+        additionalProperties: false
+        required: [id, payload]
+        properties:
+          id:
+            type: integer
+          payload:
+            type: object
+            additionalProperties: true
+
+spec:
+  type: Spec
+  connection_specification:
+    $schema: http://json-schema.org/draft-07/schema#
+    title: TrueAbility Source
+    type: object
+    additionalProperties: false
+    required: [api_key]
+    properties:
+      api_key:
+        title: API Key
+        description: API key for the TrueAbility account that can read assessment results.
+        type: string
+        minLength: 1
+        airbyte_secret: true
+        order: 0
+      ability_screen_ids:
+        title: AbilityScreen IDs
+        description: Optional. Restrict results to these numeric exam template IDs.
+        type: array
+        default: []
+        uniqueItems: true
+        items:
+          type: integer
+          minimum: 1
+        order: 1
+      assessment_ids:
+        title: Assessment IDs
+        description: Optional. Restrict results to these numeric assessment attempt IDs.
+        type: array
+        default: []
+        uniqueItems: true
+        items:
+          type: integer
+          minimum: 1
+        order: 2
+      finalized_after:
+        title: Finalized After
+        description: Optional lower bound on assessment finalization time, such as 2026-01-01T00:00:00Z.
+        type: string
+        format: date-time
+        order: 3
+      finalized_before:
+        title: Finalized Before
+        description: Optional upper bound on assessment finalization time, such as 2026-02-01T00:00:00Z.
+        type: string
+        format: date-time
+        order: 4
+      page_size:
+        title: Page Size
+        description: Number of assessment results to request per page (1–500).
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
+        order: 5

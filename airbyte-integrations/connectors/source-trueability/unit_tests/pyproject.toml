@@ -1,0 +1,19 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "source-trueability-tests"
+version = "0.1.0"
+description = "Offline tests for the TrueAbility declarative source"
+authors = ["Canonical"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.14"
+airbyte-cdk = "7.21.1"
+pytest = "^8.0.0"
+pytest-mock = "^3.14.0"
+requests-mock = "^1.12.1"
+
+[tool.pytest.ini_options]
+pythonpath = [".."]
